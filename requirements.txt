@@ -1,0 +1,29 @@
+# Detection / Tracking
+ultralytics==8.0.206
+opencv-python==4.8.1.78
+
+# Spatial computation
+shapely==2.0.1
+
+# Data handling
+numpy
+pandas
+
+# Visualization
+streamlit
+matplotlib
+
+# Type validation
+pydantic
+
+# Testing
+pytest
+pytest-cov
+
+# Development
+black
+flake8
+isort
+
+# Environment
+python-dotenv
