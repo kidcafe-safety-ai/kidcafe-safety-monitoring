@@ -5,7 +5,7 @@
 
 from dataclasses import dataclass, field
 from typing import List, Literal
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 import uuid
 
 
@@ -21,13 +21,13 @@ class Track:
     
     def __post_init__(self):
         if not isinstance(self.track_id, int) or self.track_id < 0:
-            raise ValueError(f"track_id must be non-negative int")
+            raise ValueError("track_id must be non-negative int")
         if len(self.bbox) != 4:
-            raise ValueError(f"bbox must have 4 elements")
+            raise ValueError("bbox must have 4 elements")
         if len(self.foot_point) != 2:
-            raise ValueError(f"foot_point must have 2 elements")
+            raise ValueError("foot_point must have 2 elements")
         if not (0 <= self.confidence <= 1.0):
-            raise ValueError(f"confidence must be in [0, 1]")
+            raise ValueError("confidence must be in [0, 1]")
     
     @property
     def width(self) -> float:
@@ -73,9 +73,9 @@ class Zone:
         if not self.zone_id:
             raise ValueError("zone_id cannot be empty")
         if self.type not in ["polygon", "circle"]:
-            raise ValueError(f"type must be 'polygon' or 'circle'")
+            raise ValueError("type must be 'polygon' or 'circle'")
         if len(self.points) < 3 and self.type == "polygon":
-            raise ValueError(f"polygon must have at least 3 points")
+            raise ValueError("polygon must have at least 3 points")
 
 
 # ============ Geofencing 출력 ============
@@ -98,9 +98,9 @@ class Event:
     
     def __post_init__(self):
         if len(self.bbox) != 4:
-            raise ValueError(f"bbox must have 4 elements")
+            raise ValueError("bbox must have 4 elements")
         if len(self.foot_point) != 2:
-            raise ValueError(f"foot_point must have 2 elements")
+            raise ValueError("foot_point must have 2 elements")
     
     @staticmethod
     def create(
@@ -115,7 +115,7 @@ class Event:
     ) -> "Event":
         """Event 생성 헬퍼."""
         if timestamp is None:
-            timestamp = datetime.now(UTC).isoformat()
+            timestamp = datetime.now(timezone.utc).isoformat()
         
         return Event(
             event_id=str(uuid.uuid4()),
