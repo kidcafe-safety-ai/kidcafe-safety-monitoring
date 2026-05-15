@@ -1,0 +1,17 @@
+[
+  {
+    "zone_id": "playground_center",
+    "name": "놀이터 중앙 (테스트용)",
+    "type": "polygon",
+    "points": [
+      [0.25, 0.45],
+      [0.75, 0.45],
+      [0.75, 0.95],
+      [0.25, 0.95]
+    ],
+    "rules": {
+      "enter_alert": true,
+      "dwell_threshold_sec": 5
+    }
+  }
+]

@@ -1,46 +1,107 @@
-# src/tracking/bytetrack_wrapper.py
+"""YOLOv8 + Ultralytics built-in ByteTrack 통합.
 
-from ultralytics import YOLO
-from src.common.types import Track, TrackingResult
+Detection과 Tracking을 model.track()으로 한 번에 처리한다.
+별도의 detector 모듈을 두지 않은 이유는 docs/decisions.md ADR-001 참조.
+"""
+
 from datetime import datetime, timezone
+from typing import Optional
+
+import numpy as np
+from ultralytics import YOLO
+
+from src.common.types import Track, TrackingResult
+
 
 class ByteTracker:
-    def __init__(self):
-        # YOLO 자체 tracker 사용 (ByteTrack 내장)
-        self.model = YOLO("yolov8n.pt")
+    """YOLO + ByteTrack(내장) 통합 추적기."""
 
-    def update(self, frame, frame_number: int, video_source: str) -> TrackingResult:
+    PERSON_CLASS_ID = 0  # COCO의 person 클래스
 
+    def __init__(
+        self,
+        model_path: str = "yolov8n.pt",
+        conf: float = 0.5,
+        tracker_config: str = "bytetrack.yaml",
+    ):
+        """
+        Args:
+            model_path: YOLO weight 파일 (없으면 자동 다운로드)
+            conf: confidence threshold (0~1)
+            tracker_config: "bytetrack.yaml" 또는 "botsort.yaml"
+        """
+        self.model = YOLO(model_path)
+        self.conf = conf
+        self.tracker_config = tracker_config
+
+    def update(
+        self,
+        frame: np.ndarray,
+        frame_number: int,
+        video_source: str,
+    ) -> TrackingResult:
+        """
+        한 프레임에서 사람 탐지 + ID 추적.
+
+        Args:
+            frame: BGR 이미지 (H, W, 3)
+            frame_number: 현재 프레임 번호
+            video_source: 영상 파일 경로
+
+        Returns:
+            TrackingResult: track_id가 부여된 추적 결과
+                (아직 ID가 부여되지 않은 box는 결과에서 제외)
+        """
         results = self.model.track(
             frame,
-            persist=True,
-            classes=[0],
-            verbose=False
+            conf=self.conf,
+            classes=[self.PERSON_CLASS_ID],
+            tracker=self.tracker_config,
+            persist=True,  # 프레임 간 ID 유지
+            verbose=False,
         )
 
         tracks = []
+        if len(results) == 0:
+            return self._empty_result(frame_number, video_source)
 
-        if results[0].boxes is not None:
-            for box in results[0].boxes:
+        boxes = results[0].boxes
+        if boxes is None or boxes.id is None:
+            # 첫 프레임 등 ID 미부여 상태
+            return self._empty_result(frame_number, video_source)
 
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
+        # 텐서 → numpy
+        xyxy = boxes.xyxy.cpu().numpy()  # (N, 4)
+        ids = boxes.id.cpu().numpy().astype(int)  # (N,)
+        confs = boxes.conf.cpu().numpy()  # (N,)
 
-                cx = (x1 + x2) / 2
-                cy = y2
+        for (x1, y1, x2, y2), tid, conf in zip(xyxy, ids, confs):
+            # tid가 0 미만이면 (이론상 없지만 방어적으로) skip
+            if tid < 0:
+                continue
 
-                # ultralytics tracking ID
-                track_id = int(box.id.item()) if box.id is not None else -1
+            foot_x = (x1 + x2) / 2.0
+            foot_y = y2
 
-                tracks.append(Track(
-                    track_id=track_id,
-                    bbox=[x1, y1, x2, y2],
-                    foot_point=[cx, cy],
-                    confidence=float(box.conf)
-                ))
+            track = Track(
+                track_id=int(tid),
+                bbox=[float(x1), float(y1), float(x2), float(y2)],
+                foot_point=[float(foot_x), float(foot_y)],
+                confidence=float(conf),
+            )
+            tracks.append(track)
 
         return TrackingResult(
             frame_number=frame_number,
             timestamp=datetime.now(timezone.utc).isoformat(),
             video_source=video_source,
-            tracks=tracks
+            tracks=tracks,
+        )
+
+    def _empty_result(self, frame_number: int, video_source: str) -> TrackingResult:
+        return TrackingResult(
+            frame_number=frame_number,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            video_source=video_source,
+            tracks=[],
         )
