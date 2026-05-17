@@ -23,7 +23,12 @@ class ByteTracker:
         model_path: str = "yolov8n.pt",
         conf: float = 0.5,
         tracker_config: str = "bytetrack.yaml",
+        fps: float = 30.0,
     ):
+        self.model = YOLO(model_path)
+        self.conf = conf
+        self.tracker_config = tracker_config
+        self.fps = fps
         """
         Args:
             model_path: YOLO weight 파일 (없으면 자동 다운로드)
@@ -93,7 +98,7 @@ class ByteTracker:
 
         return TrackingResult(
             frame_number=frame_number,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=self._video_timestamp(frame_number),
             video_source=video_source,
             tracks=tracks,
         )
@@ -101,7 +106,14 @@ class ByteTracker:
     def _empty_result(self, frame_number: int, video_source: str) -> TrackingResult:
         return TrackingResult(
             frame_number=frame_number,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=self._video_timestamp(frame_number),
             video_source=video_source,
             tracks=[],
         )
+
+    def _video_timestamp(self, frame_number: int) -> str:
+        total_seconds = frame_number / self.fps
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        seconds = total_seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{seconds:06.3f}"

@@ -1,6 +1,7 @@
 """KidCafe Safety AI - 메인 파이프라인."""
 
 import argparse
+import time
 
 import cv2
 
@@ -25,7 +26,7 @@ def run_pipeline(
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise RuntimeError(f"영상을 열 수 없습니다: {video_path}")
-    
+
     overlay_writer = None
 
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -38,17 +39,17 @@ def run_pipeline(
     print(f"[INFO] Total frames: {total_frames}")
 
     # 컴포넌트 초기화
-    tracker = ByteTracker(conf=conf)
+    tracker = ByteTracker(conf=conf, fps=fps)
     zones = load_zones(zones_path)
     checker = ZoneChecker(zones, frame_width, frame_height)
     event_manager = EventManager(zones=zones, fps=fps)
     writer = EventWriter(output_path)
-    
+
     overlay_writer = VideoOverlayWriter(
-    output_path=overlay_path,
-    frame_width=frame_width,
-    frame_height=frame_height,
-    fps=fps,
+        output_path=overlay_path,
+        frame_width=frame_width,
+        frame_height=frame_height,
+        fps=fps,
     )
 
     print(f"[INFO] Loaded {len(zones)} zones")
@@ -59,6 +60,8 @@ def run_pipeline(
     total_events = 0
     try:
         while True:
+            frame_start = time.time()
+
             ret, frame = cap.read()
             if not ret:
                 break
@@ -87,7 +90,7 @@ def run_pipeline(
                         f"[Frame {frame_number:5d}] {ev.event_type} "
                         f"| track_id={ev.track_id} | zone={ev.zone_id}"
                     )
-            
+
             overlay_writer.write_frame(
                 frame=frame,
                 tracks=result.tracks,
@@ -102,9 +105,13 @@ def run_pipeline(
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
 
+            processing_time = time.time() - frame_start
+            processing_fps = 1.0 / processing_time if processing_time > 0 else 0.0
+
             if frame_number % 30 == 0:
                 print(
-                    f"  ... processing frame {frame_number}/{total_frames}",
+                    f"  ... frame {frame_number}/{total_frames} "
+                    f"(processing {processing_fps:.1f} FPS, video {fps:.1f} FPS)",
                     end="\r",
                 )
 
@@ -164,9 +171,9 @@ def main():
         help="실시간 시각화 창 표시 (cv2.imshow)",
     )
     parser.add_argument(
-    "--overlay-output",
-    default="outputs/result.mp4",
-    help="결과 영상 mp4 출력 경로",
+        "--overlay-output",
+        default="outputs/result.mp4",
+        help="결과 영상 mp4 출력 경로",
     )
 
     parser.add_argument(

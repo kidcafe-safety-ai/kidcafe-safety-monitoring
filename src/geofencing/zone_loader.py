@@ -39,16 +39,13 @@ def load_zones(json_path: str) -> List[Zone]:
         # 필수 필드 체크
         for required in ("zone_id", "name", "type", "points"):
             if required not in item:
-                raise ValueError(
-                    f"Zone #{idx} missing required field: '{required}'"
-                )
+                raise ValueError(f"Zone #{idx} missing required field: '{required}'")
 
         # 좌표 0~1 범위 검증
         for pt_idx, pt in enumerate(item["points"]):
             if not isinstance(pt, list) or len(pt) != 2:
                 raise ValueError(
-                    f"Zone '{item['zone_id']}' point #{pt_idx} "
-                    f"must be [x, y] list"
+                    f"Zone '{item['zone_id']}' point #{pt_idx} " f"must be [x, y] list"
                 )
             x, y = pt
             if not (0.0 <= x <= 1.0) or not (0.0 <= y <= 1.0):

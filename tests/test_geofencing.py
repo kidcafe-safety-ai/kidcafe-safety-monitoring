@@ -1,8 +1,10 @@
 """Geofencing 모듈 테스트."""
+
+import pytest
+
 from src.common.types import Track, Zone
 from src.geofencing.zone_checker import ZoneChecker
 from src.geofencing.zone_loader import load_zones
-import pytest
 
 
 class TestZoneLoader:
@@ -53,7 +55,7 @@ class TestZoneChecker:
             confidence=0.9,
         )
         assert "test_zone" in checker.check(track)
-    
+
 
 class TestZoneLoaderValidation:
     def test_missing_zone_id(self, tmp_path):

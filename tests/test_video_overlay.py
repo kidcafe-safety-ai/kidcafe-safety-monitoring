@@ -1,5 +1,7 @@
 """video_overlay 모듈 테스트."""
+
 import os
+
 import numpy as np
 import pytest
 
@@ -13,10 +15,15 @@ class TestVideoOverlayWriter:
         writer = VideoOverlayWriter(str(out), 640, 480, 30.0)
 
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        track = Track(track_id=1, bbox=[100, 100, 200, 300],
-                      foot_point=[150, 300], confidence=0.9)
-        zone = Zone(zone_id="z", name="Test", type="polygon",
-                    points=[[0.1, 0.1], [0.5, 0.1], [0.5, 0.5], [0.1, 0.5]])
+        track = Track(
+            track_id=1, bbox=[100, 100, 200, 300], foot_point=[150, 300], confidence=0.9
+        )
+        zone = Zone(
+            zone_id="z",
+            name="Test",
+            type="polygon",
+            points=[[0.1, 0.1], [0.5, 0.1], [0.5, 0.5], [0.1, 0.5]],
+        )
 
         for _ in range(10):
             writer.write_frame(frame, [track], [zone], [])

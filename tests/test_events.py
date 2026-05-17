@@ -1,4 +1,5 @@
 """Events 모듈 테스트 (ENTER + DWELL + EXIT)."""
+
 from src.common.types import Track, Zone, ZoneRules
 from src.events.event_manager import EventManager
 

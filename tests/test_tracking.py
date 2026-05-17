@@ -2,6 +2,7 @@
 
 YOLO 모델 로드가 필요하므로 시간이 좀 걸림.
 """
+
 import numpy as np
 
 from src.tracking.bytetrack_wrapper import ByteTracker

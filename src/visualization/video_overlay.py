@@ -15,13 +15,12 @@ import numpy as np
 
 from src.common.types import Event, Track, Zone
 
-
 # 색상 (BGR, OpenCV 기준)
-COLOR_BBOX_NORMAL = (0, 255, 0)         # 초록
-COLOR_ZONE = (0, 0, 255)                # 빨강 (zone 경계)
-COLOR_ENTER = (7, 193, 255)             # 노랑 (#FFC107 → BGR)
-COLOR_DWELL = (54, 67, 244)             # 빨강 (#F44336 → BGR)
-COLOR_EXIT = (158, 158, 158)            # 회색 (#9E9E9E → BGR)
+COLOR_BBOX_NORMAL = (0, 255, 0)  # 초록
+COLOR_ZONE = (0, 0, 255)  # 빨강 (zone 경계)
+COLOR_ENTER = (7, 193, 255)  # 노랑 (#FFC107 → BGR)
+COLOR_DWELL = (54, 67, 244)  # 빨강 (#F44336 → BGR)
+COLOR_EXIT = (158, 158, 158)  # 회색 (#9E9E9E → BGR)
 COLOR_BANNER_BG = (40, 40, 40)
 COLOR_BANNER_TEXT = (255, 255, 255)
 
