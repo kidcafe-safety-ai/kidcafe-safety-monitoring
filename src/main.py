@@ -9,19 +9,24 @@ from src.events.event_manager import EventManager
 from src.geofencing.zone_checker import ZoneChecker
 from src.geofencing.zone_loader import load_zones
 from src.tracking.bytetrack_wrapper import ByteTracker
+from src.visualization.video_overlay import VideoOverlayWriter
 
 
 def run_pipeline(
     video_path: str,
     zones_path: str,
     output_path: str = "outputs/events.jsonl",
+    overlay_path: str = "outputs/result.mp4",
     frames_limit: int = None,
     show: bool = False,
+    conf: float = 0.5,
 ):
     """전체 파이프라인 실행."""
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise RuntimeError(f"영상을 열 수 없습니다: {video_path}")
+    
+    overlay_writer = None
 
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -33,11 +38,18 @@ def run_pipeline(
     print(f"[INFO] Total frames: {total_frames}")
 
     # 컴포넌트 초기화
-    tracker = ByteTracker(conf=0.5)
+    tracker = ByteTracker(conf=conf)
     zones = load_zones(zones_path)
     checker = ZoneChecker(zones, frame_width, frame_height)
-    event_manager = EventManager()
+    event_manager = EventManager(zones=zones, fps=fps)
     writer = EventWriter(output_path)
+    
+    overlay_writer = VideoOverlayWriter(
+    output_path=overlay_path,
+    frame_width=frame_width,
+    frame_height=frame_height,
+    fps=fps,
+    )
 
     print(f"[INFO] Loaded {len(zones)} zones")
     print(f"[INFO] Output: {output_path}")
@@ -75,6 +87,13 @@ def run_pipeline(
                         f"[Frame {frame_number:5d}] {ev.event_type} "
                         f"| track_id={ev.track_id} | zone={ev.zone_id}"
                     )
+            
+            overlay_writer.write_frame(
+                frame=frame,
+                tracks=result.tracks,
+                zones=zones,
+                events=frame_events,
+            )
 
             # 4. (선택) 시각화
             if show:
@@ -94,6 +113,8 @@ def run_pipeline(
                 break
     finally:
         cap.release()
+        if overlay_writer is not None:
+            overlay_writer.close()
         if show:
             cv2.destroyAllWindows()
 
@@ -142,6 +163,18 @@ def main():
         action="store_true",
         help="실시간 시각화 창 표시 (cv2.imshow)",
     )
+    parser.add_argument(
+    "--overlay-output",
+    default="outputs/result.mp4",
+    help="결과 영상 mp4 출력 경로",
+    )
+
+    parser.add_argument(
+        "--conf",
+        type=float,
+        default=0.5,
+        help="YOLO confidence threshold (0~1)",
+    )
     args = parser.parse_args()
 
     print("=" * 50)
@@ -153,6 +186,8 @@ def main():
         zones_path=args.zones,
         output_path=args.output,
         frames_limit=args.frames_limit,
+        overlay_path=args.overlay_output,
+        conf=args.conf,
         show=args.show,
     )
 

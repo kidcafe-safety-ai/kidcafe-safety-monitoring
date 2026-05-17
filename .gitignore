@@ -222,4 +222,4 @@ data/videos/*.mp4
 data/videos/*.avi
 outputs/*.jsonl
 outputs/*.csv
-.DS_Store
+.DS_Storeoutputs/*.mp4
