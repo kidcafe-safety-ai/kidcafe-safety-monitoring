@@ -4,9 +4,6 @@ Detection과 Tracking을 model.track()으로 한 번에 처리한다.
 별도의 detector 모듈을 두지 않은 이유는 docs/decisions.md ADR-001 참조.
 """
 
-from datetime import datetime, timezone
-from typing import Optional
-
 import numpy as np
 from ultralytics import YOLO
 
@@ -29,15 +26,6 @@ class ByteTracker:
         self.conf = conf
         self.tracker_config = tracker_config
         self.fps = fps
-        """
-        Args:
-            model_path: YOLO weight 파일 (없으면 자동 다운로드)
-            conf: confidence threshold (0~1)
-            tracker_config: "bytetrack.yaml" 또는 "botsort.yaml"
-        """
-        self.model = YOLO(model_path)
-        self.conf = conf
-        self.tracker_config = tracker_config
 
     def update(
         self,
