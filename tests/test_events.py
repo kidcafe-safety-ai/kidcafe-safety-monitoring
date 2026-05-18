@@ -1,5 +1,7 @@
 """Events 모듈 테스트 (ENTER + DWELL + EXIT)."""
 
+import pytest
+
 from src.common.types import Track, Zone, ZoneRules
 from src.events.event_manager import EventManager
 
@@ -78,3 +80,71 @@ class TestEventManager:
         events = manager.process(self._make_track(), ["zone_a"], 100, "test.mp4")
         assert len(events) == 1
         assert events[0].event_type == "ENTER"
+
+    def test_enter_alert_false_suppresses_enter_event(self):
+        """enter_alert=False 이면 ENTER 이벤트가 발생하지 않는다."""
+        zones = [
+            Zone(
+                zone_id="zone_a",
+                name="Test A",
+                type="polygon",
+                points=[[0.3, 0.4], [0.7, 0.4], [0.7, 0.9], [0.3, 0.9]],
+                rules=ZoneRules(enter_alert=False, dwell_threshold_sec=3),
+            )
+        ]
+        manager = EventManager(zones=zones, fps=30.0)
+        events = manager.process(self._make_track(), ["zone_a"], 0, "test.mp4")
+        assert events == []
+
+    def test_enter_alert_false_dwell_still_fires(self):
+        """enter_alert=False 여도 DWELL은 정상 발생한다."""
+        zones = [
+            Zone(
+                zone_id="zone_a",
+                name="Test A",
+                type="polygon",
+                points=[[0.3, 0.4], [0.7, 0.4], [0.7, 0.9], [0.3, 0.9]],
+                rules=ZoneRules(enter_alert=False, dwell_threshold_sec=3),
+            )
+        ]
+        manager = EventManager(zones=zones, fps=30.0)
+        manager.process(self._make_track(), ["zone_a"], 0, "test.mp4")
+        events = manager.process(self._make_track(), ["zone_a"], 90, "test.mp4")
+        assert len(events) == 1
+        assert events[0].event_type == "DWELL"
+
+    def test_flush_stale_tracks_emits_exit(self):
+        """zone 안에 있는 track이 화면에서 사라지면 flush 시 EXIT가 발생한다."""
+        manager = EventManager(zones=self._make_zones(), fps=30.0)
+        manager.process(self._make_track(), ["zone_a"], 0, "test.mp4")  # ENTER
+
+        events = manager.flush_stale_tracks(
+            active_track_ids=set(), frame_number=10, video_source="test.mp4"
+        )
+        assert len(events) == 1
+        assert events[0].event_type == "EXIT"
+        assert events[0].track_id == 1
+
+    def test_flush_stale_tracks_clears_state(self):
+        """flush 이후 해당 track_id의 상태가 완전히 제거된다."""
+        manager = EventManager(zones=self._make_zones(), fps=30.0)
+        manager.process(self._make_track(), ["zone_a"], 0, "test.mp4")
+        manager.flush_stale_tracks(
+            active_track_ids=set(), frame_number=10, video_source="test.mp4"
+        )
+        assert 1 not in manager.current_zones
+        assert 1 not in manager.last_track_info
+
+    def test_flush_stale_tracks_ignores_active_tracks(self):
+        """active_track_ids에 포함된 track은 flush해도 상태가 유지된다."""
+        manager = EventManager(zones=self._make_zones(), fps=30.0)
+        manager.process(self._make_track(track_id=1), ["zone_a"], 0, "test.mp4")
+        manager.process(self._make_track(track_id=2), ["zone_a"], 0, "test.mp4")
+
+        # track_id=1만 active
+        events = manager.flush_stale_tracks(
+            active_track_ids={1}, frame_number=10, video_source="test.mp4"
+        )
+        assert len(events) == 1
+        assert events[0].track_id == 2
+        assert 1 in manager.current_zones  # track_id=1은 유지

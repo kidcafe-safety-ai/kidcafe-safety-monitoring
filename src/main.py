@@ -81,6 +81,15 @@ def run_pipeline(
                 )
                 frame_events.extend(events)
 
+            # 화면에서 사라진 track 상태 정리 + EXIT 이벤트 발생
+            active_ids = {t.track_id for t in result.tracks}
+            stale_events = event_manager.flush_stale_tracks(
+                active_track_ids=active_ids,
+                frame_number=frame_number,
+                video_source=video_path,
+            )
+            frame_events.extend(stale_events)
+
             # 3. Save
             if frame_events:
                 writer.write_batch(frame_events)

@@ -44,7 +44,7 @@ class TestTrackingResult:
         )
         result = TrackingResult(
             frame_number=42,
-            timestamp="2024-05-07T15:30:45.123456",
+            timestamp="00:00:01.400",  # 42 frames @ 30fps = 1.4초
             video_source="test.mp4",
             tracks=[track],
         )
