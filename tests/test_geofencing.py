@@ -1,4 +1,7 @@
 """Geofencing 모듈 테스트."""
+
+import pytest
+
 from src.common.types import Track, Zone
 from src.geofencing.zone_checker import ZoneChecker
 from src.geofencing.zone_loader import load_zones
@@ -52,3 +55,19 @@ class TestZoneChecker:
             confidence=0.9,
         )
         assert "test_zone" in checker.check(track)
+
+
+class TestZoneLoaderValidation:
+    def test_missing_zone_id(self, tmp_path):
+        bad_json = '[{"name": "x", "type": "polygon", "points": [[0,0],[1,0],[1,1]]}]'
+        path = tmp_path / "bad.json"
+        path.write_text(bad_json)
+        with pytest.raises(ValueError, match="zone_id"):
+            load_zones(str(path))
+
+    def test_out_of_range_coords(self, tmp_path):
+        bad_json = '[{"zone_id":"x","name":"x","type":"polygon","points":[[1.5,0.5],[0.7,0.4],[0.7,0.9]]}]'
+        path = tmp_path / "bad.json"
+        path.write_text(bad_json)
+        with pytest.raises(ValueError, match="out of normalized range"):
+            load_zones(str(path))

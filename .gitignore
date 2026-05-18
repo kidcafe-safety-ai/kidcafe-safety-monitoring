@@ -220,6 +220,16 @@ __marimo__/
 # Project specific
 data/videos/*.mp4
 data/videos/*.avi
+
 outputs/*.jsonl
 outputs/*.csv
+outputs/*.mp4
+
+# Model weights
+*.pt
+*.pth
+*.onnx
+*.engine
+
 .DS_Store
+

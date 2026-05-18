@@ -1,91 +1,165 @@
-# Kidcafe Safety AI
+# KidCafe Safety AI
 
 Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
 한이음 드림업 프로젝트 (2026.04 ~ 2026.10)
+
+![status](https://img.shields.io/badge/status-MVP_1_in_progress-yellow)
+![python](https://img.shields.io/badge/python-3.10-blue)
+![tests](https://img.shields.io/badge/tests-pytest_passed-green)
+![license](https://img.shields.io/badge/license-Internal-lightgrey)
+
+---
+
+## 개요
+
+KidCafe Safety AI는 YOLO + ByteTrack + Geofencing 기반으로 위험구역 진입 및 장시간 체류를 감지하는 Vision AI 안전 모니터링 시스템이다.
 
 ---
 
 ## 빠른 시작
 
 ### 권장 환경
-
 - Python 3.10.x
 - macOS / Ubuntu tested
 
-### 환경 셋업
+### 1. 환경 셋업
 
 ```bash
-# 1. 저장소 클론
+# 저장소 클론
 git clone https://github.com/kidcafe-safety-ai/kidcafe-safety-monitoring.git
 cd kidcafe-safety-monitoring
 
-# 2. 가상 환경 생성
+# 가상환경 생성 (Python 3.10 권장)
 python3.10 -m venv .venv
-source .venv/bin/activate  # macOS/Linux
-# .venv\Scripts\activate   # Windows
+source .venv/bin/activate          # macOS/Linux
+# .venv\Scripts\activate           # Windows
 
-# 3. 패키지 설치
+# 패키지 설치
 pip install -r requirements.txt
+```
+
+### 2. 테스트 영상 준비
+검증용 영상을 `data/videos/test.mp4`에 배치합니다.
+- 검증 영상: [Pexels 15385683](https://www.pexels.com/ko-kr/video/shopping-15385683/)
+- 권장 해상도: 1920x1080 또는 1280x720
+- 권장 길이: 10~30초
+
+### 3. 실행
+
+```bash
+# 기본 실행
+python -m src.main
+
+# 전체 옵션
+python -m src.main \
+  --video data/videos/test.mp4 \
+  --zones data/zones/sample.json \
+  --output outputs/events.jsonl \
+  --overlay-output outputs/result.mp4 \
+  --conf 0.5 \
+  --frames-limit 300
+
+# 도움말
+python -m src.main --help
+```
+
+### 4. 결과 확인
+
+```bash
+# 이벤트 로그
+cat outputs/events.jsonl | head -5
+
+# 결과 영상 재생
+open outputs/result.mp4              # macOS
+# xdg-open outputs/result.mp4        # Linux
+# start outputs/result.mp4           # Windows
+```
+
+### 5. 테스트
+
+```bash
+pytest -v
 ```
 
 ---
 
 ## 프로젝트 구조
 
-```text
-src/
-├── common/          # 공통 타입
-├── detection/       # YOLO 탐지 (A 담당)
-├── tracking/        # 다중 객체 추적 (A 담당)
-├── geofencing/      # 위험구역 판단 (B 담당)
-├── events/          # 이벤트 상태머신 (B 담당)
-├── visualization/   # Streamlit UI (C 담당)
-└── main.py
-
-data/
-├── videos/          # 입력 영상
-└── zones/           # 구역 정의 JSON
-
-docs/
-├── interfaces.md    # 모듈 간 인터페이스
-└── decisions.md     # 아키텍처 결정 기록
-
-outputs/             # 결과 (JSONL, CSV)
-tests/               # 유닛 테스트
-notebooks/           # 실험용
+```
+kidcafe-safety-monitoring/
+├── src/
+│   ├── common/              # 공통 타입 (Track, Event, Zone)
+│   │   ├── types.py
+│   │   └── event_writer.py
+│   ├── tracking/            # YOLO + ByteTrack
+│   │   └── bytetrack_wrapper.py
+│   ├── geofencing/          # Zone 판정
+│   │   ├── zone_loader.py
+│   │   └── zone_checker.py
+│   ├── events/              # 상태머신
+│   │   └── event_manager.py
+│   ├── visualization/       # 결과 영상 + Streamlit (예정)
+│   │   ├── video_overlay.py
+│   │   └── app.py           # (예정)
+│   └── main.py              # 파이프라인 진입점
+├── data/
+│   ├── videos/              # 입력 영상 (.gitignore)
+│   └── zones/               # Zone JSON
+├── docs/
+│   ├── interfaces.md        # 모듈 간 인터페이스
+│   ├── decisions.md         # ADR 기록
+│   ├── tracking_analysis.md
+│   └── conf_tuning.md
+├── tests/
+│   └── test_*.py
+├── outputs/                 # 실행 결과 (.gitignore)
+├── notebooks/               # 실험용
+├── requirements.txt
+└── README.md
 ```
 
 ---
 
-## 역할 분담
+## 역할 분담 (MVP 1단계)
 
-> 현재 구조와 역할 분담은 1차 MVP 기준이며,  
-> ReID, Pose Estimation, Multi-camera Tracking은  
-> 고도화 단계에서 별도 모듈로 확장한다.
+| 팀원 | 담당 | 주력 모듈 |
+|------|------|---------|
+| **A** | Vision AI Backend + 결과 영상 | tracking, events, geofencing, video_overlay |
+| **B** | Data Analysis + Pipeline 운영 | main.py, event_writer, event_aggregator, charts(planned) | 
+| **C** | Streamlit UI 전담 (6 페이지) | visualization/app.py, visualization/pages/(planned) | 
 
-| 팀원 | 담당 |
-|------|------|
-| A | Detection, Tracking (YOLO + ByteTrack) |
-| B | Geofencing, Events (Zone + 상태머신) |
-| C | Visualization (Streamlit UI) |
+> ReID, Pose Estimation, Multi-camera는 **Phase 2 별도 모듈**로 확장
 
 ---
 
-## 협업 규칙
+## Tests
 
-### Git
+```bash
+# 전체 테스트
+pytest -v
 
-- **Branch**: `feature/*` 사용
-- **Commit**: `feat:`, `fix:`, `docs:`, `refactor:` 프리픽스
-- **PR**: 최소 1명 리뷰 후 머지
-- **main 브랜치 직접 push 금지**
+# 특정 모듈만
+pytest tests/test_events.py -v
+pytest tests/test_geofencing.py -v
 
-### 작업
+# 커버리지 포함
+pytest --cov=src --cov-report=term-missing
+```
 
-- **2시간 룰**: 막히면 즉시 공유
-- **70% 원칙**: 70% 완성 후 PR
-- **주차별 통합**: 매주 화요일 회의 전까지
+---
+
+## 명령어 옵션 상세
+
+| 옵션 | 기본값 | 설명 |
+|------|--------|------|
+| `--video` | `data/videos/test.mp4` | 입력 영상 경로 |
+| `--zones` | `data/zones/sample.json` | Zone 정의 JSON |
+| `--output` | `outputs/events.jsonl` | 이벤트 출력 경로 |
+| `--overlay-output` | `outputs/result.mp4` | 결과 영상 출력 |
+| `--conf` | `0.5` | YOLO confidence threshold (0~1) |
+| `--frames-limit` | `None` | 처음 N프레임만 처리 (테스트용) |
+| `--show` | `False` | 실시간 시각화 창 (cv2.imshow) |
 
 ---
 
@@ -93,36 +167,105 @@ notebooks/           # 실험용
 
 ### Version Strategy
 
-현재 MVP 단계에서는 팀 환경 통일과 재현성을 위해  
-핵심 의존성 버전을 고정하여 사용한다.
+MVP 단계에서는 **재현성**과 **환경 통일**을 위해 핵심 의존성 버전 고정.
 
-#### Core Dependencies
+### Core
 
-- ultralytics==8.0.206
-- opencv-python==4.8.1.78
-- shapely==2.0.1
-- numpy==1.26.4
-- pandas==2.2.2
-- streamlit==1.34.0
-- matplotlib==3.8.4
+| 패키지 | 버전 | 용도 |
+|--------|------|------|
+| `ultralytics` | 8.0.206 | YOLO + ByteTrack |
+| `opencv-python` | 4.8.1.78 | 영상 I/O + 시각화 |
+| `shapely` | 2.0.1 | Polygon 판정 |
+| `numpy` | 1.26.4 | 수치 연산 |
+| `pandas` | 2.2.2 | 데이터 분석 (B) |
+| `streamlit` | 1.34.0 | UI (C) |
+| `matplotlib` | 3.8.4 | 차트 (B) |
+| `torch` | 2.5.1 | YOLO 백엔드 (ADR-002) |
 
-#### Development / Testing
+### Dev/Test
 
-- pytest==8.2.0
-- black==24.4.2
-- flake8==7.0.0
-- isort==5.13.2
+| 패키지 | 버전 |
+|--------|------|
+| `pytest` | 8.2.0 |
+| `pytest-cov` | 5.0.0 |
+| `black` | 24.4.2 |
+| `isort` | 5.13.2 |
+| `flake8` | 7.0.0 |
 
-> 추후 운영 환경 및 배포 단계에서  
-> 일부 라이브러리는 범위 기반(`>=`) 전략으로 전환 가능
 ---
 
-## 1차 MVP 일정
+## MVP 1단계 일정
 
-| 주 | 내용 |
-|----|------|
-| Week 0 | 폴더 구조, 환경 셋업 |
-| Week 1 | Mob: YOLO + ByteTrack Hello World |
-| Week 2 | 분담: 각 모듈 구현 |
-| Week 3 | 통합, 이벤트 로직 |
-| Week 4 | 안정화, 시연 |
+| 주차 | 내용 | 상태 |
+|-----|------|-----|
+| Week 0 | 폴더 구조, 환경 셋업 | Done |
+| Week 1 | YOLO + ByteTrack Walking Skeleton | Done |
+| Week 2 | DWELL/EXIT + 결과 영상 | Done |
+| Week 3 | Streamlit 대시보드 통합 | Planned |
+| Week 4 | 안정화, 시연 영상 제작 | Planned |
+
+---
+
+## Architecture Decisions
+
+주요 의사결정 기록 (전체: [`docs/decisions.md`](docs/decisions.md)):
+
+### 정량 분석 문서
+
+- [`docs/tracking_analysis.md`](docs/tracking_analysis.md) — Track ID 안정성 분석
+- [`docs/conf_tuning.md`](docs/conf_tuning.md) — Confidence threshold 튜닝
+
+| ADR | 결정 | 사유 |
+|-----|------|------|
+| ADR-001 | Ultralytics built-in tracking 채택 | BoxMot API 불일치 |
+| ADR-002 | PyTorch 2.5.1 버전 고정 | YOLO weights_only 호환성 |
+| ADR-003 | shapely `covers()` 사용 | 경계 위 점 포함 (contains 대신) |
+| ADR-004 | EventManager(zones, fps) | DWELL 구현 위한 Breaking Change |
+| ADR-005 | timestamp 영상 시간 기준 | 시스템 시간 → HH:MM:SS.mmm |
+| ADR-006 | mp4v 코덱 채택 | macOS/Linux 호환성 |
+| ADR-007 | YOLOv8n + ByteTrack MVP 채택 | 전체 파이프라인 우선 검증 |
+
+---
+
+## 협업 규칙
+
+### Git
+- **Branch**: `feature/*` 사용
+- **Commit**: Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`)
+- **PR**: 최소 1명 리뷰 후 머지
+- **main 직접 push 금지**
+
+### 작업
+- **2시간 룰**: 막히면 즉시 팀에 공유
+- **70% 원칙**: 70% 완성 후 PR
+- **주차별 통합**: 매주 화요일 회의 전까지
+
+---
+
+## 알려진 한계 (Phase 2로 이연)
+
+현재 MVP에서 확인된 한계 — 모두 다음 단계에서 개선 예정:
+
+| 한계 | 원인 | Phase 2 개선 방안 |
+|------|------|----------------|
+| CCTV 거리 탐지 약함 | YOLOv8n (경량 모델) | YOLOv8s/m 교체 |
+| 작은 객체 bbox 깜빡임 | 작은 객체 confidence 흔들림 | 모델 업그레이드 + 후처리 |
+| track_id 자주 변경 | ReID 없음 | OSNet 기반 ReID 도입 |
+| 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | StrongSORT 또는 ReID 보강 |
+> 상세 분석: [`docs/tracking_analysis.md`](docs/tracking_analysis.md)
+
+---
+
+## 참고 자료
+
+- [Ultralytics YOLOv8 Docs](https://docs.ultralytics.com/)
+- [ByteTrack 논문](https://arxiv.org/abs/2110.06864)
+- [Shapely Docs](https://shapely.readthedocs.io/)
+- [Streamlit Docs](https://docs.streamlit.io/)
+- [검증 영상 (Pexels 15385683)](https://www.pexels.com/ko-kr/video/shopping-15385683/)
+
+---
+
+## License
+
+한이음 드림업 프로젝트 결과물. 외부 사용 시 문의.
