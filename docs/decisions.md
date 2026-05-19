@@ -213,3 +213,39 @@ MVP 단계에서는 mp4v 코덱 사용.
 * 실제 키즈카페 CCTV 데이터 기반
 
 ---
+
+## ADR-008: Dashboard API 모듈 분리 및 요약 출력 추가
+
+**Date**: 2026-05-18  
+**Status**: Accepted
+
+### Context
+
+대시보드에서 이벤트 데이터를 활용하려면 `outputs/events.jsonl`을 그대로 읽는 것만으로는 부족하다.
+
+필요한 기능은 다음과 같다.
+
+* 이벤트 로그 CSV 변환
+* KPI 요약 JSON 생성
+* 구역별 / 타입별 / 시간대별 이벤트 집계
+* 체류 시간 분석
+* 개별 track_id 기준 활동 리포트
+* Streamlit에서 바로 사용할 수 있는 차트 생성
+
+처음에는 `event_aggregator.py`와 `charts.py`에 모든 기능을 모을 수 있지만, 파일이 길어지고 책임이 많아져 유지보수가 어려워질 수 있다.
+
+### Decision
+
+대시보드 분석 기능을 역할별 모듈로 분리한다.
+
+```text
+src/common/event_io.py              # 이벤트 파일 입출력
+src/common/event_time.py            # 영상 시간 처리
+src/common/event_counter.py         # 이벤트 집계
+src/common/dwell_analyzer.py        # 체류 시간 분석
+src/common/track_report.py          # track_id 기준 리포트
+src/common/insight_generator.py     # 룰 기반 인사이트 생성
+src/common/event_aggregator.py      # 대시보드용 통합 API
+src/visualization/event_charts.py   # 이벤트/통계 차트
+src/visualization/track_charts.py   # track_id 기준 차트
+src/visualization/charts.py         # 차트 통합 API

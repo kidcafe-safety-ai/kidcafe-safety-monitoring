@@ -222,6 +222,7 @@ data/videos/*.mp4
 data/videos/*.avi
 
 outputs/*.jsonl
+outputs/*.json
 outputs/*.csv
 outputs/*.mp4
 
