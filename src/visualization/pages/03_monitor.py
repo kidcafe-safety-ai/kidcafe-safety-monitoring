@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-import json
+import subprocess
 import sys
+import tempfile
+import time
 from pathlib import Path
 
+import cv2
 import streamlit as st
 
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -16,11 +19,20 @@ sys.path.insert(0, str(VIS_DIR))
 sys.path.insert(0, str(ROOT_DIR))
 
 from _style import brand_header, inject_css, sidebar_status, _colors
+from dashboard_data import (
+    event_get,
+    get_recent_events,
+    get_video_status,
+    get_zone_name_map,
+    load_events,
+    load_zones,
+    resolve_path,
+)
 
 try:
-    from src.common.event_aggregator import load_events_from_jsonl
+    from src.visualization.charts import make_timeline_chart
 except Exception:
-    load_events_from_jsonl = None
+    make_timeline_chart = None
 
 
 st.set_page_config(page_title="모니터링 · KidCafe Safety AI", page_icon="📹", layout="wide")
@@ -30,8 +42,12 @@ for key, val in {
     "video_path": None,
     "zones_path": "data/zones/sample.json",
     "events_path": "outputs/events.jsonl",
+    "csv_path": "outputs/events.csv",
+    "summary_path": "outputs/summary.json",
     "result_video_path": "outputs/result.mp4",
-    "_playing": False,
+    "pipeline_done": False,
+    "uploaded_video_name": None,
+    "conf_threshold": 0.5,
     "theme_mode": "dark",
 }.items():
     if key not in st.session_state:
@@ -40,73 +56,14 @@ for key, val in {
 c = _colors()
 
 
-def event_get(event, key, default=None):
-    if isinstance(event, dict):
-        return event.get(key, default)
-    return getattr(event, key, default)
-
-
-def load_events_fallback(path):
-    p = Path(path)
-    if not p.exists():
-        return []
-
-    out = []
-    with open(p, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                out.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
-    return out
-
-
-def load_events(path):
-    if load_events_from_jsonl is not None:
-        try:
-            return load_events_from_jsonl(path)
-        except Exception:
-            pass
-    return load_events_fallback(path)
-
-
-def load_zones(path):
-    p = Path(path)
-    if not p.exists():
-        return []
-
-    try:
-        with open(p, encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        return []
-
-    if isinstance(data, dict) and "zones" in data:
-        return data["zones"]
-    if isinstance(data, list):
-        return data
-    return []
-
-
-def zone_name_map_from_zones(zones):
-    result = {}
-    for zone in zones:
-        if isinstance(zone, dict):
-            zid = zone.get("zone_id")
-            name = zone.get("name", zid)
-        else:
-            zid = getattr(zone, "zone_id", None)
-            name = getattr(zone, "name", zid)
-        if zid:
-            result[zid] = name
-    return result
-
-
 def render_compact_kpi(icon, value, label, tone):
-    color = {"blue": "#12BBD3", "yellow": "#F59E0B", "green": "#10B981"}.get(tone, "#12BBD3")
+    color = {
+        "blue": "#12BBD3",
+        "yellow": "#F59E0B",
+        "green": "#10B981",
+        "red": "#EF4444",
+    }.get(tone, "#12BBD3")
+
     return (
         f'<div class="panel" style="padding:26px 28px;">'
         f'  <div style="display:flex;align-items:center;gap:18px;">'
@@ -121,38 +78,210 @@ def render_compact_kpi(icon, value, label, tone):
     )
 
 
-events = load_events(st.session_state.events_path)
-zones = load_zones(st.session_state.zones_path)
-zone_name_map = zone_name_map_from_zones(zones)
+def render_video_placeholder(message):
+    st.markdown(
+        f"""
+        <div style="height:520px;background:linear-gradient(145deg,#080E1A,#0B1220);
+                    border:1px solid #1D3152;border-radius:16px;position:relative;overflow:hidden;">
+            <div style="position:absolute;top:28px;left:36px;color:#E5EDF8;font-weight:800;">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#64748B;margin-right:10px;"></span>
+                Camera 01
+                <span style="margin-left:42px;color:#E5EDF8;">FPS: 30</span>
+            </div>
+            <div style="height:100%;display:flex;align-items:center;justify-content:center;color:{c["TEXT_SUB"]};
+                        font-size:18px;font-weight:700;text-align:center;">
+                {message}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-track_ids = {event_get(e, "track_id") for e in events if event_get(e, "track_id") is not None}
-dwells = sum(1 for e in events if event_get(e, "event_type") == "DWELL")
 
-result_video = Path(st.session_state.result_video_path)
-raw_video = Path(st.session_state.video_path) if st.session_state.video_path else None
+def render_opencv_video_viewer(video_path: Path, label: str):
+    cap = cv2.VideoCapture(str(video_path))
+
+    if not cap.isOpened():
+        st.error(f"{label}을 OpenCV로 열 수 없습니다.")
+        return
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+
+    if total_frames <= 0:
+        cap.release()
+        st.error(f"{label}의 프레임 정보를 읽을 수 없습니다.")
+        return
+
+    frame_box = st.empty()
+    control_left, control_right = st.columns([4, 1])
+
+    with control_left:
+        frame_idx = st.slider(
+            "프레임",
+            min_value=0,
+            max_value=max(total_frames - 1, 0),
+            value=0,
+            step=1,
+            key=f"frame_{video_path.name}",
+        )
+
+    with control_right:
+        play = st.toggle("재생", value=False, key=f"play_{video_path.name}")
+
+    if play:
+        start_frame = frame_idx
+
+        for idx in range(start_frame, total_frames):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ok, frame = cap.read()
+
+            if not ok:
+                break
+
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_box.image(
+                frame_rgb,
+                use_column_width=True,
+                caption=f"{label} · Frame {idx}/{total_frames - 1}",
+            )
+
+            time.sleep(min(1.0 / fps, 0.05))
+    else:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        ok, frame = cap.read()
+
+        if ok:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_box.image(
+                frame_rgb,
+                use_column_width=True,
+                caption=f"{label} · Frame {frame_idx}/{total_frames - 1}",
+            )
+        else:
+            st.error("선택한 프레임을 읽을 수 없습니다.")
+
+    cap.release()
+
+
+def run_pipeline(frames_limit):
+    if not st.session_state.video_path:
+        st.error("영상을 먼저 업로드하세요.")
+        return
+
+    args = [
+        sys.executable,
+        "-m",
+        "src.main",
+        "--video",
+        st.session_state.video_path,
+        "--zones",
+        str(resolve_path(st.session_state.zones_path)),
+        "--output",
+        str(resolve_path(st.session_state.events_path)),
+        "--csv-output",
+        str(resolve_path(st.session_state.csv_path)),
+        "--summary-output",
+        str(resolve_path(st.session_state.summary_path)),
+        "--overlay-output",
+        str(resolve_path(st.session_state.result_video_path)),
+        "--conf",
+        str(st.session_state.conf_threshold),
+    ]
+
+    if frames_limit > 0:
+        args += ["--frames-limit", str(frames_limit)]
+
+    with st.spinner("YOLO + ByteTrack 파이프라인 처리 중..."):
+        result = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            cwd=str(ROOT_DIR),
+        )
+
+    if result.returncode == 0:
+        st.session_state.pipeline_done = True
+        st.success("파이프라인 완료. 결과 영상을 다시 불러옵니다.")
+        st.rerun()
+
+    st.error("파이프라인 오류")
+    with st.expander("오류 보기", expanded=True):
+        st.code(" ".join(args), language="bash")
+        st.code(result.stderr or result.stdout or "출력 없음")
+
 
 with st.sidebar:
     brand_header()
+
+    st.markdown("**영상 업로드**")
+    uploaded = st.file_uploader(
+        "영상 파일",
+        type=["mp4", "avi", "mov"],
+        label_visibility="collapsed",
+    )
+
+    if uploaded:
+        tmp = Path(tempfile.gettempdir()) / "kidcafe" / uploaded.name
+        tmp.parent.mkdir(exist_ok=True)
+        tmp.write_bytes(uploaded.read())
+
+        st.session_state.video_path = str(tmp)
+        st.session_state.uploaded_video_name = uploaded.name
+        st.success(uploaded.name)
+
+    frames_limit = st.number_input("처리 프레임 수", 0, 10000, 60, 10)
+
+    st.session_state.conf_threshold = st.slider(
+        "감지 신뢰도",
+        min_value=0.1,
+        max_value=1.0,
+        value=float(st.session_state.conf_threshold),
+        step=0.05,
+    )
+
+    if st.button("파이프라인 실행", use_container_width=True):
+        run_pipeline(frames_limit)
+
+    st.markdown("---")
     st.session_state.events_path = st.text_input("이벤트 파일", st.session_state.events_path)
     st.session_state.result_video_path = st.text_input("결과 영상", st.session_state.result_video_path)
-    play_btn = st.button("재생", use_container_width=True)
-    stop_btn = st.button("정지", use_container_width=True)
-
-    if play_btn:
-        st.session_state._playing = True
-    if stop_btn:
-        st.session_state._playing = False
 
     sidebar_status()
+
+
+events = load_events(st.session_state.events_path)
+zones = load_zones(st.session_state.zones_path)
+zone_name_map = get_zone_name_map(zones)
+
+track_ids = {
+    event_get(event, "track_id")
+    for event in events
+    if event_get(event, "track_id") is not None
+}
+
+dwells = sum(1 for event in events if event_get(event, "event_type") == "DWELL")
+danger_tracks = {
+    event_get(event, "track_id")
+    for event in events
+    if event_get(event, "event_type") in {"ENTER", "DWELL"}
+    and event_get(event, "track_id") is not None
+}
+
+result_status = get_video_status(st.session_state.result_video_path)
+raw_status = get_video_status(st.session_state.video_path)
 
 top_left, top_right = st.columns([4, 1])
 
 with top_left:
     st.markdown("# 실시간 모니터링")
-    st.markdown('<div class="kc-page-subtitle">Vision AI 기반 안전 감시 시스템</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="kc-page-subtitle">Vision AI 기반 안전 감시 시스템</div>',
+        unsafe_allow_html=True,
+    )
 
 with top_right:
-    live = result_video.exists() or st.session_state._playing
+    live = result_status["ok"] or raw_status["ok"]
     st.markdown(
         f"""
         <div style="display:flex;justify-content:flex-end;padding-top:16px;">
@@ -167,13 +296,26 @@ with top_right:
         unsafe_allow_html=True,
     )
 
+
 k1, k2, k3 = st.columns(3, gap="large")
+
 with k1:
-    st.markdown(render_compact_kpi("♙", str(len(track_ids) or 23), "현재 감지 인원", "blue"), unsafe_allow_html=True)
+    st.markdown(
+        render_compact_kpi("♙", str(len(track_ids)), "현재 감지 인원", "blue"),
+        unsafe_allow_html=True,
+    )
+
 with k2:
-    st.markdown(render_compact_kpi("!", str(dwells or 3), "위험구역 내 인원", "yellow"), unsafe_allow_html=True)
+    st.markdown(
+        render_compact_kpi("!", str(len(danger_tracks)), "위험구역 내 인원", "yellow"),
+        unsafe_allow_html=True,
+    )
+
 with k3:
-    st.markdown(render_compact_kpi("◷", "4.2분", "평균 체류 시간", "blue"), unsafe_allow_html=True)
+    st.markdown(
+        render_compact_kpi("◷", "4.2분", "평균 체류 시간", "blue"),
+        unsafe_allow_html=True,
+    )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -183,8 +325,10 @@ with video_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
 
     ctrl_left, ctrl_right = st.columns([4, 1])
+
     with ctrl_left:
         st.markdown('<div class="panel-title">실시간 영상</div>', unsafe_allow_html=True)
+
     with ctrl_right:
         st.markdown(
             """
@@ -196,50 +340,53 @@ with video_col:
             unsafe_allow_html=True,
         )
 
-    if result_video.exists():
-        st.video(str(result_video))
-    elif raw_video and raw_video.exists():
-        st.video(str(raw_video))
-        st.warning("아직 outputs/result.mp4가 없어 원본 영상을 표시합니다.")
+    if result_status["ok"]:
+        render_opencv_video_viewer(result_status["path"], "결과 영상")
+        st.caption(f"결과 영상: {result_status['path']} ({result_status['message']})")
+    elif raw_status["ok"]:
+        render_opencv_video_viewer(raw_status["path"], "원본 영상")
+        st.warning("아직 재생 가능한 outputs/result.mp4가 없어 업로드한 원본 영상을 표시합니다.")
     else:
-        st.markdown(
-            """
-            <div style="height:520px;background:linear-gradient(145deg,#080E1A,#0B1220);
-                        border:1px solid #1D3152;border-radius:16px;position:relative;overflow:hidden;">
-                <div style="position:absolute;top:28px;left:36px;color:#E5EDF8;font-weight:800;">
-                    <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#C83F45;margin-right:10px;"></span>
-                    Camera 01
-                    <span style="margin-left:42px;color:#E5EDF8;">FPS: 30</span>
-                </div>
-                <div style="position:absolute;left:23%;top:46%;border:2px solid #12BBD3;border-radius:14px;
-                            padding:10px 14px;color:#12D6F4;background:rgba(18,187,211,.08);">
-                    ID-1234&nbsp;&nbsp;<span style="color:#F59E0B;">⚠ 8초</span>
-                </div>
-                <div style="position:absolute;left:55%;top:46%;border:2px solid #10B981;border-radius:14px;
-                            padding:10px 14px;color:#12D6F4;background:rgba(16,185,129,.08);">
-                    ID-5678
-                </div>
-                <div style="position:absolute;left:65%;top:46%;border:2px solid #EF4444;border-radius:14px;
-                            padding:10px 14px;color:#12D6F4;background:rgba(239,68,68,.08);">
-                    ID-9012&nbsp;&nbsp;<span style="color:#EF4444;">⚠ 12초</span>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+        if result_status["exists"] and not result_status["ok"]:
+            render_video_placeholder(
+                f"결과 영상 파일은 있지만 재생 가능한 크기가 아닙니다. {result_status['message']}"
+            )
+            st.warning("파이프라인을 다시 실행해 outputs/result.mp4를 새로 생성하세요.")
+        else:
+            render_video_placeholder("영상 업로드 후 파이프라인을 실행하면 결과 영상이 표시됩니다.")
+
+    if events and make_timeline_chart is not None:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown('<div class="panel-title">이벤트 타임라인</div>', unsafe_allow_html=True)
+
+        try:
+            fig = make_timeline_chart(events)
+            st.pyplot(fig, use_container_width=True)
+        except Exception:
+            st.info("타임라인 차트를 표시할 수 없습니다.")
+
+    with st.expander("영상 파일 상태"):
+        st.write(
+            {
+                "result_video_path": str(result_status["path"]) if result_status["path"] else None,
+                "result_exists": result_status["exists"],
+                "result_size": result_status["size"],
+                "result_message": result_status["message"],
+                "raw_video_path": str(raw_status["path"]) if raw_status["path"] else None,
+                "raw_exists": raw_status["exists"],
+                "raw_size": raw_status["size"],
+                "raw_message": raw_status["message"],
+            }
         )
 
     st.markdown("</div>", unsafe_allow_html=True)
+
 
 with event_col:
     st.markdown('<div class="panel" style="min-height:650px;">', unsafe_allow_html=True)
     st.markdown('<div class="panel-title">실시간 이벤트</div>', unsafe_allow_html=True)
 
-    recent = events[-12:][::-1] if events else [
-        {"event_type": "DWELL", "track_id": 1234, "zone_id": "slide", "ago": "8초"},
-        {"event_type": "ENTER", "track_id": 5678, "zone_id": "entrance", "ago": "2초"},
-        {"event_type": "DWELL", "track_id": 9012, "zone_id": "trampoline", "ago": "12초"},
-        {"event_type": "EXIT", "track_id": 3456, "zone_id": "entrance", "ago": "1초"},
-    ]
+    recent = get_recent_events(events, n=12)
 
     card_style = {
         "DWELL": ("rgba(245,158,11,.13)", "rgba(245,158,11,.42)"),
@@ -247,27 +394,42 @@ with event_col:
         "EXIT": ("rgba(100,116,139,.08)", "rgba(29,49,82,.86)"),
     }
 
-    for i, event in enumerate(recent[:8]):
-        etype = event_get(event, "event_type", "UNKNOWN")
-        track_id = event_get(event, "track_id", "-")
-        zone_id = event_get(event, "zone_id", "-")
-        ago = event_get(event, "ago") or f"{i + 1}초"
-        zname = zone_name_map.get(
-            zone_id,
-            {"slide": "미끄럼틀 하단", "entrance": "출입문", "trampoline": "트램폴린"}.get(zone_id, zone_id),
-        )
-        bg, border = card_style.get(etype, ("rgba(100,116,139,.08)", "rgba(29,49,82,.86)"))
+    if recent:
+        for i, event in enumerate(recent[:8]):
+            etype = event_get(event, "event_type", "UNKNOWN")
+            track_id = event_get(event, "track_id", "-")
+            zone_id = event_get(event, "zone_id", "-")
+            frame_number = event_get(event, "frame_number")
 
+            ago = f"F{frame_number}" if frame_number is not None else f"{i + 1}초"
+            zname = zone_name_map.get(str(zone_id), zone_id)
+
+            bg, border = card_style.get(
+                etype,
+                ("rgba(100,116,139,.08)", "rgba(29,49,82,.86)"),
+            )
+
+            st.markdown(
+                f"""
+                <div style="background:{bg};border:1px solid {border};border-radius:14px;
+                            padding:20px;margin-bottom:16px;min-height:90px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                        <span class="badge badge-{etype}">{etype}</span>
+                        <span style="color:#A7B4C8;font-size:15px;">{ago}</span>
+                    </div>
+                    <div style="color:#F8FAFC;font-size:19px;font-weight:900;">ID-{track_id}</div>
+                    <div style="color:#A7B4C8;font-size:15px;margin-top:4px;">{zname}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    else:
         st.markdown(
             f"""
-            <div style="background:{bg};border:1px solid {border};border-radius:14px;
-                        padding:20px;margin-bottom:16px;min-height:90px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-                    <span class="badge badge-{etype}">{etype}</span>
-                    <span style="color:#A7B4C8;font-size:15px;">{ago}</span>
-                </div>
-                <div style="color:#F8FAFC;font-size:19px;font-weight:900;">ID-{track_id}</div>
-                <div style="color:#A7B4C8;font-size:15px;margin-top:4px;">{zname}</div>
+            <div style="height:240px;display:flex;align-items:center;justify-content:center;
+                        color:{c["TEXT_SUB"]};font-size:16px;text-align:center;">
+                이벤트 파일이 비어 있습니다.<br>
+                파이프라인 실행 후 events.jsonl이 생성되면 여기에 표시됩니다.
             </div>
             """,
             unsafe_allow_html=True,

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -17,17 +16,27 @@ sys.path.insert(0, str(VIS_DIR))
 sys.path.insert(0, str(ROOT_DIR))
 
 from _style import brand_header, inject_css, sidebar_status, _colors
+from dashboard_data import (
+    event_get,
+    events_to_dataframe,
+    get_track_ids,
+    get_track_summary,
+    get_zone_name_map,
+    load_events,
+    load_zones,
+    time_per_zone_by_track,
+)
 
 try:
-    from src.common.event_aggregator import (
-        get_track_ids_in_period,
-        get_track_summary,
-        load_events_from_jsonl,
+    from src.visualization.charts import (
+        make_activity_heatmap,
+        make_movement_heatmap,
+        make_zone_donut_chart,
     )
 except Exception:
-    get_track_ids_in_period = None
-    get_track_summary = None
-    load_events_from_jsonl = None
+    make_activity_heatmap = None
+    make_movement_heatmap = None
+    make_zone_donut_chart = None
 
 
 st.set_page_config(page_title="자녀 활동 리포트 · KidCafe Safety AI", page_icon="📄", layout="wide")
@@ -44,71 +53,6 @@ for key, val in {
 c = _colors()
 
 
-def event_get(event, key, default=None):
-    if isinstance(event, dict):
-        return event.get(key, default)
-    return getattr(event, key, default)
-
-
-def load_events_fallback(path):
-    p = Path(path)
-    if not p.exists():
-        return []
-
-    out = []
-    with open(p, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                out.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
-    return out
-
-
-def load_events(path):
-    if load_events_from_jsonl is not None:
-        try:
-            return load_events_from_jsonl(path)
-        except Exception:
-            pass
-    return load_events_fallback(path)
-
-
-def load_zones(path):
-    p = Path(path)
-    if not p.exists():
-        return []
-
-    try:
-        with open(p, encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        return []
-
-    if isinstance(data, dict) and "zones" in data:
-        return data["zones"]
-    if isinstance(data, list):
-        return data
-    return []
-
-
-def zone_name_map_from_zones(zones):
-    result = {}
-    for zone in zones:
-        if isinstance(zone, dict):
-            zid = zone.get("zone_id")
-            name = zone.get("name", zid)
-        else:
-            zid = getattr(zone, "zone_id", None)
-            name = getattr(zone, "name", zid)
-        if zid:
-            result[zid] = name
-    return result
-
-
 def format_seconds(seconds):
     seconds = int(seconds or 0)
     minutes = seconds // 60
@@ -122,57 +66,12 @@ def format_seconds(seconds):
     return f"{seconds}초"
 
 
-def fallback_track_summary(child_events):
-    frames = [
-        event_get(e, "frame_number", 0)
-        for e in child_events
-        if event_get(e, "frame_number") is not None
-    ]
-    visited_zones = {
-        event_get(e, "zone_id")
-        for e in child_events
-        if event_get(e, "zone_id") is not None
-    }
-    risk_count = sum(1 for e in child_events if event_get(e, "event_type") in {"ENTER", "DWELL"})
-
-    active_seconds = max(frames) / 30 if frames else 0
-
-    return {
-        "total_activity_seconds": active_seconds,
-        "visited_zone_count": len(visited_zones),
-        "movement_distance": 0,
-        "risk_event_count": risk_count,
-    }
-
-
-def normalize_summary(summary, child_events):
-    if not isinstance(summary, dict):
-        summary = {}
-
-    fallback = fallback_track_summary(child_events)
-
-    visited = summary.get("visited_zone_count", fallback["visited_zone_count"])
-    if isinstance(visited, list):
-        visited = len(visited)
-
-    return {
-        "total_activity_seconds": (
-            summary.get("total_activity_seconds")
-            or summary.get("total_activity_time")
-            or summary.get("activity_seconds")
-            or fallback["total_activity_seconds"]
-        ),
-        "visited_zone_count": visited,
-        "movement_distance": summary.get("movement_distance") or summary.get("distance") or fallback["movement_distance"],
-        "risk_event_count": summary.get("risk_event_count") or summary.get("danger_event_count") or fallback["risk_event_count"],
-    }
-
-
 def render_report_kpi(icon, label, value, tone="blue"):
     color = {
         "blue": "#12BBD3",
         "green": "#10B981",
         "yellow": "#F59E0B",
+        "red": "#EF4444",
     }.get(tone, "#12BBD3")
 
     return f"""
@@ -203,11 +102,11 @@ def demo_events_if_empty(child_events):
 
 
 def render_timeline_item(zone, etype, time_text, duration, icon, color, is_last):
-    connector_html = ""
-    if not is_last:
-        connector_html = """
-        <div style="width:3px;height:44px;background:#1D3152;margin:0 auto;"></div>
-        """
+    connector_html = (
+        ""
+        if is_last
+        else '<div style="width:3px;height:44px;background:#1D3152;margin:0 auto;"></div>'
+    )
 
     return f"""
     <div style="display:grid;grid-template-columns:54px 1fr;gap:18px;align-items:start;">
@@ -232,115 +131,267 @@ def render_timeline_item(zone, etype, time_text, duration, icon, color, is_last)
     """
 
 
+def render_safety_event(message, time_text, tone="green"):
+    color = {
+        "green": "#10B981",
+        "yellow": "#F59E0B",
+        "red": "#EF4444",
+        "gray": "#64748B",
+    }.get(tone, "#10B981")
+
+    bg = {
+        "green": "rgba(16,185,129,.12)",
+        "yellow": "rgba(245,158,11,.12)",
+        "red": "rgba(239,68,68,.12)",
+        "gray": "rgba(100,116,139,.12)",
+    }.get(tone, "rgba(16,185,129,.12)")
+
+    border = {
+        "green": "rgba(16,185,129,.42)",
+        "yellow": "rgba(245,158,11,.42)",
+        "red": "rgba(239,68,68,.42)",
+        "gray": "rgba(100,116,139,.42)",
+    }.get(tone, "rgba(16,185,129,.42)")
+
+    st.markdown(
+        f"""
+        <div style="background:{bg};border:1px solid {border};border-radius:14px;padding:20px;margin-bottom:16px;">
+            <div style="display:flex;gap:14px;align-items:flex-start;">
+                <div style="width:10px;height:10px;border-radius:50%;background:{color};margin-top:8px;"></div>
+                <div>
+                    <div style="color:#F8FAFC;font-size:18px;font-weight:900;">{message}</div>
+                    <div style="color:#A7B4C8;font-size:15px;margin-top:8px;">{time_text}</div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_weekly_pattern(total_seconds):
+    weekend_hours = max(float(total_seconds or 0) / 3600, 0)
+
+    days = [
+        ("월", "-"),
+        ("화", "-"),
+        ("수", "-"),
+        ("목", "-"),
+        ("금", "-"),
+        ("토", f"{weekend_hours:.1f}h" if weekend_hours else "-"),
+        ("일", f"{weekend_hours + 0.1:.1f}h" if weekend_hours else "-"),
+    ]
+
+    cols = st.columns(7)
+
+    for index, (day, value) in enumerate(days):
+        active = value != "-"
+        with cols[index]:
+            st.markdown(
+                f"""
+                <div style="background:{'rgba(18,187,211,.16)' if active else '#0B1220'};
+                            border:1px solid {'rgba(18,187,211,.42)' if active else '#1D3152'};
+                            border-radius:14px;padding:22px 10px;text-align:center;">
+                    <div style="color:#A7B4C8;font-size:16px;">{day}</div>
+                    <div style="color:{'#12BBD3' if active else '#A7B4C8'};
+                                font-size:28px;font-weight:900;margin-top:18px;">{value}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+
 events = load_events(st.session_state.events_path)
 zones = load_zones(st.session_state.zones_path)
-zone_name_map = zone_name_map_from_zones(zones)
-
-fallback_track_ids = sorted({
-    event_get(event, "track_id")
-    for event in events
-    if event_get(event, "track_id") is not None
-})
-
-if get_track_ids_in_period is not None:
-    try:
-        track_ids = get_track_ids_in_period(events, 0, 10**9)
-    except Exception:
-        track_ids = fallback_track_ids
-else:
-    track_ids = fallback_track_ids
+zone_name_map = get_zone_name_map(zones)
+track_ids = get_track_ids(events)
 
 with st.sidebar:
     brand_header()
+
     st.session_state.events_path = st.text_input("이벤트 파일", st.session_state.events_path)
+    st.markdown("**아동 선택**")
+
     selected_id = st.selectbox(
         "Track ID",
         options=track_ids if track_ids else [1234],
         format_func=lambda x: f"ID-{x}",
+        label_visibility="collapsed",
     )
+
     sidebar_status()
 
-child_events = [event for event in events if event_get(event, "track_id") == selected_id]
 
-if get_track_summary is not None and child_events:
-    try:
-        raw_summary = get_track_summary(events, selected_id)
-    except Exception:
-        raw_summary = fallback_track_summary(child_events)
-else:
-    raw_summary = fallback_track_summary(child_events)
+child_events = [
+    event
+    for event in events
+    if event_get(event, "track_id") == selected_id
+]
 
-summary = normalize_summary(raw_summary, child_events)
 report_events = demo_events_if_empty(child_events)
+summary = get_track_summary(events, selected_id)
 
-visited_count = int(summary["visited_zone_count"] or 4)
-activity_seconds = int(summary["total_activity_seconds"] or 5820)
-risk_count = int(summary["risk_event_count"] or 0)
-safety_score = max(0, 100 - risk_count * 8)
-activity_level = "높음" if len(report_events) >= 4 else "보통"
+risk_event_count = int(summary.get("risk_event_count", 0) or 0)
+safety_score = max(0, 100 - risk_event_count * 8)
+activity_count = len(child_events)
+activity_level = "높음" if activity_count >= 10 else "보통" if activity_count >= 4 else "낮음"
 
-top_left, top_right = st.columns([4, 1])
-with top_left:
-    st.markdown("# 자녀 활동 리포트")
-    st.markdown('<div class="kc-page-subtitle">오늘의 활동 요약 및 안전 기록</div>', unsafe_allow_html=True)
+st.markdown("# 자녀 활동 리포트")
+st.markdown(
+    f'<div style="color:{c["TEXT_SUB"]};font-size:20px;margin-top:-8px;margin-bottom:26px;">'
+    f"ID-{selected_id} · 오늘의 활동 요약 및 안전 기록</div>",
+    unsafe_allow_html=True,
+)
+
+top_left, top_right = st.columns([3, 1])
+
 with top_right:
-    csv_data = pd.DataFrame([
-        {
-            "event_type": event_get(event, "event_type"),
-            "track_id": event_get(event, "track_id"),
-            "zone_id": event_get(event, "zone_id"),
-            "frame_number": event_get(event, "frame_number"),
-        }
-        for event in child_events
-    ]).to_csv(index=False).encode("utf-8-sig")
-    st.download_button("리포트 다운로드", csv_data, f"child_report_track_{selected_id}.csv", "text/csv", use_container_width=True)
+    df_child = events_to_dataframe(child_events)
+
+    st.download_button(
+        "리포트 다운로드",
+        df_child.to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"child_report_track_{selected_id}.csv",
+        mime="text/csv",
+        use_container_width=True,
+        disabled=df_child.empty,
+    )
 
 k1, k2, k3, k4 = st.columns(4, gap="large")
+
 with k1:
-    st.markdown(render_report_kpi("◷", "총 활동 시간", format_seconds(activity_seconds), "blue"), unsafe_allow_html=True)
+    st.markdown(
+        render_report_kpi("◷", "총 활동 시간", format_seconds(summary["total_activity_seconds"]), "blue"),
+        unsafe_allow_html=True,
+    )
+
 with k2:
-    st.markdown(render_report_kpi("⌖", "방문 구역", str(visited_count), "green"), unsafe_allow_html=True)
+    st.markdown(
+        render_report_kpi("⌖", "방문 구역", str(summary["visited_zone_count"]), "green"),
+        unsafe_allow_html=True,
+    )
+
 with k3:
-    st.markdown(render_report_kpi("⌁", "활동 강도", activity_level, "blue"), unsafe_allow_html=True)
+    st.markdown(
+        render_report_kpi("⌁", "활동 강도", activity_level, "blue"),
+        unsafe_allow_html=True,
+    )
+
 with k4:
-    st.markdown(render_report_kpi("▣", "안전 점수", f"{safety_score}/100", "green"), unsafe_allow_html=True)
+    score_tone = "green" if safety_score >= 80 else "yellow" if safety_score >= 60 else "red"
+    st.markdown(
+        render_report_kpi("□", "안전 점수", f"{safety_score}/100", score_tone),
+        unsafe_allow_html=True,
+    )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-left, right = st.columns([2.25, 1.1], gap="large")
+chart_left, chart_right = st.columns(2, gap="large")
 
-zone_demo_names = {
-    "entrance": "출입문",
-    "ballpool": "볼풀",
-    "trampoline": "트램폴린",
-    "slide": "미끄럼틀",
-    "playground_center": "중앙 놀이공간",
-}
+with chart_left:
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">시설별 체류 시간</div>', unsafe_allow_html=True)
+
+    if child_events and make_zone_donut_chart is not None:
+        try:
+            fig = make_zone_donut_chart(events, selected_id)
+            st.pyplot(fig, use_container_width=True)
+        except Exception:
+            zone_times = time_per_zone_by_track(events, selected_id)
+            if zone_times:
+                df_zone = pd.DataFrame(
+                    {
+                        "구역": [zone_name_map.get(str(zone), str(zone)) for zone in zone_times.keys()],
+                        "시간": list(zone_times.values()),
+                    }
+                )
+                st.bar_chart(df_zone.set_index("구역"))
+            else:
+                st.info("시설별 체류 데이터가 없습니다.")
+    else:
+        zone_times = time_per_zone_by_track(events, selected_id)
+        if zone_times:
+            df_zone = pd.DataFrame(
+                {
+                    "구역": [zone_name_map.get(str(zone), str(zone)) for zone in zone_times.keys()],
+                    "시간": list(zone_times.values()),
+                }
+            )
+            st.bar_chart(df_zone.set_index("구역"))
+        else:
+            st.info("시설별 체류 데이터가 없습니다.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with chart_right:
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">시간대별 활동 강도</div>', unsafe_allow_html=True)
+
+    if child_events and make_activity_heatmap is not None:
+        try:
+            fig = make_activity_heatmap(events, selected_id)
+            st.pyplot(fig, use_container_width=True)
+        except Exception:
+            df_child = events_to_dataframe(child_events)
+            if not df_child.empty and "event_type" in df_child.columns:
+                st.bar_chart(df_child["event_type"].value_counts())
+            else:
+                st.info("활동 강도 데이터가 없습니다.")
+    else:
+        df_child = events_to_dataframe(child_events)
+        if not df_child.empty and "event_type" in df_child.columns:
+            st.bar_chart(df_child["event_type"].value_counts())
+        else:
+            st.info("활동 강도 데이터가 없습니다.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+left, right = st.columns([2.2, 1], gap="large")
 
 with left:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     st.markdown('<div class="panel-title">활동 타임라인</div>', unsafe_allow_html=True)
 
-    visible_events = report_events[:6]
-    for i, event in enumerate(visible_events):
+    visible_events = report_events[:8]
+
+    for index, event in enumerate(visible_events):
         etype = event_get(event, "event_type", "UNKNOWN")
         zone_id = event_get(event, "zone_id", "-")
-        zname = zone_name_map.get(zone_id, zone_demo_names.get(zone_id, zone_id))
         frame_number = event_get(event, "frame_number")
-        time_text = event_get(event, "time") or (f"F{frame_number}" if frame_number is not None else "14:23")
-        duration = event_get(event, "duration") or "—"
-        icon = "→" if etype == "ENTER" else "←" if etype == "EXIT" else "·"
-        color = "#10B981" if etype == "ENTER" else "#64748B" if etype == "EXIT" else "#12BBD3"
+
+        zone = zone_name_map.get(
+            str(zone_id),
+            {
+                "entrance": "출입문",
+                "ballpool": "볼풀",
+                "trampoline": "트램폴린",
+                "slide": "미끄럼틀",
+            }.get(str(zone_id), str(zone_id)),
+        )
+
+        time_text = event_get(event, "time", f"F{frame_number}" if frame_number is not None else "-")
+        duration = event_get(event, "duration", "-")
+
+        if etype == "ENTER":
+            icon, color = "→", "#10B981"
+        elif etype == "DWELL":
+            icon, color = "•", "#12BBD3"
+        elif etype == "EXIT":
+            icon, color = "←", "#64748B"
+        else:
+            icon, color = "•", "#A7B4C8"
 
         st.markdown(
             render_timeline_item(
-                zone=zname,
-                etype=etype,
-                time_text=time_text,
-                duration=duration,
-                icon=icon,
-                color=color,
-                is_last=i == len(visible_events) - 1,
+                zone,
+                etype,
+                time_text,
+                duration,
+                icon,
+                color,
+                index == len(visible_events) - 1,
             ),
             unsafe_allow_html=True,
         )
@@ -348,73 +399,77 @@ with left:
     st.markdown("</div>", unsafe_allow_html=True)
 
 with right:
-    st.markdown('<div class="panel" style="margin-bottom:22px;">', unsafe_allow_html=True)
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
     st.markdown('<div class="panel-title">안전 이벤트</div>', unsafe_allow_html=True)
 
-    safety_items = [
-        ("#10B981", "볼풀 영역 진입", "14:25"),
-        ("#10B981", "트램폴린 8분 체류 (정상)", "14:43"),
-        ("#F59E0B", "미끄럼틀 하단 접근", "14:52"),
-    ]
+    risk_events = [
+        event
+        for event in report_events
+        if event_get(event, "event_type") in {"ENTER", "DWELL"}
+    ][:5]
 
-    for color, message, time_text in safety_items:
-        st.markdown(
-            f"""
-            <div style="background:{'rgba(16,185,129,.13)' if color == '#10B981' else 'rgba(245,158,11,.13)'};
-                        border:1px solid {'rgba(16,185,129,.35)' if color == '#10B981' else 'rgba(245,158,11,.42)'};
-                        border-radius:14px;padding:20px;margin-bottom:16px;">
-                <div style="display:flex;align-items:center;gap:14px;">
-                    <span style="width:10px;height:10px;border-radius:50%;background:{color};display:inline-block;"></span>
-                    <div>
-                        <div style="color:#F8FAFC;font-size:17px;font-weight:900;">{message}</div>
-                        <div style="color:#A7B4C8;font-size:15px;margin-top:8px;">{time_text}</div>
-                    </div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    if risk_events:
+        for event in risk_events:
+            etype = event_get(event, "event_type", "UNKNOWN")
+            zone_id = event_get(event, "zone_id", "-")
+            zone = zone_name_map.get(
+                str(zone_id),
+                {
+                    "entrance": "출입문",
+                    "ballpool": "볼풀",
+                    "trampoline": "트램폴린",
+                    "slide": "미끄럼틀",
+                }.get(str(zone_id), str(zone_id)),
+            )
+
+            time_text = event_get(event, "time", f"F{event_get(event, 'frame_number', '-')}")
+            tone = "yellow" if etype == "DWELL" else "green"
+            message = f"{zone} {'장시간 체류' if etype == 'DWELL' else '영역 진입'}"
+
+            render_safety_event(message, time_text, tone)
+    else:
+        render_safety_event("위험 이벤트 없음", "오늘", "green")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown('<div class="panel" style="background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.25);">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-title">일일 요약</div>', unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
     st.markdown(
-        """
-        <div style="color:#D7E2F1;font-size:17px;line-height:1.8;">
-            자녀가 키즈카페에서 안전하게 놀았습니다.<br><br>
-            <span style="color:#10D99B;font-weight:900;">• 위험 이벤트 없음</span><br>
-            <span style="color:#10D99B;font-weight:900;">• 모든 활동 정상 범위 내</span><br><br>
-            가장 선호한 놀이: <b>볼풀 (15분)</b>
+        f"""
+        <div style="background:rgba(16,185,129,.10);border:1px solid rgba(16,185,129,.35);
+                    border-radius:20px;padding:28px;">
+            <div style="color:#F8FAFC;font-size:26px;font-weight:900;margin-bottom:18px;">일일 요약</div>
+            <div style="color:#A7B4C8;font-size:17px;line-height:1.8;">
+                {"자녀가 키즈카페에서 안정적으로 활동했습니다." if safety_score >= 80 else "주의 이벤트가 있어 보호자 확인이 필요합니다."}
+            </div>
+            <div style="color:#10D99B;font-size:17px;font-weight:800;margin-top:16px;">• 안전 점수 {safety_score}/100</div>
+            <div style="color:#10D99B;font-size:17px;font-weight:800;margin-top:8px;">• 총 {summary["visited_zone_count"]}개 구역 방문</div>
+            <div style="color:#F8FAFC;font-size:17px;margin-top:16px;">총 활동 시간: {format_seconds(summary["total_activity_seconds"])}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
 st.markdown("<br>", unsafe_allow_html=True)
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
 st.markdown('<div class="panel-title">주간 활동 패턴</div>', unsafe_allow_html=True)
+render_weekly_pattern(summary["total_activity_seconds"])
+st.markdown("</div>", unsafe_allow_html=True)
 
-days = [("월", "-"), ("화", "-"), ("수", "-"), ("목", "-"), ("금", "-"), ("토", "1.5h"), ("일", "1.6h")]
-day_cols = st.columns(7)
-for col, (day, value) in zip(day_cols, days):
-    with col:
-        active = value != "-"
-        st.markdown(
-            f"""
-            <div style="background:{'rgba(18,187,211,.15)' if active else '#0B1220'};
-                        border:1px solid {'rgba(18,187,211,.38)' if active else '#1D3152'};
-                        border-radius:14px;padding:22px;text-align:center;min-height:96px;">
-                <div style="color:#A7B4C8;font-size:16px;font-weight:800;">{day}</div>
-                <div style="color:{'#12BBD3' if active else '#A7B4C8'};font-size:30px;font-weight:900;margin-top:14px;">{value}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+st.markdown("<br>", unsafe_allow_html=True)
+
+st.markdown('<div class="panel">', unsafe_allow_html=True)
+st.markdown('<div class="panel-title">이동 경로 히트맵</div>', unsafe_allow_html=True)
+
+if child_events and make_movement_heatmap is not None:
+    try:
+        fig = make_movement_heatmap(events, selected_id, width=1280, height=720)
+        st.pyplot(fig, use_container_width=True)
+    except Exception:
+        st.info("이동 좌표 데이터가 부족해 히트맵을 표시할 수 없습니다.")
+else:
+    st.info("이동 좌표 데이터가 부족해 히트맵을 표시할 수 없습니다.")
 
 st.markdown("</div>", unsafe_allow_html=True)
 

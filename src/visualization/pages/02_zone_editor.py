@@ -8,6 +8,8 @@ import tempfile
 from pathlib import Path
 
 import cv2
+import numpy as np
+import pandas as pd
 import streamlit as st
 
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -18,6 +20,7 @@ sys.path.insert(0, str(VIS_DIR))
 sys.path.insert(0, str(ROOT_DIR))
 
 from _style import brand_header, inject_css, sidebar_status, _colors
+from dashboard_data import get_zone_name_map, load_zones, resolve_path
 
 st.set_page_config(page_title="Zone 편집 · KidCafe Safety AI", page_icon="🗺️", layout="wide")
 inject_css()
@@ -34,27 +37,6 @@ for key, val in {
 c = _colors()
 
 
-def load_zones(path):
-    p = Path(path)
-    if not p.exists():
-        return []
-
-    try:
-        with open(p, encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as exc:
-        st.error(f"Zone JSON을 읽을 수 없습니다: {exc}")
-        return []
-
-    if isinstance(data, dict) and "zones" in data:
-        return data["zones"]
-    if isinstance(data, list):
-        return data
-
-    st.warning("Zone JSON 형식이 올바르지 않습니다. 리스트 또는 {'zones': [...]} 형식을 사용하세요.")
-    return []
-
-
 def parse_points(text):
     points = []
     errors = []
@@ -69,7 +51,7 @@ def parse_points(text):
             errors.append(f"{line_no}행: 쉼표로 x,y를 구분하세요.")
             continue
 
-        parts = [p.strip() for p in line.split(",")]
+        parts = [part.strip() for part in line.split(",")]
 
         if len(parts) != 2:
             errors.append(f"{line_no}행: 좌표는 x,y 두 값만 입력하세요.")
@@ -97,31 +79,36 @@ def parse_points(text):
 def validate_zone(zone, index):
     errors = []
 
-    zone_id = zone.get("zone_id", "").strip()
-    name = zone.get("name", "").strip()
+    zone_id = str(zone.get("zone_id", "")).strip()
+    name = str(zone.get("name", "")).strip()
     zone_type = zone.get("type")
     points = zone.get("points", [])
     rules = zone.get("rules", {})
 
     if not zone_id:
         errors.append(f"Zone {index}: zone_id가 비어 있습니다.")
+
     if not name:
         errors.append(f"Zone {index}: name이 비어 있습니다.")
+
     if zone_type != "polygon":
         errors.append(f"Zone {index}: type은 polygon이어야 합니다.")
+
     if len(points) < 3:
         errors.append(f"Zone {index}: polygon은 최소 3점 이상이어야 합니다.")
 
     for point_index, point in enumerate(points, start=1):
-        if len(point) != 2:
+        if not isinstance(point, list | tuple) or len(point) != 2:
             errors.append(f"Zone {index} point {point_index}: x,y 두 값이 필요합니다.")
             continue
 
         x, y = point
+
         if not 0 <= x <= 1 or not 0 <= y <= 1:
             errors.append(f"Zone {index} point {point_index}: 좌표는 0~1 범위여야 합니다.")
 
     dwell_threshold = rules.get("dwell_threshold_sec")
+
     if not isinstance(dwell_threshold, int) or dwell_threshold < 1:
         errors.append(f"Zone {index}: dwell_threshold_sec는 1 이상의 정수여야 합니다.")
 
@@ -132,14 +119,14 @@ def validate_zones(zones):
     errors = []
     seen_ids = set()
 
-    for i, zone in enumerate(zones, start=1):
-        zone_id = zone.get("zone_id", "").strip()
+    for index, zone in enumerate(zones, start=1):
+        zone_id = str(zone.get("zone_id", "")).strip()
 
         if zone_id in seen_ids:
-            errors.append(f"Zone {i}: zone_id '{zone_id}'가 중복됩니다.")
+            errors.append(f"Zone {index}: zone_id '{zone_id}'가 중복됩니다.")
 
         seen_ids.add(zone_id)
-        errors.extend(validate_zone(zone, i))
+        errors.extend(validate_zone(zone, index))
 
     return errors
 
@@ -149,10 +136,12 @@ def zones_to_json(zones):
 
 
 def get_first_frame(video_path):
-    if not video_path or not Path(video_path).exists():
+    path = resolve_path(video_path)
+
+    if path is None or not path.exists():
         return None
 
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(str(path))
     ret, frame = cap.read()
     cap.release()
 
@@ -163,30 +152,31 @@ def get_first_frame(video_path):
 
 
 def draw_preview_on_frame(frame, zones):
-    import cv2
-    import numpy as np
-
     if frame is None:
         return None
 
     out = frame.copy()
     h, w = out.shape[:2]
+
     colors = [
         (18, 187, 211),
         (245, 158, 11),
         (239, 68, 68),
         (16, 185, 129),
-        (14, 165, 233),
+        (100, 116, 139),
     ]
 
-    for i, zone in enumerate(zones):
+    for index, zone in enumerate(zones):
         points = zone.get("points", [])
 
         if len(points) < 3:
             continue
 
-        color = colors[i % len(colors)]
-        pts = np.array([[int(x * w), int(y * h)] for x, y in points], dtype=np.int32)
+        color = colors[index % len(colors)]
+        pts = np.array(
+            [[int(x * w), int(y * h)] for x, y in points],
+            dtype=np.int32,
+        )
 
         overlay = out.copy()
         cv2.fillPoly(overlay, [pts], color)
@@ -195,10 +185,11 @@ def draw_preview_on_frame(frame, zones):
 
         lx, ly = pts[0]
         ly = max(ly - 8, 14)
+
         cv2.putText(
             out,
             zone.get("name", zone.get("zone_id", "zone")),
-            (lx, ly),
+            (int(lx), int(ly)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.48,
             color,
@@ -209,32 +200,56 @@ def draw_preview_on_frame(frame, zones):
     return out
 
 
+def render_help_card():
+    st.markdown(
+        f"""
+        <div style="background:#0B1220;border:1px solid #1D3152;border-radius:14px;padding:20px;">
+            <div style="color:#F8FAFC;font-size:18px;font-weight:900;margin-bottom:10px;">좌표 기준</div>
+            <div style="color:#A7B4C8;font-size:15px;line-height:1.8;">
+                좌표는 영상 크기와 무관한 정규화 좌표입니다.<br>
+                왼쪽 위는 <code>0,0</code>, 오른쪽 아래는 <code>1,1</code>입니다.<br>
+                polygon은 최소 3점 이상 필요합니다.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 with st.sidebar:
     brand_header()
 
     st.markdown("**영상 업로드**")
-    up = st.file_uploader("영상", type=["mp4", "avi", "mov"], label_visibility="collapsed")
+    uploaded = st.file_uploader(
+        "영상",
+        type=["mp4", "avi", "mov"],
+        label_visibility="collapsed",
+    )
 
-    if up:
-        tmp = Path(tempfile.gettempdir()) / "kidcafe" / up.name
+    if uploaded:
+        tmp = Path(tempfile.gettempdir()) / "kidcafe" / uploaded.name
         tmp.parent.mkdir(exist_ok=True)
-        tmp.write_bytes(up.read())
+        tmp.write_bytes(uploaded.read())
+
         st.session_state.video_path = str(tmp)
-        st.success(up.name)
+        st.success(uploaded.name)
 
     st.session_state.zones_path = st.text_input("Zone JSON 경로", st.session_state.zones_path)
+
     sidebar_status()
 
-st.markdown("# Zone 편집")
-st.markdown(
-    '<div class="kc-page-subtitle">정규화 좌표값으로 위험 구역을 설정합니다. 좌표 범위는 0~1입니다.</div>',
-    unsafe_allow_html=True,
-)
 
 existing = load_zones(st.session_state.zones_path)
 first_frame = get_first_frame(st.session_state.video_path)
 
-tab_edit, tab_preview, tab_help = st.tabs(["좌표 입력", "미리보기", "좌표 가이드"])
+st.markdown("# Zone 편집")
+st.markdown(
+    f'<div style="color:{c["TEXT_SUB"]};font-size:20px;margin-top:-8px;margin-bottom:26px;">'
+    f"A 파이프라인에서 사용할 위험구역 좌표를 설정합니다.</div>",
+    unsafe_allow_html=True,
+)
+
+tab_edit, tab_preview, tab_json = st.tabs(["좌표 입력", "미리보기", "JSON 확인"])
 
 with tab_edit:
     left, right = st.columns([2.1, 1], gap="large")
@@ -243,89 +258,97 @@ with tab_edit:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
         st.markdown('<div class="panel-title">Zone 직접 입력</div>', unsafe_allow_html=True)
 
-        num_zones = st.number_input("Zone 개수", 1, 10, max(1, len(existing)))
+        num_zones = st.number_input(
+            "Zone 개수",
+            min_value=1,
+            max_value=10,
+            value=max(1, len(existing)),
+            step=1,
+        )
+
         zones_out = []
         all_errors = []
 
-        for i in range(int(num_zones)):
-            ex = existing[i] if i < len(existing) else {}
+        for index in range(int(num_zones)):
+            ex = existing[index] if index < len(existing) else {}
 
-            with st.expander(f"Zone {i + 1}: {ex.get('name', f'Zone {i + 1}')}", expanded=(i == 0)):
-                co1, co2 = st.columns(2)
+            expander_title = f"Zone {index + 1}: {ex.get('name', f'Zone {index + 1}')}"
+            with st.expander(expander_title, expanded=(index == 0)):
+                col1, col2 = st.columns(2)
 
-                with co1:
-                    zid = st.text_input(
+                with col1:
+                    zone_id = st.text_input(
                         "zone_id",
-                        value=ex.get("zone_id", f"zone_{i + 1:02d}"),
-                        key=f"eid_{i}",
+                        value=ex.get("zone_id", f"zone_{index + 1:02d}"),
+                        key=f"zone_id_{index}",
                     )
-                    zname = st.text_input(
+                    name = st.text_input(
                         "name",
-                        value=ex.get("name", f"Zone {i + 1}"),
-                        key=f"enm_{i}",
+                        value=ex.get("name", f"Zone {index + 1}"),
+                        key=f"zone_name_{index}",
                     )
 
-                with co2:
+                with col2:
                     danger = st.selectbox(
                         "위험도",
                         ["High", "Medium", "Low"],
                         index=["High", "Medium", "Low"].index(ex.get("danger_level", "High"))
                         if ex.get("danger_level", "High") in ["High", "Medium", "Low"]
                         else 0,
-                        key=f"edg_{i}",
+                        key=f"danger_{index}",
                     )
                     dwell_threshold = st.number_input(
                         "체류 임계값(초)",
-                        1,
-                        120,
-                        int(ex.get("rules", {}).get("dwell_threshold_sec", 5)),
-                        key=f"edt_{i}",
+                        min_value=1,
+                        max_value=120,
+                        value=int(ex.get("rules", {}).get("dwell_threshold_sec", 5)),
+                        step=1,
+                        key=f"dwell_{index}",
                     )
 
                 default_points = ex.get(
                     "points",
-                    [[0.1, 0.1], [0.5, 0.1], [0.5, 0.5], [0.1, 0.5]],
+                    [[0.10, 0.10], [0.50, 0.10], [0.50, 0.45], [0.10, 0.45]],
                 )
 
-                pts_str = st.text_area(
+                points_text = st.text_area(
                     "points (x,y 한 줄에 하나)",
-                    value="\n".join(f"{p[0]},{p[1]}" for p in default_points),
-                    key=f"ept_{i}",
-                    height=110,
+                    value="\n".join(f"{point[0]},{point[1]}" for point in default_points),
+                    height=120,
+                    key=f"points_{index}",
                     help="예: 0.1,0.1 / 0.5,0.1 / 0.5,0.5 / 0.1,0.5",
                 )
 
-                points, errors = parse_points(pts_str)
+                points, point_errors = parse_points(points_text)
 
-                for error in errors:
-                    st.warning(error)
+                if point_errors:
+                    for error in point_errors:
+                        st.warning(error)
+                    all_errors.extend([f"Zone {index + 1}: {error}" for error in point_errors])
 
-                if errors:
-                    all_errors.extend([f"Zone {i + 1}: {e}" for e in errors])
+                zone = {
+                    "zone_id": zone_id.strip(),
+                    "name": name.strip(),
+                    "type": "polygon",
+                    "danger_level": danger,
+                    "points": points,
+                    "rules": {
+                        "enter_alert": True,
+                        "dwell_threshold_sec": int(dwell_threshold),
+                    },
+                }
 
-                zones_out.append(
-                    {
-                        "zone_id": zid.strip(),
-                        "name": zname.strip(),
-                        "type": "polygon",
-                        "danger_level": danger,
-                        "points": points,
-                        "rules": {
-                            "enter_alert": True,
-                            "dwell_threshold_sec": int(dwell_threshold),
-                        },
-                    }
-                )
+                zones_out.append(zone)
 
         schema_errors = validate_zones(zones_out)
         all_errors.extend(schema_errors)
-        jstr = zones_to_json(zones_out)
+        json_text = zones_to_json(zones_out)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
     with right:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.markdown('<div class="panel-title">저장 상태</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel-title">검증 및 저장</div>', unsafe_allow_html=True)
 
         if all_errors:
             st.error(f"수정이 필요한 항목 {len(all_errors)}개")
@@ -338,61 +361,62 @@ with tab_edit:
         save_col, download_col = st.columns(2)
 
         with save_col:
-            if st.button("세션 저장", key="save_manual", disabled=bool(all_errors), use_container_width=True):
+            if st.button(
+                "세션 저장",
+                key="save_zones",
+                disabled=bool(all_errors),
+                use_container_width=True,
+            ):
                 tmp = Path(tempfile.gettempdir()) / "kidcafe" / "zones_edited.json"
                 tmp.parent.mkdir(exist_ok=True)
-                tmp.write_text(jstr, encoding="utf-8")
+                tmp.write_text(json_text, encoding="utf-8")
+
                 st.session_state.zones_path = str(tmp)
-                st.success("저장되었습니다.")
+                st.success("저장 완료")
 
         with download_col:
             st.download_button(
-                "JSON",
-                jstr,
+                "JSON 다운로드",
+                json_text,
                 "zones.json",
                 "application/json",
                 disabled=bool(all_errors),
                 use_container_width=True,
             )
 
-        st.markdown(
-            """
-            <div class="inner-card" style="margin-top:18px;">
-                <div style="color:#A7B4C8;font-size:14px;margin-bottom:10px;">A 모듈 연동 스키마</div>
-                <div style="color:#F8FAFC;font-size:15px;line-height:1.8;">
-                    zone_id, name, type=polygon, points,<br>
-                    rules.enter_alert, rules.dwell_threshold_sec
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
+        st.markdown("<br>", unsafe_allow_html=True)
+        render_help_card()
         st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
+
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.markdown('<div class="panel-title">현재 정의된 Zone</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel-title">현재 Zone 목록</div>', unsafe_allow_html=True)
 
         if zones_out:
             zone_rows = [
                 {
-                    "zone_id": z["zone_id"],
-                    "name": z["name"],
-                    "danger": z["danger_level"],
-                    "points": len(z["points"]),
-                    "dwell_sec": z["rules"]["dwell_threshold_sec"],
+                    "zone_id": zone["zone_id"],
+                    "name": zone["name"],
+                    "danger": zone["danger_level"],
+                    "points": len(zone["points"]),
+                    "dwell_sec": zone["rules"]["dwell_threshold_sec"],
                 }
-                for z in zones_out
+                for zone in zones_out
             ]
-            st.dataframe(zone_rows, hide_index=True, use_container_width=True)
+            st.dataframe(
+                pd.DataFrame(zone_rows),
+                hide_index=True,
+                use_container_width=True,
+                height=240,
+            )
         else:
             st.info("Zone이 없습니다.")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
 with tab_preview:
-    preview_left, preview_right = st.columns([3, 2], gap="large")
+    preview_left, preview_right = st.columns([2, 1], gap="large")
 
     with preview_left:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
@@ -408,11 +432,11 @@ with tab_preview:
             st.info("표시할 Zone 좌표가 없습니다.")
         else:
             st.markdown(
-                """
+                f"""
                 <div style="height:420px;background:#0B1220;border:1px dashed #1D3152;
                             border-radius:16px;display:flex;align-items:center;justify-content:center;
-                            color:#A7B4C8;font-size:18px;">
-                    영상을 업로드하면 첫 프레임 위에 Zone을 확인할 수 있습니다
+                            color:{c["TEXT_SUB"]};font-size:17px;text-align:center;">
+                    영상을 업로드하면 첫 프레임 위에 Zone을 확인할 수 있습니다.
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -422,39 +446,37 @@ with tab_preview:
 
     with preview_right:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.markdown('<div class="panel-title">JSON 미리보기</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel-title">Zone 이름 매핑</div>', unsafe_allow_html=True)
 
         preview_zones = zones_out if "zones_out" in locals() and zones_out else existing
+        zone_map = get_zone_name_map(preview_zones)
 
-        if preview_zones:
-            st.code(zones_to_json(preview_zones), language="json")
+        if zone_map:
+            for zone_id, name in zone_map.items():
+                st.markdown(
+                    f"""
+                    <div class="status-row">
+                        <span class="status-label">{zone_id}</span>
+                        <span class="status-cyan">{name}</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
         else:
-            st.info("Zone이 설정되지 않았습니다.")
+            st.info("Zone이 없습니다.")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-with tab_help:
+with tab_json:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-title">좌표 입력 방법</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">JSON 미리보기</div>', unsafe_allow_html=True)
 
-    st.markdown(
-        """
-        <div style="color:#D7E2F1;line-height:1.9;font-size:17px;">
-            <b>좌표는 영상 크기와 무관한 정규화 좌표입니다.</b><br>
-            왼쪽 위는 <code>0,0</code>, 오른쪽 아래는 <code>1,1</code> 입니다.<br>
-            polygon은 최소 3점이 필요하며, 각 줄에 <code>x,y</code> 형식으로 입력합니다.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    preview_zones = zones_out if "zones_out" in locals() and zones_out else existing
 
-    st.code(
-        """0.10,0.10
-0.50,0.10
-0.50,0.45
-0.10,0.45""",
-        language="text",
-    )
+    if preview_zones:
+        st.code(zones_to_json(preview_zones), language="json")
+    else:
+        st.info("Zone이 설정되지 않았습니다.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
