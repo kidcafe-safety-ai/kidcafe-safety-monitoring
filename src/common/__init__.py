@@ -1,13 +1,6 @@
 """Common types and utilities."""
 
-from .types import (
-    Track,
-    TrackingResult,
-    Zone,
-    ZoneRules,
-    Event,
-    EventType,
-)
+from .types import Event, EventType, Track, TrackingResult, Zone, ZoneRules
 
 __all__ = [
     "Track",

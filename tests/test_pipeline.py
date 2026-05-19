@@ -1,5 +1,7 @@
 """파이프라인 통합 테스트."""
+
 import os
+
 import pytest
 
 from src.main import run_pipeline

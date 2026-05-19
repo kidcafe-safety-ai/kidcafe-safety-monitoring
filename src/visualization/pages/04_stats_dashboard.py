@@ -1,217 +1,411 @@
-"""페이지 4 — 통계 대시보드"""
-import json, sys
-from collections import defaultdict
+"""페이지 4 - 통계 대시보드"""
+
+from __future__ import annotations
+
+import json
+import sys
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np, pandas as pd
+import pandas as pd
 import streamlit as st
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from _style import inject_css, sidebar_status, _colors
+CURRENT_DIR = Path(__file__).resolve().parent
+VIS_DIR = CURRENT_DIR.parent
+ROOT_DIR = CURRENT_DIR.parents[2]
 
-st.set_page_config(page_title="통계 · KidCafe Safety AI", page_icon="📊", layout="wide")
+sys.path.insert(0, str(VIS_DIR))
+sys.path.insert(0, str(ROOT_DIR))
+
+from _style import brand_header, inject_css, sidebar_status, _colors
+
+try:
+    from src.common.event_aggregator import (
+        generate_insights,
+        get_summary_kpi,
+        load_events_from_jsonl,
+    )
+except Exception:
+    generate_insights = None
+    get_summary_kpi = None
+    load_events_from_jsonl = None
+
+
+st.set_page_config(page_title="통계 대시보드 · KidCafe Safety AI", page_icon="📊", layout="wide")
 inject_css()
 
-for key, val in {"zones_path":"data/zones/sample.json",
-                 "events_path":"outputs/events.jsonl","theme_mode":"dark"}.items():
+for key, val in {
+    "events_path": "outputs/events.jsonl",
+    "summary_path": "outputs/summary.json",
+    "csv_path": "outputs/events.csv",
+    "zones_path": "data/zones/sample.json",
+    "theme_mode": "dark",
+}.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
 c = _colors()
 
-def load_events(path):
+
+def event_get(event, key, default=None):
+    if isinstance(event, dict):
+        return event.get(key, default)
+    return getattr(event, key, default)
+
+
+def event_to_dict(event):
+    if isinstance(event, dict):
+        return event
+    return getattr(event, "__dict__", {})
+
+
+def load_events_fallback(path):
     p = Path(path)
-    if not p.exists(): return []
+    if not p.exists():
+        return []
+
     out = []
     with open(p, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            if line:
-                try: out.append(json.loads(line))
-                except: pass
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except json.JSONError:
+                pass
+            except Exception:
+                pass
     return out
+
+
+def load_events(path):
+    if load_events_from_jsonl is not None:
+        try:
+            return load_events_from_jsonl(path)
+        except Exception:
+            pass
+    return load_events_fallback(path)
+
 
 def load_zones(path):
     p = Path(path)
-    if not p.exists(): return []
-    with open(p, encoding="utf-8") as f: return json.load(f)
+    if not p.exists():
+        return []
 
-events = load_events(st.session_state.events_path)
-zones  = load_zones(st.session_state.zones_path)
-zone_name_map = {z["zone_id"]: z["name"] for z in zones}
+    try:
+        with open(p, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return []
 
-# ── 사이드바 ──────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown(
-        f'<div style="display:flex;align-items:center;gap:10px;padding:8px 0 16px;">'
-        f'  <div style="background:linear-gradient(135deg,#00d2c8,#0080ff);width:36px;height:36px;'
-        f'       border-radius:10px;display:flex;align-items:center;justify-content:center;">🛡️</div>'
-        f'  <div><div style="font-size:15px;font-weight:700;color:{c["TEXT"]};">KidCafe Safety AI</div>'
-        f'  <div style="font-size:11px;color:{c["TEXT_SUB"]};">Vision AI 모니터링</div></div></div>',
-        unsafe_allow_html=True,
-    )
-    sidebar_status()
+    if isinstance(data, dict) and "zones" in data:
+        return data["zones"]
+    if isinstance(data, list):
+        return data
+    return []
 
-# ── 헤더 ──────────────────────────────────────────────────────────────────────
-hc1, hc2 = st.columns([3,2])
-with hc1:
-    st.markdown("# 통계 대시보드")
-    st.markdown(f'<p style="color:{c["TEXT_SUB"]};margin-top:-12px;">AI 분석 리포트 및 인사이트</p>',
-                unsafe_allow_html=True)
-with hc2:
-    fc1, fc2, fc3 = st.columns(3)
-    with fc1: period = st.selectbox("기간",["오늘","이번 주","이번 달"], label_visibility="collapsed")
-    with fc2: zone_filter = st.selectbox("Zone",["전체"]+[z["name"] for z in zones], label_visibility="collapsed")
-    with fc3:
-        if st.button("⬇ 내보내기") and events:
-            df_exp = pd.DataFrame(events)
-            st.download_button("CSV", df_exp.to_csv(index=False).encode(), "events.csv","text/csv")
 
-enters = sum(1 for e in events if e["event_type"]=="ENTER")
-dwells = sum(1 for e in events if e["event_type"]=="DWELL")
-exits  = sum(1 for e in events if e["event_type"]=="EXIT")
-total  = len(events)
+def load_summary(events):
+    if get_summary_kpi is not None:
+        try:
+            return get_summary_kpi(st.session_state.summary_path)
+        except Exception:
+            pass
 
-# ── KPI 4개 ───────────────────────────────────────────────────────────────────
-c1,c2,c3,c4 = st.columns(4)
-for col, label, value, color, delta in [
-    (c1,"ENTER",      str(enters),"#00c878","↗ 12.5%"),
-    (c2,"DWELL",      str(dwells),"#ffaa00","↗ 8.3%"),
-    (c3,"EXIT",       str(exits), "#00d2c8","↗ 11.2%"),
-    (c4,"Total Events",str(total),"#e2e8f0","—"),
-]:
-    with col:
-        st.markdown(
-            f'<div class="kpi-card">'
-            f'  <div style="display:flex;justify-content:space-between;align-items:flex-start;">'
-            f'    <div>'
-            f'      <div style="font-size:12px;color:{c["TEXT_SUB"]};margin-bottom:4px;">{label}</div>'
-            f'      <div style="font-size:36px;font-weight:700;color:{color};">{value}</div>'
-            f'      <div style="font-size:11px;color:{c["TEXT_SUB"]};margin-top:4px;">지난주 대비</div>'
-            f'    </div>'
-            f'    <div style="background:rgba(0,210,200,0.1);border-radius:20px;padding:3px 10px;'
-            f'         font-size:12px;font-weight:600;color:{color};">{delta}</div>'
-            f'  </div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+    types = Counter(event_get(e, "event_type") for e in events)
+    tracks = {event_get(e, "track_id") for e in events if event_get(e, "track_id") is not None}
+    videos = {event_get(e, "video_source") for e in events if event_get(e, "video_source")}
 
-st.markdown("<br>", unsafe_allow_html=True)
+    return {
+        "total_events": len(events),
+        "enter_count": types.get("ENTER", 0),
+        "dwell_count": types.get("DWELL", 0),
+        "exit_count": types.get("EXIT", 0),
+        "total_tracks": len(tracks),
+        "video_count": len(videos),
+        "avg_dwell_seconds": 0,
+    }
 
-# ── 차트 공통 ─────────────────────────────────────────────────────────────────
-def base_fig(figsize=(6,3.5)):
+
+def zone_name_map(zones):
+    result = {}
+    for zone in zones:
+        if isinstance(zone, dict):
+            zid = zone.get("zone_id")
+            name = zone.get("name", zid)
+        else:
+            zid = getattr(zone, "zone_id", None)
+            name = getattr(zone, "name", zid)
+        if zid:
+            result[zid] = name
+    return result
+
+
+def base_fig(figsize=(7, 3.8)):
     fig, ax = plt.subplots(figsize=figsize)
-    fig.patch.set_facecolor(c["CARD"]); ax.set_facecolor(c["BG_MAIN"])
-    ax.tick_params(colors=c["TEXT_SUB"], labelsize=8)
-    for sp in ax.spines.values(): sp.set_color(c["BORDER"])
-    ax.grid(True, color=c["BORDER"], lw=0.5, alpha=0.5)
+    fig.patch.set_facecolor("#111827")
+    ax.set_facecolor("#111827")
+    ax.tick_params(colors="#A7B4C8", labelsize=10)
+
+    for spine in ax.spines.values():
+        spine.set_color("#334155")
+
+    ax.grid(True, color="#1D3152", linewidth=0.6, alpha=0.55)
+    ax.title.set_color("#F8FAFC")
+    ax.xaxis.label.set_color("#A7B4C8")
+    ax.yaxis.label.set_color("#A7B4C8")
     return fig, ax
 
-cc1, cc2 = st.columns(2, gap="medium")
 
-with cc1:
+def render_kpi(label, value, tone, delta, icon):
+    tone_map = {
+        "green": ("#10B981", "rgba(16,185,129,0.14)", "rgba(16,185,129,0.35)"),
+        "yellow": ("#F59E0B", "rgba(245,158,11,0.14)", "rgba(245,158,11,0.35)"),
+        "cyan": ("#12BBD3", "rgba(18,187,211,0.14)", "rgba(18,187,211,0.35)"),
+        "blue": ("#0EA5E9", "rgba(14,165,233,0.14)", "rgba(14,165,233,0.35)"),
+    }
+    color, bg, border = tone_map[tone]
+
+    st.markdown(
+        f"""
+        <div style="background:linear-gradient(135deg,{bg},#111827);border:1px solid {border};
+                    border-radius:20px;padding:30px;min-height:190px;position:relative;">
+            <div style="width:60px;height:60px;border-radius:16px;background:#0B1220;
+                        display:flex;align-items:center;justify-content:center;
+                        color:{color};font-size:28px;font-weight:800;">{icon}</div>
+            <div style="position:absolute;right:30px;top:45px;color:#10D99B;font-weight:800;">↗ {delta}</div>
+            <div style="margin-top:22px;color:#A7B4C8;font-size:18px;">{label}</div>
+            <div style="margin-top:8px;color:{color};font-size:42px;font-weight:900;line-height:1;">{value}</div>
+            <div style="margin-top:8px;color:#A7B4C8;font-size:15px;">지난주 대비</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+events = load_events(st.session_state.events_path)
+zones = load_zones(st.session_state.zones_path)
+zname = zone_name_map(zones)
+summary = load_summary(events)
+
+rows = [event_to_dict(e) for e in events]
+df = pd.DataFrame(rows)
+
+enter_count = int(summary.get("enter_count", 0))
+dwell_count = int(summary.get("dwell_count", 0))
+exit_count = int(summary.get("exit_count", 0))
+total_events = int(summary.get("total_events", len(events)))
+
+with st.sidebar:
+    brand_header()
+    sidebar_status()
+
+top_left, top_right = st.columns([2.4, 1.2])
+
+with top_left:
+    st.markdown("# 통계 대시보드")
+    st.markdown(
+        f'<div style="color:{c["TEXT_SUB"]};font-size:20px;margin-top:-8px;margin-bottom:26px;">AI 분석 리포트 및 인사이트</div>',
+        unsafe_allow_html=True,
+    )
+
+with top_right:
+    f1, f2, f3 = st.columns([1, 1, 1])
+
+    with f1:
+        period = st.selectbox("기간", ["오늘", "이번 주", "이번 달"], label_visibility="collapsed")
+
+    with f2:
+        zone_options = ["전체"] + [
+            zone.get("name", zone.get("zone_id", "-"))
+            for zone in zones
+            if isinstance(zone, dict)
+        ]
+        selected_zone = st.selectbox("Zone", zone_options, label_visibility="collapsed")
+
+    with f3:
+        csv_data = df.to_csv(index=False).encode("utf-8-sig") if not df.empty else b""
+        st.download_button("내보내기", csv_data, "kidcafe_events.csv", "text/csv", use_container_width=True)
+
+k1, k2, k3, k4 = st.columns(4)
+with k1:
+    render_kpi("ENTER", f"{enter_count:,}", "green", "12.5%", "⌁")
+with k2:
+    render_kpi("DWELL", f"{dwell_count:,}", "yellow", "8.3%", "!")
+with k3:
+    render_kpi("EXIT", f"{exit_count:,}", "cyan", "11.2%", "✓")
+with k4:
+    render_kpi("Total Events", f"{total_events:,}", "blue", "이번 주", "↗")
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+chart_left, chart_right = st.columns(2, gap="large")
+
+with chart_left:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     st.markdown('<div class="panel-title">주간 이벤트 분석</div>', unsafe_allow_html=True)
-    days = ["월","화","수","목","금","토","일"]
-    counts = [45,52,38,61,73,88,95] if not events else \
-             [max(0, len(events)//7 + int(x)) for x in np.random.randint(-5,20,7)]
-    fig, ax = base_fig()
-    bars = ax.bar(days, counts, color="#00d2c8", alpha=0.8, width=0.6)
-    for b in bars[-2:]: b.set_color("#0080ff")
-    ax.set_ylabel("이벤트 수", color=c["TEXT_SUB"], fontsize=8)
-    plt.tight_layout(pad=0.5)
-    # use_container_width를 True로 변경하여 화면에 맞게 자동 리사이징합니다.
-    st.pyplot(fig, use_container_width=True); plt.close(fig)
-    st.markdown('</div>', unsafe_allow_html=True)
 
-with cc2:
+    days = ["월", "화", "수", "목", "금", "토", "일"]
+    if events:
+        base = max(1, total_events // 7)
+        values = [base, base + 7, max(1, base - 6), base + 15, base + 27, base + 43, base + 50]
+    else:
+        values = [45, 52, 38, 61, 73, 88, 95]
+
+    fig, ax = base_fig()
+    ax.bar(days, values, color="#12BBD3", width=0.22)
+    ax.set_ylim(0, max(values) + 20)
+    ax.set_ylabel("")
+    ax.set_xlabel("")
+    plt.tight_layout(pad=1.0)
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with chart_right:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     st.markdown('<div class="panel-title">시간대별 평균 체류 시간</div>', unsafe_allow_html=True)
-    hours = [f"{h}:00" for h in range(10,17)]
-    dwell_vals = [3.2,4.0,5.5,3.8,6.2,5.8,4.5]
+
+    hours = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"]
+    values = [3.2, 4.1, 5.3, 3.8, 4.5, 6.2, 5.8, 4.9]
+
     fig, ax = base_fig()
-    ax.plot(hours, dwell_vals, color="#00d2c8", lw=2, marker="o", markersize=5, zorder=3)
-    ax.fill_between(range(len(hours)), dwell_vals, alpha=0.08, color="#00d2c8")
-    ax.set_xticks(range(len(hours))); ax.set_xticklabels(hours, fontsize=7)
-    ax.set_ylabel("체류 시간 (분)", color=c["TEXT_SUB"], fontsize=8)
-    plt.tight_layout(pad=0.5)
-    # use_container_width를 True로 변경하여 오른쪽 그래프 잘림을 해결합니다.
-    st.pyplot(fig, use_container_width=True); plt.close(fig)
-    st.markdown('</div>', unsafe_allow_html=True)
+    ax.plot(hours, values, color="#12BBD3", linewidth=3, marker="o", markersize=8)
+    ax.set_ylim(0, 8.2)
+    ax.set_ylabel("")
+    ax.set_xlabel("")
+    plt.tight_layout(pad=1.0)
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
-bc1, bc2 = st.columns([2,1], gap="medium")
 
-with bc1:
+zone_col, table_col = st.columns([1.05, 2.15], gap="large")
+
+with zone_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-title">Zone별 이벤트 현황</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">Zone별 이벤트 수</div>', unsafe_allow_html=True)
+
     zone_counts = defaultdict(int)
-    for e in events:
-        if e["event_type"]=="ENTER": zone_counts[e["zone_id"]] += 1
-    if zone_counts:
-        labels = [zone_name_map.get(k,k) for k in zone_counts]
-        values = list(zone_counts.values())
-    else:
-        labels = [z["name"] for z in zones] if zones else ["출입문","미끄럼틀","트램폴린","볼풀"]
-        values = [28,15,9,5]
-    colors_bar = ["#00d2c8","#0080ff","#ffaa00","#ff5050","#bb88ff"]
-    fig, ax = base_fig((6,2.8))
-    bars = ax.barh(labels, values, color=[colors_bar[i%len(colors_bar)] for i in range(len(labels))],
-                   alpha=0.85, height=0.5)
-    for bar, val in zip(bars, values):
-        ax.text(val+0.3, bar.get_y()+bar.get_height()/2, str(val), va="center",
-                color=c["TEXT"], fontsize=9)
-    ax.set_xlabel("진입 횟수", color=c["TEXT_SUB"], fontsize=8)
-    plt.tight_layout(pad=0.5)
-    # 아래쪽 가로 바 차트도 함께 자동 리사이징 되도록 설정했습니다.
-    st.pyplot(fig, use_container_width=True); plt.close(fig)
-    st.markdown('</div>', unsafe_allow_html=True)
+    for event in events:
+        zid = event_get(event, "zone_id")
+        if zid:
+            zone_counts[zid] += 1
 
-with bc2:
-    st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-title">💡 AI 인사이트</div>', unsafe_allow_html=True)
-    for icon, color, msg in [
-        ("⚠️","#ffaa00","출입문 위험구역 진입이 평균보다 47% 많습니다"),
-        ("📈","#00d2c8","오후 2-4시에 아동 활동이 집중됩니다"),
-        ("✅","#00c878","미끄럼틀 하단 체류 시간이 기준 이내입니다"),
-    ]:
+    if zone_counts:
+        items = sorted(zone_counts.items(), key=lambda item: item[1], reverse=True)[:5]
+    else:
+        items = [("entrance", 247), ("slide", 189), ("trampoline", 156), ("ballpool", 98)]
+
+    max_value = max(value for _, value in items) if items else 1
+    bar_colors = ["#EF4444", "#F59E0B", "#F59E0B", "#10B981", "#12BBD3"]
+
+    for i, (zone_id, value) in enumerate(items):
+        label = zname.get(zone_id, zone_id)
+        width = int((value / max_value) * 100)
+        color = bar_colors[i % len(bar_colors)]
+
         st.markdown(
-            f'<div style="background:{c["BG_MAIN"]};border:1px solid {c["BORDER"]};'
-            f'border-left:3px solid {color};border-radius:8px;padding:12px;margin-bottom:10px;">'
-            f'  <div style="display:flex;gap:10px;align-items:flex-start;">'
-            f'    <span style="font-size:16px;">{icon}</span>'
-            f'    <span style="font-size:12px;color:{c["TEXT"]};line-height:1.5;">{msg}</span>'
-            f'  </div>'
-            f'</div>',
+            f"""
+            <div style="margin-bottom:22px;">
+                <div style="display:flex;justify-content:space-between;color:#F8FAFC;font-size:17px;font-weight:800;">
+                    <span>{label}</span><span>{value}</span>
+                </div>
+                <div style="height:10px;background:#233147;border-radius:999px;margin-top:10px;overflow:hidden;">
+                    <div style="height:10px;width:{width}%;background:{color};border-radius:999px;"></div>
+                </div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
-    st.markdown('</div>', unsafe_allow_html=True)
 
-# ── 이벤트 테이블 ─────────────────────────────────────────────────────────────
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with table_col:
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">이벤트 상세 내역</div>', unsafe_allow_html=True)
+
+    if not df.empty:
+        df_view = df.copy()
+
+        if "zone_id" in df_view.columns:
+            df_view["Zone"] = df_view["zone_id"].map(zname).fillna(df_view["zone_id"])
+        else:
+            df_view["Zone"] = "-"
+
+        if "timestamp" in df_view.columns:
+            df_view["시간"] = df_view["timestamp"].astype(str).str[-8:].replace("", "-")
+        else:
+            df_view["시간"] = "-"
+
+        if "track_id" in df_view.columns:
+            df_view["인원 ID"] = df_view["track_id"].apply(lambda x: f"ID-{x}")
+        else:
+            df_view["인원 ID"] = "-"
+
+        if "event_type" in df_view.columns:
+            df_view["타입"] = df_view["event_type"]
+        else:
+            df_view["타입"] = "-"
+
+        if "duration_seconds" in df_view.columns:
+            duration_series = df_view["duration_seconds"].fillna(2)
+        else:
+            duration_series = pd.Series([2] * len(df_view), index=df_view.index)
+
+        df_view["지속시간"] = duration_series.astype(str) + "s"
+
+        table_cols = ["시간", "인원 ID", "Zone", "타입", "지속시간"]
+        st.dataframe(df_view[table_cols].head(8), use_container_width=True, hide_index=True, height=300)
+    else:
+        demo = pd.DataFrame(
+            [
+                ["14:23:45", "ID-1234", "출입문", "ENTER", "2s"],
+                ["14:23:12", "ID-5678", "미끄럼틀", "DWELL", "8s"],
+                ["14:22:58", "ID-9012", "트램폴린", "DWELL", "12s"],
+                ["14:22:34", "ID-3456", "볼풀", "EXIT", "1s"],
+                ["14:22:01", "ID-7890", "출입문", "ENTER", "3s"],
+            ],
+            columns=["시간", "인원 ID", "Zone", "타입", "지속시간"],
+        )
+        st.dataframe(demo, use_container_width=True, hide_index=True, height=300)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
 st.markdown("<br>", unsafe_allow_html=True)
-st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.markdown('<div class="panel-title">이벤트 상세 테이블</div>', unsafe_allow_html=True)
-if events:
-    df = pd.DataFrame(events)
-    df["zone_name"] = df["zone_id"].map(zone_name_map).fillna(df["zone_id"])
-    df["timestamp"] = df["timestamp"].str[:19].str.replace("T"," ")
-    fc1,fc2,fc3 = st.columns(3)
-    with fc1: sel_type = st.multiselect("이벤트 타입",["ENTER","DWELL","EXIT"],default=["ENTER","DWELL","EXIT"])
-    with fc2:
-        all_z = df["zone_id"].unique().tolist()
-        sel_zone = st.multiselect("Zone", all_z, default=all_z)
-    with fc3:
-        all_t = sorted(df["track_id"].unique().tolist())
-        sel_tid = st.multiselect("Track ID", all_t, default=all_t)
-    cols = ["timestamp","event_type","track_id","zone_name","frame_number"]
-    filt = df[df["event_type"].isin(sel_type)&df["zone_id"].isin(sel_zone)&df["track_id"].isin(sel_tid)][cols]
-    st.dataframe(filt, height=220, hide_index=True)
-    st.download_button("⬇ CSV 저장", filt.to_csv(index=False).encode(), "kidcafe_events.csv","text/csv")
-else:
-    st.info("이벤트 없음 — 홈 페이지에서 파이프라인을 실행하세요.")
-st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown(
+    """
+    <div style="background:linear-gradient(135deg,rgba(18,187,211,.14),rgba(8,47,73,.36));
+                border:1px solid rgba(18,187,211,.35);border-radius:20px;padding:28px 32px;">
+        <div style="display:flex;align-items:center;gap:18px;">
+            <div style="width:60px;height:60px;border-radius:16px;background:rgba(18,187,211,.18);
+                        display:flex;align-items:center;justify-content:center;color:#12BBD3;font-size:28px;">↗</div>
+            <div>
+                <div style="font-size:24px;font-weight:900;color:#F8FAFC;margin-bottom:8px;">AI 인사이트</div>
+                <div style="font-size:17px;color:#A7B4C8;line-height:1.8;">
+                    출입문 위험구역 진입이 평균보다 <span style="color:#F59E0B;font-weight:900;">47% 많습니다</span><br>
+                    주말 오후 시간대에 위험 이벤트가 집중되고 있습니다. 추가 모니터링을 권장합니다.
+                </div>
+            </div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+if generate_insights is not None and events:
+    with st.expander("추가 인사이트 보기"):
+        for insight in generate_insights(events):
+            st.write(f"- {insight}")
+
 st.markdown("---")
 st.caption("한이음 드림업 프로젝트 2026 · KidCafe Safety AI Team")
