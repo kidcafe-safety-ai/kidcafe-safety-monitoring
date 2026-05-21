@@ -1,5 +1,9 @@
 # Dashboard API 사용 가이드
 
+> **작성일**: 2026-05-18  
+> **작성자**: 우민 (Dashboard/Data API 담당)  
+> **관련 문서**: [`dashboard_analysis.md`](dashboard_analysis.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md)
+
 이 문서는 이벤트 로그를 대시보드에서 활용하기 위한 주요 API 사용 방법을 정리합니다.
 
 ---
