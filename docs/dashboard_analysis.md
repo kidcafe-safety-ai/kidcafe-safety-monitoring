@@ -1,5 +1,9 @@
 # Dashboard Analysis 기준 문서
 
+> **작성일**: 2026-05-18  
+> **작성자**: 우민 (Dashboard/Data API 담당)  
+> **관련 문서**: [`dashboard_api.md`](dashboard_api.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md)
+
 이 문서는 이벤트 로그 기반 대시보드 통계와 차트 생성 기준을 정리합니다.
 
 ---
