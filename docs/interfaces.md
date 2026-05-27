@@ -195,7 +195,75 @@ EXIT
 
 ---
 
-## 6. 변경 절차
+## 6. 팀원 A/B/C 산출물 계약 (MVP 기준)
+
+MVP 1단계 기준의 팀원별 입출력 인터페이스.
+
+### A (Vision AI Backend + 결과 영상)
+
+담당 모듈: `tracking`, `events`, `geofencing`, `video_overlay`
+
+출력:
+
+```text
+outputs/events.jsonl    # 이벤트 로그 (한 줄 = Event JSON)
+outputs/result.mp4      # bbox + track_id + zone + 이벤트 오버레이 결과 영상
+```
+
+### B (Data Analysis + Pipeline 운영)
+
+담당 모듈: `main.py`, `event_writer`, `event_aggregator`, `charts`
+
+입력:
+
+```text
+outputs/events.jsonl
+```
+
+출력:
+
+```text
+outputs/events.csv      # 이벤트 로그 CSV
+outputs/summary.json    # KPI 요약 JSON
+```
+
+관련 모듈: `event_aggregator.py`, `charts.py`
+
+### C (Streamlit 검증 대시보드)
+
+담당 모듈: `visualization/app.py`, `visualization/pages`
+
+입력:
+
+```text
+outputs/events.jsonl
+outputs/events.csv
+outputs/summary.json
+outputs/result.mp4
+data/zones/sample.json
+```
+
+---
+
+## 7. MVP / Phase 2 인터페이스 구분
+
+**MVP (파일 기반)**
+
+- 모든 입출력은 로컬 파일 시스템 기반
+- `outputs/events.jsonl`, `events.csv`, `summary.json`, `result.mp4`
+- 영상 입력은 저장 파일(`.mp4`)만 지원
+
+**Phase 2 이후 (서버 기반, 미구현)**
+
+- FastAPI REST API
+- WebSocket 실시간 이벤트 스트림
+- DB (PostgreSQL 또는 SQLite) 연동
+- IP 카메라 / RTSP 실시간 입력
+- 위 인터페이스는 MVP에 포함되지 않으며 Phase 2에서 설계·구현한다.
+
+---
+
+## 8. 변경 절차
 
 1. Discord/카톡에서 변경 아이디어 공유
 2. `types.py`와 `interfaces.md` 동시 수정
