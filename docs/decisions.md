@@ -249,3 +249,30 @@ src/common/event_aggregator.py      # 대시보드용 통합 API
 src/visualization/event_charts.py   # 이벤트/통계 차트
 src/visualization/track_charts.py   # track_id 기준 차트
 src/visualization/charts.py         # 차트 통합 API
+```
+
+---
+
+## ADR-009: 파일 영상 기반 MVP 1차 종료 및 Phase 2 분리
+
+**Date**: 2026-05-27
+**Status**: Accepted
+
+### Context
+
+MVP 1차 목표인 파일 영상 기반 end-to-end 검증이 완료되었다.
+
+파이프라인 전체가 동작하고 Streamlit 검증 대시보드까지 구현되었으나, 실시간 입력·운영형 UI·서버 인프라는 검증 범위 밖이었다.
+
+### Decision
+
+- MVP 1차는 파일 영상 기반 end-to-end 검증 버전으로 종료한다.
+- Streamlit은 운영 UI가 아니라 검증용 임시 대시보드로 둔다.
+- React, FastAPI, IP 카메라, ReID, 낙상 감지는 Phase 2 이후로 분리한다.
+- MVP baseline을 `v0.1.0-mvp` 태그로 고정한다.
+
+### Consequences
+
+- Phase 2 개발 범위와 MVP 완료 범위가 명확하게 분리된다.
+- Streamlit 코드는 Phase 2에서 React로 전환 시 삭제 또는 별도 브랜치로 이동한다.
+- `v0.1.0-mvp` 태그로 재현 가능한 기준선을 유지한다.
