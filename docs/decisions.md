@@ -212,6 +212,10 @@ MVP 단계에서는 mp4v 코덱 사용.
 * 장기 track_id 유지 안정화
 * 실제 키즈카페 CCTV 데이터 기반
 
+### Update
+* 2026-05-30: Phase 1.5 모델 benchmark에서 YOLO26n을 Phase 2 실시간 입력 1차 기준 모델 후보로 선정.
+* 상세 근거: `docs/model_benchmark.md`
+
 ---
 
 ## ADR-008: Dashboard API 모듈 분리 및 요약 출력 추가

@@ -258,12 +258,81 @@ data/zones/sample.json
 - FastAPI REST API
 - WebSocket 실시간 이벤트 스트림
 - DB (PostgreSQL 또는 SQLite) 연동
-- IP 카메라 / RTSP 실시간 입력
+
+---
+
+## 8. Phase 2 InputSource 인터페이스 초안
+
+Phase 2에서는 파일 영상, 웹캠, RTSP/IP 카메라 입력을 동일한 Vision AI 파이프라인으로 처리하기 위해 입력 소스를 추상화한다.
+
+### 목적
+
+- 기존 파일 영상 파이프라인 유지
+- 웹캠/RTSP 입력 추가 시 `main.py` 변경 최소화
+- 입력 종류와 관계없이 Vision AI 파이프라인은 frame 단위로 동일하게 동작
+- `Event.video_source` 필드를 source 식별자로 일관되게 사용
+
+### 공통 인터페이스
+
+```python
+class InputSource:
+    def open(self) -> None:
+        """입력 소스를 연다."""
+
+    def read(self) -> tuple[bool, Any]:
+        """다음 프레임을 읽는다. 반환값은 (success, frame)."""
+
+    def release(self) -> None:
+        """입력 소스를 정리한다."""
+
+    def get_fps(self) -> float:
+        """입력 FPS를 반환한다. 알 수 없으면 30.0."""
+
+    def get_size(self) -> tuple[int, int]:
+        """프레임 크기를 (width, height)로 반환한다."""
+
+    def get_source_id(self) -> str:
+        """Event.video_source에 들어갈 source 식별자를 반환한다."""
+```
+
+### 구현 후보
+
+```text
+FileVideoSource
+- 파일 영상 입력
+- 예: data/videos/test.mp4
+- source_id: 파일 경로
+
+WebcamSource
+- 노트북/USB 웹캠 입력
+- 예: camera index 0
+- source_id: webcam_0
+
+RTSPSource
+- IP 카메라 RTSP 입력
+- 예: rtsp://...
+- source_id: camera_01
+```
+
+### Phase 2 구현 우선순위
+
+```text
+1. FileVideoSource로 기존 동작 유지
+2. WebcamSource 추가
+3. RTSPSource 추가
+4. reconnect / frame drop / latency 측정
+```
+
+### 주의사항
+
+- Phase 1.5에서는 입력 인터페이스 초안만 확정하고 실제 RTSP 구현은 Phase 2에서 진행한다.
+- 기존 파일 영상 MVP 파이프라인은 깨지지 않아야 한다.
+- `Event.video_source`는 파일 경로 또는 camera_id로 사용한다.
 - 위 인터페이스는 MVP에 포함되지 않으며 Phase 2에서 설계·구현한다.
 
 ---
 
-## 8. 변경 절차
+## 9. 변경 절차
 
 1. Discord/카톡에서 변경 아이디어 공유
 2. `types.py`와 `interfaces.md` 동시 수정

@@ -115,6 +115,7 @@ MVP 이후 고도화 단계에서는 다음 개선이 필요하다.
 
 개선 후보:
 
+- YOLO26n (Phase 1.5 모델 benchmark 기준 1차 후보)
 - YOLOv8s
 - YOLOv8m
 - 실제 키즈카페 CCTV 데이터로 fine-tuning
@@ -150,7 +151,8 @@ MVP 이후 고도화 단계에서는 다음 개선이 필요하다.
 따라서 현재 단계에서는 **전체 파이프라인 검증용으로 사용**하고, Phase 2에서 다음 개선을 진행한다.
 
 ```text
-YOLOv8s/m 교체
+YOLO26n 1차 후보 검증
++ 필요 시 YOLOv8s/m 추가 비교
 + ReID (OSNet / StrongSORT)
 + 이벤트 후처리 (debounce / hysteresis)
 + 실제 키즈카페 데이터 기반 재튜닝
@@ -166,7 +168,7 @@ YOLOv8s/m 교체
 
 | 수행계획서 명시 기술 | 현재 MVP 단계 | Phase 2 적용 |
 |---------------------|--------------|-------------|
-| YOLOv10/11 기반 객체 탐지 | YOLOv8n (경량 모델로 검증) | YOLOv8s/m 또는 YOLOv10 교체 |
+| YOLOv10/11 기반 객체 탐지 | YOLOv8n (MVP 경량 모델로 검증) | YOLO26n 1차 후보 검증 후 필요 시 YOLOv8s/m 또는 YOLOv10/11 비교 |
 | ByteTrack/StrongSORT 다중 추적 | ByteTrack 단독 | StrongSORT 또는 ReID 결합 |
 | OSNet 기반 경량 ReID | 미적용 | 도입 예정 |
 | Cross-Camera ReID | 미적용 | 다중 카메라 환경에서 도입 |

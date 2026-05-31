@@ -151,6 +151,7 @@ activemq-data/
 .env
 .envrc
 .venv
+.venv-benchmark/
 env/
 venv/
 ENV/
@@ -225,6 +226,7 @@ outputs/*.jsonl
 outputs/*.json
 outputs/*.csv
 outputs/*.mp4
+outputs/benchmark/
 
 # Model weights
 *.pt
@@ -233,4 +235,3 @@ outputs/*.mp4
 *.engine
 
 .DS_Store
-
