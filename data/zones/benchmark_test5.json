@@ -1,0 +1,29 @@
+[
+  {
+    "zone_id": "door_area",
+    "name": "문앞 구역",
+    "type": "polygon",
+    "points": [
+      [
+        0.4141,
+        0.3625
+      ],
+      [
+        0.4688,
+        0.3312
+      ],
+      [
+        0.5828,
+        0.3875
+      ],
+      [
+        0.4672,
+        0.4521
+      ]
+    ],
+    "rules": {
+      "enter_alert": true,
+      "dwell_threshold_sec": 3
+    }
+  }
+]

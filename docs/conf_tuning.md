@@ -137,7 +137,8 @@ False Alert 빈발              진짜 위험 놓칠 수도
 
 ### 8.3 모델 교체 후 재실험
 
-[`tracking_analysis.md`](tracking_analysis.md)에서 제시한 Phase 2 모델 교체 (YOLOv8s/m) 후 동일 실험을 반복하여 최적 conf 재산정.
+[`model_benchmark.md`](model_benchmark.md)에서 YOLO26n을 Phase 2 실시간 입력 1차 기준 모델 후보로 선정했다.  
+Phase 2에서 YOLO26n을 실제 웹캠/RTSP 환경에 적용한 뒤 동일한 confidence threshold 실험을 반복하여 최적 conf를 재산정한다.
 
 → 모델이 강해지면 최적 conf 값이 달라질 수 있음.
 
@@ -148,4 +149,4 @@ False Alert 빈발              진짜 위험 놓칠 수도
 | 수행계획서 명시 기술 | 현재 MVP 단계 | Phase 2 적용 |
 |---------------------|--------------|-------------|
 | 룰 기반 이벤트 판단 로직 (오탐 감소) | `conf=0.5` 고정 + DWELL 임계시간 적용 | 영역별/시간대별 동적 conf |
-| 작은 객체 탐지 정밀도 | YOLOv8n + `conf=0.5` | YOLOv8s/m + 동적 conf |
+| 작은 객체 탐지 정밀도 | YOLOv8n + `conf=0.5` | YOLO26n 1차 후보 검증 + 동적 conf |

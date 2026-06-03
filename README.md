@@ -152,6 +152,7 @@ kidcafe-safety-monitoring/
 │   ├── roadmap.md           # Phase 1~5 개발 로드맵
 │   ├── tracking_analysis.md
 │   ├── conf_tuning.md
+│   ├── model_benchmark.md
 │   ├── dashboard_api.md
 │   ├── dashboard_analysis.md
 │   └── dashboard_mvp_summary.md
@@ -273,6 +274,7 @@ Phase 2 개발은 **2026-06-01부터 착수 예정**이며, 세부 개발 단계
 - [`docs/interfaces.md`](docs/interfaces.md) — 모듈 간 인터페이스 + A/B/C 산출물 계약
 - [`docs/tracking_analysis.md`](docs/tracking_analysis.md) — Track ID 안정성 분석
 - [`docs/conf_tuning.md`](docs/conf_tuning.md) — Confidence threshold 튜닝
+- [`docs/model_benchmark.md`](docs/model_benchmark.md) — Phase 2 기준 모델 1차 비교
 
 | ADR | 결정 | 사유 |
 |-----|------|------|
@@ -309,7 +311,7 @@ Phase 2 개발은 **2026-06-01부터 착수 예정**이며, 세부 개발 단계
 
 | 한계 | 원인 | Phase 2 개선 방안 |
 |------|------|----------------|
-| CCTV 거리 탐지 약함 | YOLOv8n (경량 모델) | YOLOv8s/m 교체 |
+| CCTV 거리 탐지 약함 | YOLOv8n (MVP 경량 모델) | YOLO26n 1차 후보 검증 및 필요 시 모델 교체 |
 | 작은 객체 bbox 깜빡임 | 작은 객체 confidence 흔들림 | 모델 업그레이드 + 후처리 |
 | track_id 자주 변경 | ReID 없음 | OSNet 기반 ReID 도입 |
 | 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | StrongSORT 또는 ReID 보강 |
