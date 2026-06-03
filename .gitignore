@@ -226,6 +226,7 @@ outputs/*.jsonl
 outputs/*.json
 outputs/*.csv
 outputs/*.mp4
+outputs/*.db
 outputs/benchmark/
 
 # Model weights
