@@ -1,6 +1,11 @@
 # API Contract v1
 
-KidCafe Safety AI Phase 1.5 Backend API 계약 문서.
+> **작성일**: 2026-06-04  
+> **작성자**: 우민 (B / Backend FastAPI 담당)  
+> **상태**: Phase 1.5 API 계약 v1  
+> **관련 문서**: [`dashboard_api.md`](dashboard_api.md), [`dashboard_analysis.md`](dashboard_analysis.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md), [`roadmap.md`](roadmap.md)
+
+이 문서는 KidCafe Safety AI Phase 1.5 Backend API 계약을 정리합니다.
 
 Phase 1.5의 목적은 기존 파일 기반 Vision AI 파이프라인을 변경하지 않고,
 MVP 1단계에서 생성하던 Event 구조를 FastAPI + SQLite 기반 API 서버로 제공하는 것이다.
