@@ -1,0 +1,95 @@
+<svg width="512" height="620" viewBox="0 0 512 620" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cardBg" x1="82" y1="72" x2="430" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FBFDFF"/>
+      <stop offset="1" stop-color="#EEF5FF"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="151" y1="95" x2="399" y2="419" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5EA1FF"/>
+      <stop offset="0.48" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="navy" x1="163" y1="177" x2="360" y2="422" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#172554"/>
+      <stop offset="1" stop-color="#0B1B3F"/>
+    </linearGradient>
+    <filter id="softShadow" x="48" y="46" width="416" height="430" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#0F172A" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="620" fill="white"/>
+
+  <g filter="url(#softShadow)">
+    <rect x="82" y="72" width="348" height="348" rx="78" fill="url(#cardBg)"/>
+    <rect x="84" y="74" width="344" height="344" rx="76" stroke="#E8EEF7" stroke-width="4"/>
+  </g>
+
+  <path
+    d="M256 95C214 128 175 147 128 156C120 158 115 164 115 172V251C115 327 161 383 256 424C351 383 397 327 397 251V172C397 164 392 158 384 156C337 147 298 128 256 95Z"
+    fill="white"
+  />
+  <path
+    d="M256 95C214 128 175 147 128 156C120 158 115 164 115 172V251C115 327 161 383 256 424C351 383 397 327 397 251V172C397 164 392 158 384 156C337 147 298 128 256 95Z"
+    stroke="url(#blue)"
+    stroke-width="28"
+    stroke-linejoin="round"
+  />
+
+  <path
+    d="M165 304C177 292 190 292 202 305L228 332C236 340 241 352 241 364V397C205 379 177 356 157 326C153 319 157 310 165 304Z"
+    fill="url(#navy)"
+  />
+  <path
+    d="M347 304C335 292 322 292 310 305L284 332C276 340 271 352 271 364V397C307 379 335 356 355 326C359 319 355 310 347 304Z"
+    fill="url(#navy)"
+  />
+
+  <path
+    d="M203 281C206 239 231 218 258 218C287 218 310 240 313 281C310 313 288 333 256 333C224 333 206 313 203 281Z"
+    fill="#F8FBFF"
+  />
+  <path
+    d="M205 272C207 226 233 205 263 207C293 209 316 232 318 271C306 248 290 242 267 243C246 244 222 249 205 272Z"
+    fill="url(#blue)"
+  />
+  <path
+    d="M202 267C217 276 239 265 254 251C266 278 292 277 318 275C316 237 294 212 260 211C225 210 202 233 202 267Z"
+    fill="url(#blue)"
+  />
+  <path
+    d="M235 297C243 309 269 312 281 296"
+    stroke="#10234D"
+    stroke-width="12"
+    stroke-linecap="round"
+  />
+
+  <path
+    d="M308 177L354 164C365 161 375 168 378 179L387 212C390 223 384 234 373 237L327 250C316 253 306 246 303 235L294 202C291 191 297 180 308 177Z"
+    fill="url(#navy)"
+  />
+  <circle cx="329" cy="207" r="17" fill="#F8FBFF"/>
+  <circle cx="329" cy="207" r="10" fill="#10234D"/>
+  <path d="M382 219H404V242H351C343 242 337 236 337 228V216H358V226H382V219Z" fill="#10234D"/>
+
+  <text
+    x="256"
+    y="504"
+    text-anchor="middle"
+    font-family="Inter, Arial, Helvetica, sans-serif"
+    font-size="58"
+    font-weight="800"
+    letter-spacing="-1"
+    fill="#123E7A"
+  >KidCafe</text>
+  <text
+    x="256"
+    y="552"
+    text-anchor="middle"
+    font-family="Inter, Arial, Helvetica, sans-serif"
+    font-size="30"
+    font-weight="600"
+    letter-spacing="1"
+    fill="#64748B"
+  >Safety Monitor</text>
+</svg>
