@@ -1,66 +1,77 @@
-"""
-시각화 모듈 단위 테스트
-실행: pytest tests/test_visualization.py -v
-"""
+"""Visualization and Phase 1.5 React Dashboard structure tests."""
+
 import json
+import re
 import sys
 from pathlib import Path
 
 import pytest
 
-# src 경로 추가
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-# ── 1. 페이지 파일 존재 확인 ──────────────────────────────────────────────────
-class TestPageFilesExist:
-    VIZ_DIR = Path("src/visualization")
+class TestReactDashboardFilesExist:
+    FRONTEND_DIR = Path("frontend")
+    SRC_DIR = FRONTEND_DIR / "src"
 
-    def test_app_exists(self):
-        assert (self.VIZ_DIR / "app.py").exists(), "app.py 없음"
+    @pytest.mark.parametrize(
+        "path",
+        [
+            FRONTEND_DIR / "package.json",
+            FRONTEND_DIR / "index.html",
+            FRONTEND_DIR / "vite.config.ts",
+            SRC_DIR / "main.tsx",
+            SRC_DIR / "App.tsx",
+            SRC_DIR / "App.css",
+            SRC_DIR / "pages" / "MonitoringPage.tsx",
+            SRC_DIR / "pages" / "EventsPage.tsx",
+            SRC_DIR / "api" / "eventsApi.ts",
+            SRC_DIR / "types" / "event.ts",
+            SRC_DIR / "mocks" / "mockEvents.ts",
+            SRC_DIR / "mocks" / "mockSummary.ts",
+            SRC_DIR / "mocks" / "mockZoneStatus.ts",
+        ],
+    )
+    def test_react_dashboard_file_exists(self, path):
+        assert path.exists(), f"{path} not found"
 
-    def test_style_helper_exists(self):
-        assert (self.VIZ_DIR / "_style.py").exists(), "_style.py 없음"
 
-    @pytest.mark.parametrize("page", [
-        "01_home.py",
-        "02_zone_editor.py",
-        "03_monitor.py",
-        "04_stats_dashboard.py",
-        "05_child_report.py",
-        "06_settings.py",
-    ])
-    def test_page_file_exists(self, page):
-        assert (self.VIZ_DIR / "pages" / page).exists(), f"{page} 없음"
+class TestReactDashboardApiContract:
+    def test_events_api_uses_contract_wrapper(self):
+        source = Path("frontend/src/api/eventsApi.ts").read_text(encoding="utf-8")
 
+        assert 'status: "success"' in source
+        assert "data," in source
+        assert "message: null" in source
+        assert "ApiResponse" in source
 
-# ── 2. syntax check ───────────────────────────────────────────────────────────
-class TestSyntaxCheck:
-    VIZ_DIR = Path("src/visualization")
-
-    def _compile(self, path: Path):
+    @pytest.mark.parametrize(
+        "path",
+        [
+            Path("frontend/src/pages/MonitoringPage.tsx"),
+            Path("frontend/src/pages/EventsPage.tsx"),
+            Path("frontend/src/components/RecentEventList.tsx"),
+            Path("frontend/src/components/EventTable.tsx"),
+            Path("frontend/src/components/EventChart.tsx"),
+            Path("frontend/src/components/ZoneStatusPanel.tsx"),
+        ],
+    )
+    def test_pages_and_components_do_not_import_mocks_directly(self, path):
         source = path.read_text(encoding="utf-8")
-        compile(source, str(path), "exec")  # SyntaxError 나면 실패
 
-    def test_app_syntax(self):
-        self._compile(self.VIZ_DIR / "app.py")
+        assert "../mocks" not in source
+        assert "mocks/" not in source
 
-    def test_style_syntax(self):
-        self._compile(self.VIZ_DIR / "_style.py")
+    def test_mock_event_timestamps_match_backend_contract(self):
+        source = Path("frontend/src/mocks/mockEvents.ts").read_text(encoding="utf-8")
+        timestamps = re.findall(r'timestamp:\s*"([^"]+)"', source)
 
-    @pytest.mark.parametrize("page", [
-        "01_home.py",
-        "02_zone_editor.py",
-        "03_monitor.py",
-        "04_stats_dashboard.py",
-        "05_child_report.py",
-        "06_settings.py",
-    ])
-    def test_page_syntax(self, page):
-        self._compile(self.VIZ_DIR / "pages" / page)
+        assert timestamps
+        for timestamp in timestamps:
+            assert re.fullmatch(r"\d{2}:\d{2}:\d{2}\.\d{3}", timestamp), timestamp
 
 
-# ── 3. JSONL 파싱 ─────────────────────────────────────────────────────────────
 class TestJsonlParsing:
     def _load(self, path: str):
         out = []
@@ -69,8 +80,8 @@ class TestJsonlParsing:
         if not p.exists():
             return out
 
-        with open(p, encoding="utf-8") as f:
-            for line in f:
+        with open(p, encoding="utf-8") as file:
+            for line in file:
                 line = line.strip()
 
                 if line:
@@ -82,42 +93,41 @@ class TestJsonlParsing:
         return out
 
     def test_valid_jsonl(self, tmp_path):
-        f = tmp_path / "events.jsonl"
+        events_file = tmp_path / "events.jsonl"
 
-        f.write_text(
+        events_file.write_text(
             '{"event_type":"ENTER","track_id":1,"zone_id":"z1","frame_number":0}\n'
             '{"event_type":"DWELL","track_id":2,"zone_id":"z2","frame_number":10}\n',
             encoding="utf-8",
         )
 
-        events = self._load(str(f))
+        events = self._load(str(events_file))
 
         assert len(events) == 2
         assert events[0]["event_type"] == "ENTER"
         assert events[1]["track_id"] == 2
 
     def test_invalid_jsonl_skipped(self, tmp_path):
-        """깨진 줄은 건너뛰고 나머지는 파싱."""
-        f = tmp_path / "bad.jsonl"
+        events_file = tmp_path / "bad.jsonl"
 
-        f.write_text(
+        events_file.write_text(
             '{"event_type":"ENTER","track_id":1,"zone_id":"z1","frame_number":0}\n'
-            'THIS IS NOT JSON\n'
+            "THIS IS NOT JSON\n"
             '{"event_type":"EXIT","track_id":3,"zone_id":"z1","frame_number":99}\n',
             encoding="utf-8",
         )
 
-        events = self._load(str(f))
+        events = self._load(str(events_file))
 
         assert len(events) == 2
         assert events[1]["event_type"] == "EXIT"
 
     def test_empty_jsonl(self, tmp_path):
-        f = tmp_path / "empty.jsonl"
+        events_file = tmp_path / "empty.jsonl"
 
-        f.write_text("", encoding="utf-8")
+        events_file.write_text("", encoding="utf-8")
 
-        events = self._load(str(f))
+        events = self._load(str(events_file))
 
         assert events == []
 
@@ -127,16 +137,15 @@ class TestJsonlParsing:
         assert events == []
 
 
-# ── 4. Zone JSON 파싱 ─────────────────────────────────────────────────────────
 class TestZoneParsing:
     def test_sample_zone_loads(self):
-        p = Path("data/zones/sample.json")
+        zones_path = Path("data/zones/sample.json")
 
-        if not p.exists():
-            pytest.skip("sample.json 없음")
+        if not zones_path.exists():
+            pytest.skip("sample.json not found")
 
-        with open(p, encoding="utf-8") as f:
-            zones = json.load(f)
+        with open(zones_path, encoding="utf-8") as file:
+            zones = json.load(file)
 
         assert len(zones) >= 1
         assert "zone_id" in zones[0]
@@ -144,40 +153,15 @@ class TestZoneParsing:
         assert len(zones[0]["points"]) >= 3
 
     def test_zone_normalization(self):
-        """모든 point 좌표가 0~1 범위인지."""
-        p = Path("data/zones/sample.json")
+        zones_path = Path("data/zones/sample.json")
 
-        if not p.exists():
-            pytest.skip("sample.json 없음")
+        if not zones_path.exists():
+            pytest.skip("sample.json not found")
 
-        with open(p, encoding="utf-8") as f:
-            zones = json.load(f)
+        with open(zones_path, encoding="utf-8") as file:
+            zones = json.load(file)
 
-        for z in zones:
-            for x, y in z["points"]:
-                assert 0.0 <= x <= 1.0, f"x 범위 초과: {x}"
-                assert 0.0 <= y <= 1.0, f"y 범위 초과: {y}"
-
-
-# ── 5. _style.py import 및 내용 확인 ─────────────────────────────────────────
-class TestStyleModule:
-    def test_dark_css_exported(self):
-        p = Path("src/visualization/_style.py")
-
-        if not p.exists():
-            pytest.skip("_style.py 없음")
-
-        source = p.read_text(encoding="utf-8")
-
-        assert "DARK_CSS" in source
-        assert "<style>" in source
-
-    def test_sidebar_status_function_exists(self):
-        p = Path("src/visualization/_style.py")
-
-        if not p.exists():
-            pytest.skip("_style.py 없음")
-
-        source = p.read_text(encoding="utf-8")
-
-        assert "def sidebar_status" in source
+        for zone in zones:
+            for x, y in zone["points"]:
+                assert 0.0 <= x <= 1.0, f"x out of range: {x}"
+                assert 0.0 <= y <= 1.0, f"y out of range: {y}"

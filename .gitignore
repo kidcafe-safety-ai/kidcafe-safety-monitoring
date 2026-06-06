@@ -229,6 +229,14 @@ outputs/*.mp4
 outputs/*.db
 outputs/benchmark/
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/node_modules/.vite/
+frontend/tsconfig.tsbuildinfo
+/package-lock.json
+
 # Model weights
 *.pt
 *.pth
