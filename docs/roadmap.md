@@ -1,9 +1,8 @@
 # KidCafe Safety AI — 개발 로드맵
 
-> 최종 수정: 2026-05-30
+> 최종 수정: 2026-06-01
 > MVP baseline: `v0.1.0-mvp`
 > 본 문서는 MVP 1차 종료 이후 최종 제출까지의 상위 개발 로드맵이다.
-> Event Schema v1과 InputSource 초안은 A 역할 기준으로 확인했으며, API 계약과 React 화면 범위는 2026-06-01 개발 착수 전 팀 회의에서 확정한다.
 > 한이음 일정은 2025년 창의도전형 공고 기준으로 작성했으며, 2026년 공고 확인 후 갱신한다.
 
 ---
@@ -13,7 +12,7 @@
 | 기간 | 단계 | 핵심 목표 |
 | --- | --- | --- |
 | ~5/31 | MVP 1차 종료 | 파일 영상 기반 MVP 기준선 고정 |
-| 6/1~6/8 | Phase 1.5 | 서비스 구조 전환 준비 |
+| 6/1~6/8 | Phase 1.5 | 서비스 구조 전환 준비 — 완료 |
 | 6/8~6/21 | Phase 2 | 실시간 입력 연결 |
 | 6/22~6/30 | Phase 2.5 | 실시간 운영 대시보드 1차 완성 |
 | 7월 | Phase 3 | 안전 감지 고도화 |
@@ -33,54 +32,41 @@
 - [x] main 머지
 - [x] `v0.1.0-mvp` 태그 생성
 - [x] README / ADR / interfaces / roadmap 정리
-- [ ] Phase 1.5 역할 확정
+- [x] Phase 1.5 역할 확정 (Phase 1.5에서 완료)
 - [x] Event Schema v1 확인
-- [ ] API 계약 초안
-- [ ] React 화면 범위 확정
+- [x] API 계약 초안 (Phase 1.5에서 완료)
+- [x] React 화면 범위 확정 (Phase 1.5에서 완료)
 - [x] 모델 비교 후보 확정
 - [x] 실험 영상 후보 확정
+- [x] 브랜치 / 파일 소유권 규칙 확정 (Phase 1.5에서 확정)
 - [ ] 데이터 확보 계획 초안
 - [ ] 개인정보 / 촬영 동의 / 비식별 처리 방식 검토
 - [ ] 최종 성능지표 초안
 - [ ] 논문 / 경진대회 목표 후보 확정
-- [ ] 브랜치 / 파일 소유권 규칙 확정
-
-### 산출물
-
-- MVP 1차 baseline
-- 정리된 문서
-- 다음 단계 개발 기준
 
 ---
 
-## 6/1~6/8 — Phase 1.5: 서비스 구조 전환 준비
+## 6/1~6/8 — Phase 1.5: 서비스 구조 전환 준비 — 완료
 
 **목표**: MVP 1차를 실시간 서비스 구조로 확장하기 위한 기반을 만든다.
 
-### 핵심 작업
+### 완료 항목
 
-- 인터페이스 확정
-- FastAPI 뼈대 구성
-- React mock 2페이지 개발
-- YOLO 기준선 1차 비교
-- 실시간 입력 인터페이스 초안
-- 데이터 수집 후보 영상 목록 정리
-- API / mock 데이터 구조 고정
-- 역할별 담당 파일 범위 확정
+- [x] Event Schema v1 확정 (MVP 기존 구조 유지)
+- [x] FastAPI + SQLite 최소 API 구현
+- [x] React mock Dashboard 2페이지 (모니터링 / 이벤트 기록)
+- [x] YOLO 모델 1차 비교 완료 → YOLO26n 선정
+- [x] InputSource 인터페이스 초안 (`interfaces.md` Section 8)
+- [x] API Contract v1 문서화
+- [x] 역할별 담당 파일 범위 확정
 
 ### 산출물
 
-- Event/API 계약
-- FastAPI 최소 서버
-- React mock 대시보드
-- YOLO 모델 1차 비교 결과
-- 실시간 입력 구조 초안
-
-### A 역할 기준 확정 사항
-
-- Event Schema v1은 MVP의 기존 `Event` 구조를 유지한다.
-- Phase 2 실시간 입력 1차 기준 모델 후보는 `YOLO26n`으로 선정한다.
-- 파일 / 웹캠 / RTSP 입력을 위한 `InputSource` 인터페이스 초안을 `interfaces.md`에 기록했다.
+- `src/api/` — FastAPI + SQLite
+- `frontend/` — React mock Dashboard
+- `docs/model_benchmark.md` — YOLO 모델 비교 결과
+- `docs/api_contract.md` — API 계약 v1
+- `scripts/` — 벤치마크 도구
 
 ---
 
@@ -90,25 +76,44 @@
 
 ### 핵심 작업
 
-- 웹캠 입력 연결
-- RTSP / IP 카메라 입력 연결
-- FastAPI 이벤트 송수신
-- React API 연동
-- 실시간 이벤트 저장 구조 결정
-- latency / reconnect / frame drop 측정
-- 실시간 이벤트 로그 검증
+**A**
+- WebcamSource 구현 (우선)
+- RTSPSource 구현 또는 실패 원인 문서화 (fallback 가능)
+- YOLO26n 기준 실시간 추론 테스트
+- 이벤트를 FastAPI `POST /events`로 전송
+- `PUT /status/current`로 현재 감지 상태 전송
+- latency / FPS / frame drop 측정
+
+**B**
+- `PUT /status/current` / `GET /status/current` API 구현
+- 실시간 이벤트 저장 검증
+- API 안정화
+
+**C**
+- `eventsApi.ts` mock → FastAPI 실제 호출로 교체
+- `/events/recent` polling (3초), `/summary` polling (10초), `/status/current` polling (2초)
+- loading / error / empty 상태 처리
+
+### 우선순위 원칙
+
+```text
+1. 웹캠 기반 end-to-end 먼저 완성
+2. 실시간 영상 스트리밍보다 실시간 이벤트 저장/조회 우선
+3. WebSocket은 Phase 2 제외 → Phase 2.5 이후 검토
+4. Current Status는 Event 누적이 아니라 /status/current 별도 처리
+```
 
 ### 비고
 
-- 실시간 입력은 네트워크, 코덱, 지연시간, 끊김 문제가 발생할 수 있으므로 기간을 넉넉히 잡는다.
-- 시험기간과 팀 일정 변동 가능성을 고려해 핵심 기능 우선순위를 명확히 한다.
+- 시험 기간(6/17~6/23) 고려, 핵심 기능 6/16 이전 완성 목표
+- RTSP 실패 시 원인 문서화도 완료 기준으로 인정
 
 ### 산출물
 
-- 실시간 입력 파이프라인
-- FastAPI 이벤트 송수신 구조
+- 웹캠 실시간 입력 파이프라인
+- FastAPI 이벤트 송수신 + current status API
 - React API 연동
-- 지연시간 / 안정성 측정 결과
+- `docs/realtime_test.md` 실험 로그
 
 ---
 
