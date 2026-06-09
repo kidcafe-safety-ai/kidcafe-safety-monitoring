@@ -2,13 +2,10 @@
 
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
-> **상태**: Phase 1.5 API 계약 v1  
+> **상태**: Phase 1.5 구현 완료 + Phase 2 확장 계약 초안
 > **관련 문서**: [`dashboard_api.md`](dashboard_api.md), [`dashboard_analysis.md`](dashboard_analysis.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md), [`roadmap.md`](roadmap.md)
 
-이 문서는 KidCafe Safety AI Phase 1.5 Backend API 계약을 정리합니다.
-
-Phase 1.5의 목적은 기존 파일 기반 Vision AI 파이프라인을 변경하지 않고,
-MVP 1단계에서 생성하던 Event 구조를 FastAPI + SQLite 기반 API 서버로 제공하는 것이다.
+이 문서는 Phase 1.5에서 구현된 Backend API와 Phase 2에서 추가할 Current Status API 계약을 정리한다.
 
 ---
 
@@ -97,6 +94,8 @@ API 계층에서는 별도 Pydantic schema로 매핑하며, 기존 Event datacla
 
 ## API List
 
+### Phase 1.5 (구현 완료)
+
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/health` | API health check |
@@ -104,7 +103,16 @@ API 계층에서는 별도 Pydantic schema로 매핑하며, 기존 Event datacla
 | `GET` | `/events` | 이벤트 목록 조회 |
 | `GET` | `/events/recent` | 최신 이벤트 조회 |
 | `GET` | `/summary` | 이벤트 KPI summary 조회 |
-| `GET` | `/zones` | `data/zones/sample.json` zone 목록 조회 |
+| `GET` | `/zones` | zone 목록 조회 |
+
+### Phase 2 추가 예정
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `PUT` | `/status/current` | Vision AI 현재 감지 상태 저장/갱신 |
+| `GET` | `/status/current` | 현재 감지 상태 조회 |
+
+`/status/current`는 Event 누적 로그가 아니라 현재 상태만 저장한다. 상세 계약은 `interfaces.md` Section 7-A 참고.
 
 ---
 
@@ -377,6 +385,21 @@ React 개발 서버 연동을 위해 최소 다음 origin을 허용한다.
 
 ---
 
+## Phase 2 React Polling 기준
+
+C 역할은 WebSocket 대신 polling으로 실시간성을 확보한다.
+
+| API | 호출 주기 |
+| --- | --- |
+| `GET /status/current` | 2초 |
+| `GET /events/recent` | 3초 |
+| `GET /summary` | 10초 |
+| `GET /events` | 페이지 진입 또는 필터 변경 시 |
+
+WebSocket은 Phase 2에서 제외하고 Phase 2.5 이후 검토한다.
+
+---
+
 ## Phase 1.5 Out of Scope
 
 다음 항목은 Phase 1.5 B 역할에 포함하지 않는다.
@@ -393,4 +416,10 @@ React 개발 서버 연동을 위해 최소 다음 origin을 허용한다.
 - 낙상 감지
 - 충돌 감지
 
-위 항목은 후속 단계에서 별도 설계 후 구현한다.
+## Phase 2 Out of Scope
+
+- WebSocket 완성
+- 인증/권한
+- 알림 push
+- PostgreSQL 전환
+- 복잡한 관리자 기능

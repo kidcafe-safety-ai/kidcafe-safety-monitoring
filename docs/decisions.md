@@ -30,7 +30,7 @@ MVP 단계에서 Ultralytics built-in tracking 사용.
 - 트래커 세부 튜닝 어려울 경우 ADR-004로 재검토
 
 ### References
-- 검증 영상: [Pexels 856731](https://www.pexels.com/video/kids-playing-at-the-playground-856731/)
+- 검증 영상: 초기 검증 영상 (파일 영상 기반 MVP 검증용)
 - 검증 결과: bbox + track_id 정상 출력, 간헐적 ID 변경은 MVP 범위 허용
 
 ---
@@ -280,3 +280,91 @@ MVP 1차 목표인 파일 영상 기반 end-to-end 검증이 완료되었다.
 - Phase 2 개발 범위와 MVP 완료 범위가 명확하게 분리된다.
 - Streamlit 코드는 Phase 2에서 React로 전환 시 삭제 또는 별도 브랜치로 이동한다.
 - `v0.1.0-mvp` 태그로 재현 가능한 기준선을 유지한다.
+
+### Update
+
+- 2026-06-01: Phase 1.5에서 Streamlit app/pages는 삭제되고 React Dashboard로 전환됨. 자세한 내용은 ADR-010 참고.
+
+---
+
+## ADR-010: Streamlit 검증 대시보드 종료 및 React Dashboard 전환
+
+**Date**: 2026-06-01
+**Status**: Accepted
+
+### Context
+
+Phase 1.5에서 React mock Dashboard 2페이지가 완성되었다.
+
+### Decision
+
+Streamlit은 MVP 검증용으로 종료한다. Phase 1.5 기준 운영 UI는 `frontend/` React Dashboard다.
+
+### Consequences
+
+- Streamlit app/pages (`app.py`, `pages/`)는 Phase 1.5에서 삭제되었다.
+- `src/visualization/` 내 결과 영상/차트 유틸(`video_overlay.py`, `charts.py` 등)은 legacy 모듈로 유지한다.
+- 새로운 UI 기능은 React (`frontend/`)에 추가한다.
+
+---
+
+## ADR-011: Phase 2 실시간 갱신 방식은 WebSocket이 아닌 polling 우선
+
+**Date**: 2026-06-01
+**Status**: Accepted
+
+### Context
+
+Phase 2에서 React Dashboard가 실시간 이벤트를 표시해야 한다. WebSocket과 polling 중 선택이 필요했다.
+
+### Decision
+
+Phase 2에서는 polling으로 실시간성을 확보한다. WebSocket은 Phase 2.5 이후 검토한다.
+
+### Reason
+
+- WebSocket 구현보다 실시간 입력 연결 자체가 Phase 2의 핵심이다.
+- polling 기반으로도 2~3초 주기로 충분한 실시간성 확보가 가능하다.
+- 개발 복잡도를 낮추고 Phase 2 일정 리스크를 줄인다.
+
+---
+
+## ADR-012: Event 로그와 Current Status 데이터 분리
+
+**Date**: 2026-06-01
+**Status**: Accepted
+
+### Context
+
+React Dashboard에서 "현재 감지 인원"과 "위험구역 현재 점유"를 표시해야 한다. Event 누적 로그만으로는 이를 정확히 계산하기 어렵다.
+
+### Decision
+
+Event는 발생 기록으로 누적 저장(`POST /events`)하고, Current Status는 현재 상태로 최신 값만 갱신(`PUT /status/current`)하는 구조로 분리한다.
+
+### Consequences
+
+- A는 `PUT /status/current`로 현재 상태를 전송한다.
+- B는 최신 상태를 저장/조회한다.
+- C는 현재 KPI를 `/status/current` 기준으로 표시한다.
+- 상세 계약: `interfaces.md` Section 7-A
+
+---
+
+## ADR-013: Phase 2는 웹캠 기반 end-to-end를 우선하고 RTSP는 fallback 가능
+
+**Date**: 2026-06-01
+**Status**: Accepted
+
+### Context
+
+Phase 2에서 웹캠과 RTSP 입력을 모두 연결해야 하나, 시험 기간(6/17~6/23)으로 실질 개발 기간이 제한적이다.
+
+### Decision
+
+웹캠 기반 end-to-end를 먼저 완성한다. RTSP는 테스트 완료 또는 실패 원인 문서화로 대체 가능하다.
+
+### Reason
+
+- 웹캠은 환경 의존성이 낮아 빠르게 검증 가능하다.
+- RTSP는 네트워크, 코덱, 지연 문제 등 예측 불가한 오류가 발생할 수 있다.

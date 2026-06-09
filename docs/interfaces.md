@@ -195,69 +195,157 @@ EXIT
 
 ---
 
-## 6. 팀원 A/B/C 산출물 계약 (MVP 기준)
+## 6. 팀원 A/B/C 산출물 계약
 
-MVP 1단계 기준의 팀원별 입출력 인터페이스.
+### A (Vision AI / 모델 기준선 / 실시간 입력)
 
-### A (Vision AI Backend + 결과 영상)
-
-담당 모듈: `tracking`, `events`, `geofencing`, `video_overlay`
+담당 모듈: `tracking`, `events`, `geofencing`, `video_overlay`, `scripts/`
 
 출력:
 
 ```text
 outputs/events.jsonl    # 이벤트 로그 (한 줄 = Event JSON)
 outputs/result.mp4      # bbox + track_id + zone + 이벤트 오버레이 결과 영상
+POST /events            # Phase 2 예정: FastAPI로 이벤트 전송
+PUT /status/current     # Phase 2 예정: 현재 감지 상태 전송
 ```
 
-### B (Data Analysis + Pipeline 운영)
+### B (FastAPI / SQLite / Backend)
 
-담당 모듈: `main.py`, `event_writer`, `event_aggregator`, `charts`
+담당 모듈: `src/api/`
 
 입력:
 
 ```text
-outputs/events.jsonl
+POST /events (Vision AI → FastAPI)
+PUT /status/current (Vision AI → FastAPI)
 ```
 
 출력:
 
 ```text
-outputs/events.csv      # 이벤트 로그 CSV
-outputs/summary.json    # KPI 요약 JSON
+GET /events, /events/recent, /summary, /zones   # Phase 1.5 구현 완료
+GET /status/current                             # Phase 2 예정
+outputs/kidcafe_events.db  # SQLite 이벤트 누적 저장
 ```
 
-관련 모듈: `event_aggregator.py`, `charts.py`
+### C (MVP: Streamlit 검증 대시보드 종료 / Phase 1.5 이후: React Dashboard)
 
-### C (Streamlit 검증 대시보드)
-
-담당 모듈: `visualization/app.py`, `visualization/pages`
+담당 모듈: `frontend/`
 
 입력:
 
 ```text
-outputs/events.jsonl
-outputs/events.csv
-outputs/summary.json
-outputs/result.mp4
-data/zones/sample.json
+GET /events/recent   # 최근 이벤트 (Phase 2: 3초 polling)
+GET /summary         # KPI (Phase 2: 10초 polling)
+GET /status/current  # 현재 상태 (Phase 2: 2초 polling)
+GET /events          # 이벤트 목록 (필터/페이지 진입 시)
 ```
 
 ---
 
-## 7. MVP / Phase 2 인터페이스 구분
+## 7. Phase별 인터페이스 구분
 
-**MVP (파일 기반)**
+**MVP (파일 기반) — 완료**
 
 - 모든 입출력은 로컬 파일 시스템 기반
 - `outputs/events.jsonl`, `events.csv`, `summary.json`, `result.mp4`
 - 영상 입력은 저장 파일(`.mp4`)만 지원
 
-**Phase 2 이후 (서버 기반, 미구현)**
+**Phase 1.5 (서버 기반 준비) — 완료**
 
-- FastAPI REST API
-- WebSocket 실시간 이벤트 스트림
-- DB (PostgreSQL 또는 SQLite) 연동
+- FastAPI REST API (`src/api/`)
+- SQLite 이벤트 저장 (`outputs/kidcafe_events.db`)
+- React mock Dashboard (`frontend/`)
+
+**Phase 2 (실시간 연결)**
+
+- 웹캠 / RTSP 실시간 입력
+- Event → `POST /events` 전송
+- Current Status → `PUT /status/current` 전송
+- React polling 기반 실시간 갱신
+- WebSocket은 Phase 2.5 이후 검토
+
+---
+
+## 7-A. Event와 Current Status 분리 원칙 (Phase 2 계약)
+
+```text
+Event        → 발생 기록, 누적 저장    → POST /events
+CurrentStatus → 현재 상태, 최신 값 갱신 → PUT /status/current
+```
+
+**현재 감지 인원, 위험구역 현재 인원은 Event 로그가 아니라 /status/current 기준으로 처리한다.**
+
+이유: Event 로그만으로는 현재 추적 중인 인원 수와 위험구역 실시간 점유를 정확히 계산하기 어렵다.
+
+### PUT /status/current 요청 예시 (A → B)
+
+```json
+{
+  "source": "camera_01",
+  "frame_number": 1230,
+  "active_track_count": 4,
+  "zone_occupancy": [
+    {
+      "zone_id": "exit_area",
+      "zone_name": "출입구 위험구역",
+      "current_count": 1,
+      "risk_level": "HIGH"
+    }
+  ],
+  "updated_at": "2026-06-08T10:15:30+09:00"
+}
+```
+
+### GET /status/current 응답 예시 (B → C)
+
+```json
+{
+  "status": "success",
+  "data": {
+    "source": "camera_01",
+    "frame_number": 1230,
+    "active_track_count": 4,
+    "zone_occupancy": [
+      {
+        "zone_id": "exit_area",
+        "zone_name": "출입구 위험구역",
+        "current_count": 1,
+        "risk_level": "HIGH"
+      }
+    ],
+    "updated_at": "2026-06-08T10:15:30+09:00"
+  },
+  "message": null
+}
+```
+
+### C 역할 — DashboardSummary 타입 분리 (Phase 2 전환 기준)
+
+Phase 2 API 연동 시 `frontend/src/types/event.ts`의 `DashboardSummary`를 다음 기준으로 분리한다.
+
+```text
+/summary 응답 기반:          today_event_count, 이벤트 타입별 count
+/status/current 응답 기반:   active_tracks, danger_zone_occupancy
+```
+
+mock → API 교체 시 KPI 카드별 데이터 소스를 위 기준으로 매핑한다.
+
+> `risk_level`은 Phase 2에서 optional 필드이며, 실제 위험도 계산은 Phase 3 안전정책 고도화에서 확정한다.
+
+---
+
+## 7-B. Phase 2 React Polling 기준
+
+| API | 호출 주기 |
+|---|---|
+| `GET /status/current` | 2초 |
+| `GET /events/recent` | 3초 |
+| `GET /summary` | 10초 |
+| `GET /events` | 페이지 진입 또는 필터 변경 시 |
+
+WebSocket은 Phase 2에서 제외하며 Phase 2.5 이후 검토한다.
 
 ---
 
