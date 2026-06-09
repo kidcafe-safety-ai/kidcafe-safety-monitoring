@@ -1,30 +1,57 @@
 import { AlertTriangle, Clock3, ShieldAlert, Users } from "lucide-react";
-import { useEffect, useState } from "react";
-import { getRecentEvents, getSummary, getZoneStatus } from "../api/eventsApi";
+import { useCallback, useState } from "react";
+import { getDashboardSummary, getRecentEvents, getZoneStatus } from "../api/eventsApi";
 import KpiCard from "../components/KpiCard";
 import RecentEventList from "../components/RecentEventList";
 import ZoneStatusPanel from "../components/ZoneStatusPanel";
+import { usePolling } from "../hooks/usePolling";
 import type { DashboardSummary, SafetyEvent, ZoneStatus } from "../types/event";
 
 export default function MonitoringPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [recentEvents, setRecentEvents] = useState<SafetyEvent[]>([]);
   const [zones, setZones] = useState<ZoneStatus[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasApiError, setHasApiError] = useState(false);
 
-  useEffect(() => {
-    async function loadDashboardData() {
-      const [summaryData, eventData, zoneData] = await Promise.all([
-        getSummary(),
-        getRecentEvents(),
-        getZoneStatus(),
-      ]);
-      setSummary(summaryData.data);
-      setRecentEvents(eventData.data);
-      setZones(zoneData.data);
-    }
+  const loadDashboardData = useCallback(async () => {
+    const [summaryData, eventData, zoneData] = await Promise.all([
+      getDashboardSummary(),
+      getRecentEvents(5),
+      getZoneStatus(),
+    ]);
 
-    loadDashboardData();
+    setSummary(summaryData.data);
+    setRecentEvents(eventData.data);
+    setZones(zoneData.data);
+    setHasApiError(
+      [summaryData, eventData, zoneData].some((response) => response.status === "error"),
+    );
+    setIsLoading(false);
   }, []);
+
+  const loadRecentEvents = useCallback(async () => {
+    const eventData = await getRecentEvents(5);
+    setRecentEvents(eventData.data);
+    setHasApiError((previous) => previous || eventData.status === "error");
+  }, []);
+
+  const loadSummary = useCallback(async () => {
+    const summaryData = await getDashboardSummary();
+    setSummary(summaryData.data);
+    setHasApiError((previous) => previous || summaryData.status === "error");
+  }, []);
+
+  const loadZones = useCallback(async () => {
+    const zoneData = await getZoneStatus();
+    setZones(zoneData.data);
+    setHasApiError((previous) => previous || zoneData.status === "error");
+  }, []);
+
+  usePolling(loadDashboardData, 5000);
+  usePolling(loadRecentEvents, 3000, !isLoading);
+  usePolling(loadSummary, 5000, !isLoading);
+  usePolling(loadZones, 2000, !isLoading);
 
   return (
     <main className="page">
@@ -37,6 +64,13 @@ export default function MonitoringPage() {
           <p>Mock 이벤트 기반 Phase 1.5 운영 대시보드</p>
         </div>
       </div>
+
+      {isLoading ? <div className="state-banner">데이터를 불러오는 중입니다.</div> : null}
+      {hasApiError ? (
+        <div className="state-banner error">
+          API 연결에 실패했습니다. mock 또는 기본값으로 화면을 표시합니다.
+        </div>
+      ) : null}
 
       <section className="kpi-grid">
         <KpiCard
@@ -70,6 +104,9 @@ export default function MonitoringPage() {
           <span>Live Video 예정</span>
         </div>
         <aside className="side-stack">
+          {!isLoading && recentEvents.length === 0 ? (
+            <div className="state-banner empty">표시할 이벤트가 없습니다.</div>
+          ) : null}
           <RecentEventList events={recentEvents} />
           <ZoneStatusPanel zones={zones} />
         </aside>

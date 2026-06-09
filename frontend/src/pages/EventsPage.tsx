@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { getEvents } from "../api/eventsApi";
 import EventChart from "../components/EventChart";
 import EventTable from "../components/EventTable";
+import { usePolling } from "../hooks/usePolling";
 import type { EventType, SafetyEvent } from "../types/event";
 
 type EventFilter = "ALL" | EventType;
@@ -11,15 +12,17 @@ const FILTERS: EventFilter[] = ["ALL", "ENTER", "DWELL", "EXIT"];
 export default function EventsPage() {
   const [events, setEvents] = useState<SafetyEvent[]>([]);
   const [filter, setFilter] = useState<EventFilter>("ALL");
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasApiError, setHasApiError] = useState(false);
 
-  useEffect(() => {
-    async function loadEvents() {
-      const response = await getEvents();
-      setEvents(response.data);
-    }
-
-    loadEvents();
+  const loadEvents = useCallback(async () => {
+    const response = await getEvents();
+    setEvents(response.data);
+    setHasApiError(response.status === "error");
+    setIsLoading(false);
   }, []);
+
+  usePolling(loadEvents, 5000);
 
   const filteredEvents = useMemo(() => {
     if (filter === "ALL") {
@@ -53,6 +56,16 @@ export default function EventsPage() {
           ))}
         </div>
       </section>
+
+      {isLoading ? <div className="state-banner">데이터를 불러오는 중입니다.</div> : null}
+      {hasApiError ? (
+        <div className="state-banner error">
+          API 연결에 실패했습니다. mock 또는 기본값으로 화면을 표시합니다.
+        </div>
+      ) : null}
+      {!isLoading && filteredEvents.length === 0 ? (
+        <div className="state-banner empty">표시할 이벤트가 없습니다.</div>
+      ) : null}
 
       <section className="events-grid">
         <EventChart events={filteredEvents} />

@@ -452,6 +452,27 @@ button {
   align-items: start;
 }
 
+.state-banner {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-muted);
+  background: var(--panel-bg);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.state-banner.error {
+  color: #b42318;
+  background: #fee4e2;
+}
+
+.state-banner.empty {
+  color: var(--text-muted);
+  background: var(--card-bg);
+}
+
 .bar-chart {
   display: grid;
   gap: 18px;
@@ -523,4 +544,305 @@ th {
 
 tbody tr:hover {
   background: var(--table-hover-bg);
+}
+
+.zone-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+
+.zone-preview-card,
+.zone-config-card,
+.zone-table-card {
+  padding: 22px;
+}
+
+.zone-map {
+  display: grid;
+  padding: 18px;
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.08), transparent 34%),
+    var(--panel-bg);
+}
+
+.video-frame-preview {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  min-height: 360px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 24% 28%, rgba(96, 165, 250, 0.22), transparent 28%),
+    radial-gradient(circle at 78% 68%, rgba(20, 184, 166, 0.14), transparent 24%),
+    linear-gradient(145deg, #111827 0%, #0f172a 52%, #020617 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.video-frame-preview::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 64px 64px;
+  opacity: 0.5;
+}
+
+.video-frame-preview::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.1), rgba(2, 6, 23, 0.28)),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.035) 0,
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 1px,
+      transparent 8px
+    );
+  pointer-events: none;
+}
+
+.video-hud {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(191, 219, 254, 0.22);
+  border-radius: 10px;
+  color: #dbeafe;
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(8px);
+}
+
+.video-hud strong {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.video-hud span {
+  color: #93c5fd;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.video-hud.top-left {
+  top: 14px;
+  left: 14px;
+}
+
+.video-hud.top-right {
+  top: 14px;
+  right: 14px;
+  justify-items: end;
+}
+
+.video-guide {
+  position: absolute;
+  z-index: 1;
+  background: rgba(191, 219, 254, 0.14);
+}
+
+.video-guide.horizontal {
+  top: 50%;
+  left: 18px;
+  right: 18px;
+  height: 1px;
+}
+
+.video-guide.vertical {
+  top: 18px;
+  bottom: 18px;
+  left: 50%;
+  width: 1px;
+}
+
+.video-subject {
+  position: absolute;
+  z-index: 1;
+  width: 46px;
+  height: 76px;
+  border: 1px solid rgba(147, 197, 253, 0.54);
+  border-radius: 18px 18px 10px 10px;
+  background: rgba(59, 130, 246, 0.12);
+  box-shadow: 0 0 18px rgba(37, 99, 235, 0.18);
+}
+
+.video-subject::after {
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  width: 7px;
+  height: 7px;
+  content: "";
+  border-radius: 999px;
+  background: #93c5fd;
+  transform: translateX(-50%);
+}
+
+.subject-one {
+  left: 42%;
+  top: 45%;
+}
+
+.subject-two {
+  right: 18%;
+  top: 56%;
+}
+
+.zone-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+}
+
+.zone-overlay polygon {
+  stroke-width: 1.8;
+}
+
+.zone-overlay text {
+  fill: #f8fafc;
+  font-size: 4px;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: rgba(2, 6, 23, 0.82);
+  stroke-width: 1px;
+}
+
+.zone-danger polygon {
+  fill: rgba(239, 68, 68, 0.18);
+  stroke: #ef4444;
+}
+
+.zone-warning polygon {
+  fill: rgba(247, 144, 9, 0.2);
+  stroke: #f79009;
+}
+
+.zone-watch polygon {
+  fill: rgba(20, 184, 166, 0.18);
+  stroke: #14b8a6;
+}
+
+.zone-danger circle,
+.zone-warning circle,
+.zone-watch circle {
+  fill: #f8fafc;
+  stroke: rgba(2, 6, 23, 0.82);
+  stroke-width: 0.5;
+}
+
+.zone-form-preview {
+  display: grid;
+  gap: 16px;
+}
+
+.zone-form-preview label,
+.setting-row {
+  display: grid;
+  gap: 7px;
+}
+
+.zone-form-preview label span,
+.setting-row > span:first-child {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.zone-form-preview input,
+.zone-form-preview select {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-main);
+  background: var(--panel-bg);
+}
+
+.zone-form-preview select:disabled {
+  opacity: 1;
+}
+
+.setting-row {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--panel-bg);
+}
+
+.setting-row strong {
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.toggle-preview {
+  display: inline-flex;
+  width: 44px;
+  height: 24px;
+  align-items: center;
+  padding: 3px;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.toggle-preview span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+}
+
+.toggle-preview.on {
+  justify-content: flex-end;
+  background: #2563eb;
+}
+
+.zone-type-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.zone-type-pill.zone-danger {
+  color: #b42318;
+  background: #fee4e2;
+}
+
+.zone-type-pill.zone-warning {
+  color: #b54708;
+  background: #fef0c7;
+}
+
+.zone-type-pill.zone-watch {
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.app-shell[data-theme="dark"] .zone-map {
+  background:
+    linear-gradient(135deg, rgba(96, 165, 250, 0.1), transparent 34%),
+    var(--panel-bg);
+}
+
+.app-shell[data-theme="dark"] .video-frame-preview {
+  border-color: rgba(148, 163, 184, 0.26);
 }
