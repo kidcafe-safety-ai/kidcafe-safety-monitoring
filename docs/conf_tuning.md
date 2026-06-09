@@ -16,7 +16,7 @@ YOLOv8n 기반 사람 탐지에서 **confidence threshold** 값에 따른 탐지
 
 | 항목 | 내용 |
 |------|------|
-| 입력 영상 | `data/videos/test.mp4` |
+| 입력 영상 | 초기 검증 영상 (파일 영상 기반 MVP 검증용) |
 | 해상도 | 1920x1080 |
 | FPS | 25 |
 | 모델 | `yolov8n.pt` |
