@@ -1,5 +1,5 @@
 import { AlertTriangle, Clock3, ShieldAlert, Users } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getDashboardSummary, getRecentEvents, getZoneStatus } from "../api/eventsApi";
 import KpiCard from "../components/KpiCard";
 import RecentEventList from "../components/RecentEventList";
@@ -12,7 +12,13 @@ export default function MonitoringPage() {
   const [recentEvents, setRecentEvents] = useState<SafetyEvent[]>([]);
   const [zones, setZones] = useState<ZoneStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [hasApiError, setHasApiError] = useState(false);
+  const [apiErrors, setApiErrors] = useState({
+    recentEvents: false,
+    summary: false,
+    zones: false,
+  });
+
+  const hasApiError = apiErrors.recentEvents || apiErrors.summary || apiErrors.zones;
 
   const loadDashboardData = useCallback(async () => {
     const [summaryData, eventData, zoneData] = await Promise.all([
@@ -24,31 +30,45 @@ export default function MonitoringPage() {
     setSummary(summaryData.data);
     setRecentEvents(eventData.data);
     setZones(zoneData.data);
-    setHasApiError(
-      [summaryData, eventData, zoneData].some((response) => response.status === "error"),
-    );
+    setApiErrors({
+      recentEvents: eventData.status === "error",
+      summary: summaryData.status === "error",
+      zones: zoneData.status === "error",
+    });
     setIsLoading(false);
   }, []);
 
   const loadRecentEvents = useCallback(async () => {
     const eventData = await getRecentEvents(5);
     setRecentEvents(eventData.data);
-    setHasApiError((previous) => previous || eventData.status === "error");
+    setApiErrors((previous) => ({
+      ...previous,
+      recentEvents: eventData.status === "error",
+    }));
   }, []);
 
   const loadSummary = useCallback(async () => {
     const summaryData = await getDashboardSummary();
     setSummary(summaryData.data);
-    setHasApiError((previous) => previous || summaryData.status === "error");
+    setApiErrors((previous) => ({
+      ...previous,
+      summary: summaryData.status === "error",
+    }));
   }, []);
 
   const loadZones = useCallback(async () => {
     const zoneData = await getZoneStatus();
     setZones(zoneData.data);
-    setHasApiError((previous) => previous || zoneData.status === "error");
+    setApiErrors((previous) => ({
+      ...previous,
+      zones: zoneData.status === "error",
+    }));
   }, []);
 
-  usePolling(loadDashboardData, 5000);
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
   usePolling(loadRecentEvents, 3000, !isLoading);
   usePolling(loadSummary, 5000, !isLoading);
   usePolling(loadZones, 2000, !isLoading);
