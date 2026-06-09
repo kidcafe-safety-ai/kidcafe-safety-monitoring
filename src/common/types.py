@@ -11,7 +11,7 @@ timestamp 형식 표준:
 
 import uuid
 from dataclasses import dataclass, field
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 # ============ Tracking 결과 ============
 
@@ -164,3 +164,51 @@ class Event:
             frame_number=frame_number,
             video_source=video_source,
         )
+
+
+# ============ API 전송 페이로드 ============
+
+RiskLevel = Literal["NORMAL", "HIGH"]
+
+
+@dataclass
+class CurrentZoneStatus:
+    """PUT /status/current 페이로드 내 zone별 점유 현황."""
+
+    zone_id: str
+    zone_name: str
+    current_count: int
+    risk_level: RiskLevel
+
+
+@dataclass
+class CurrentStatus:
+    """PUT /status/current 전송 페이로드.
+
+    EventApiClient.send_current_status()의 인자로 사용한다.
+    B의 Pydantic schema와 필드명/타입을 맞춰야 한다.
+    """
+
+    source: str
+    frame_number: int
+    active_track_count: int
+    zone_occupancy: List[CurrentZoneStatus]
+    updated_at: str  # ISO 8601 (시스템 시간 기준)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """EventApiClient.send_current_status()에 전달할 dict 반환."""
+        return {
+            "source": self.source,
+            "frame_number": self.frame_number,
+            "active_track_count": self.active_track_count,
+            "zone_occupancy": [
+                {
+                    "zone_id": z.zone_id,
+                    "zone_name": z.zone_name,
+                    "current_count": z.current_count,
+                    "risk_level": z.risk_level,
+                }
+                for z in self.zone_occupancy
+            ],
+            "updated_at": self.updated_at,
+        }

@@ -59,26 +59,40 @@ pip install -r requirements.txt
 ### 3. 실행
 
 ```bash
-# 기본 실행
-python -m src.main
+# 파일 영상 (기본)
+python -m src.main --source-type file --source data/videos/test.mp4
 
-# 전체 옵션
+# 웹캠 실시간
 python -m src.main \
-  --video data/videos/test.mp4 \
-  --zones data/zones/sample.json \
-  --output outputs/events.jsonl \
-  --csv-output outputs/events.csv \
-  --summary-output outputs/summary.json \
-  --overlay-output outputs/result.mp4 \
-  --conf 0.5 \
+  --source-type webcam \
+  --source 0 \
+  --model yolo26n.pt \
+  --infer-device auto \
+  --width 640 --height 480 \
   --frames-limit 300 \
-  --log-level INFO
+  --show
+
+# RTSP IP 카메라 (--rtsp-alias 로 URL이 로그/이벤트에 노출되지 않음)
+python -m src.main \
+  --source-type rtsp \
+  --source rtsp://user:pass@192.168.1.10/stream \
+  --rtsp-alias camera_01 \
+  --model yolo26n.pt \
+  --infer-device auto
+
+# API 서버 포함 실행
+python -m src.main \
+  --source-type webcam \
+  --source 0 \
+  --api-url http://localhost:8000 \
+  --frames-limit 300
 
 # 도움말
 python -m src.main --help
 ```
 
-> `yolov8n.pt` 모델 파일은 Git에 포함하지 않는다. 최초 실행 시 Ultralytics가 자동 다운로드하며, 다운로드된 `.pt` 파일은 `.gitignore`에 의해 추적되지 않는다.
+> YOLO 모델 파일(`*.pt`)은 Git에 포함하지 않는다. 최초 실행 시 Ultralytics가 자동 다운로드하며, 다운로드된 `.pt` 파일은 `.gitignore`에 의해 추적되지 않는다.
+> Phase 2 기본 모델은 `yolo26n.pt`이며, `yolov8n.pt`는 MVP baseline/fallback으로 유지한다.
 
 ### 4. FastAPI 서버 실행
 
@@ -201,18 +215,48 @@ pytest --cov=src --cov-report=term-missing
 
 ## 명령어 옵션 상세
 
+### 입력 소스
+
 | 옵션 | 기본값 | 설명 |
 |------|--------|------|
-| `--video` | `data/videos/test.mp4` | 입력 영상 경로 |
+| `--source-type` | `file` | 입력 소스 종류 (`file` / `webcam` / `rtsp`) |
+| `--source` | `None` | 소스 경로 또는 ID. file: 파일 경로, webcam: 카메라 인덱스(0), rtsp: URL |
+| `--video` | `data/videos/test.mp4` | [레거시] 파일 영상 경로. `--source-type file` 일 때 `--source` 미지정 시 사용 |
+| `--width` | `None` | 웹캠 가로 해상도 요청 (예: `640`) |
+| `--height` | `None` | 웹캠 세로 해상도 요청 (예: `480`) |
+| `--rtsp-alias` | `None` | RTSP source_id 별칭. 지정 시 URL 대신 이 값이 이벤트/로그에 기록됨 (예: `camera_01`) |
+
+### 모델 / 추론
+
+| 옵션 | 기본값 | 설명 |
+|------|--------|------|
+| `--model` | `yolo26n.pt` | YOLO 모델 경로 |
+| `--infer-device` | `auto` | 추론 장치 (`auto` / `mps` / `cuda` / `cpu`) |
+| `--conf` | `0.5` | YOLO confidence threshold (0~1) |
+
+### Zone / API
+
+| 옵션 | 기본값 | 설명 |
+|------|--------|------|
 | `--zones` | `data/zones/sample.json` | Zone 정의 JSON |
+| `--api-url` | `None` | FastAPI 서버 URL. 지정 시 이벤트/상태를 전송 (예: `http://localhost:8000`) |
+
+### 출력
+
+| 옵션 | 기본값 | 설명 |
+|------|--------|------|
 | `--output` | `outputs/events.jsonl` | 이벤트 출력 경로 |
 | `--csv-output` | `outputs/events.csv` | CSV 이벤트 로그 출력 경로 |
 | `--summary-output` | `outputs/summary.json` | KPI summary JSON 출력 경로 |
 | `--overlay-output` | `outputs/result.mp4` | 결과 영상 출력 |
-| `--conf` | `0.5` | YOLO confidence threshold (0~1) |
+
+### 실행 제어
+
+| 옵션 | 기본값 | 설명 |
+|------|--------|------|
 | `--frames-limit` | `None` | 처음 N프레임만 처리 (테스트용) |
-| `--show` | `False` | 실시간 시각화 창 (cv2.imshow) |
-| `--log-level` | `INFO` | 로그 레벨 (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `--show` | `False` | 실시간 시각화 창 (`cv2.imshow`). 종료: `q` |
+| `--log-level` | `INFO` | 로그 레벨 (`DEBUG` / `INFO` / `WARNING` / `ERROR`) |
 
 ---
 
@@ -226,7 +270,7 @@ pytest --cov=src --cov-report=term-missing
 
 | 패키지 | 버전 | 용도 |
 |--------|------|------|
-| `ultralytics` | 8.0.206 | YOLO + ByteTrack |
+| `ultralytics` | 8.4.56 | YOLO + ByteTrack |
 | `opencv-python` | 4.8.1.78 | 영상 I/O + 시각화 |
 | `shapely` | 2.0.1 | Polygon 판정 |
 | `numpy` | 1.26.4 | 수치 연산 |
