@@ -4,7 +4,7 @@ torchvision==0.20.1
 torchaudio==2.5.1
 
 # Detection / Tracking
-ultralytics==8.0.206
+ultralytics==8.4.56
 opencv-python==4.8.1.78
 
 # Spatial computation
@@ -36,3 +36,6 @@ isort==5.13.2
 
 # Environment
 python-dotenv==1.0.1
+
+# HTTP client (Vision AI → FastAPI 이벤트 전송)
+requests==2.32.3

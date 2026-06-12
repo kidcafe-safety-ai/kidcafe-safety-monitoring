@@ -373,14 +373,25 @@ class InputSource:
     def release(self) -> None:
         """입력 소스를 정리한다."""
 
-    def get_fps(self) -> float:
-        """입력 FPS를 반환한다. 알 수 없으면 30.0."""
+    @property
+    def fps(self) -> float:
+        """입력 FPS. 알 수 없으면 fallback 값 반환."""
 
-    def get_size(self) -> tuple[int, int]:
-        """프레임 크기를 (width, height)로 반환한다."""
+    @property
+    def width(self) -> int:
+        """프레임 가로 픽셀."""
 
-    def get_source_id(self) -> str:
-        """Event.video_source에 들어갈 source 식별자를 반환한다."""
+    @property
+    def height(self) -> int:
+        """프레임 세로 픽셀."""
+
+    @property
+    def source_id(self) -> str:
+        """Event.video_source에 들어갈 source 식별자."""
+
+    @property
+    def total_frames(self) -> int | None:
+        """총 프레임 수. 실시간 소스(webcam/RTSP)는 None."""
 ```
 
 ### 구현 후보
@@ -394,7 +405,7 @@ FileVideoSource
 WebcamSource
 - 노트북/USB 웹캠 입력
 - 예: camera index 0
-- source_id: webcam_0
+- source_id: webcam:0
 
 RTSPSource
 - IP 카메라 RTSP 입력

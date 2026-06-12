@@ -1,13 +1,30 @@
-"""YOLOv8 + Ultralytics built-in ByteTrack 통합.
+"""YOLO + Ultralytics built-in ByteTrack 통합.
 
 Detection과 Tracking을 model.track()으로 한 번에 처리한다.
 별도의 detector 모듈을 두지 않은 이유는 docs/decisions.md ADR-001 참조.
 """
 
+import logging
+
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 from src.common.types import Track, TrackingResult
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _auto_device() -> str:
+    """사용 가능한 최적 device를 반환한다.
+
+    Apple Silicon MPS → CUDA → CPU 순으로 선택한다.
+    """
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return "mps"
+    if torch.cuda.is_available():
+        return "cuda"
+    return "cpu"
 
 
 class ByteTracker:
@@ -17,15 +34,19 @@ class ByteTracker:
 
     def __init__(
         self,
-        model_path: str = "yolov8n.pt",
+        model_path: str = "yolo26n.pt",
         conf: float = 0.5,
         tracker_config: str = "bytetrack.yaml",
         fps: float = 30.0,
+        device: str = "auto",
     ):
+        self._device = _auto_device() if device == "auto" else device
         self.model = YOLO(model_path)
         self.conf = conf
         self.tracker_config = tracker_config
         self.fps = fps
+        LOGGER.info("ByteTracker 초기화: model=%s  device=%s", model_path, self._device)
+        self._warmup()
 
     def update(
         self,
@@ -33,8 +54,7 @@ class ByteTracker:
         frame_number: int,
         video_source: str,
     ) -> TrackingResult:
-        """
-        한 프레임에서 사람 탐지 + ID 추적.
+        """한 프레임에서 사람 탐지 + ID 추적.
 
         Args:
             frame: BGR 이미지 (H, W, 3)
@@ -52,6 +72,7 @@ class ByteTracker:
             tracker=self.tracker_config,
             persist=True,  # 프레임 간 ID 유지
             verbose=False,
+            device=self._device,
         )
 
         tracks = []
@@ -90,6 +111,16 @@ class ByteTracker:
             video_source=video_source,
             tracks=tracks,
         )
+
+    def _warmup(self) -> None:
+        """MPS/CUDA JIT 컴파일을 초기화 시점에 완료한다.
+
+        첫 실제 프레임에서 수 초 지연이 발생하는 문제를 방지한다.
+        """
+        LOGGER.info("모델 warm-up 중...")
+        dummy = np.zeros((640, 640, 3), dtype=np.uint8)
+        self.model.predict(dummy, verbose=False, device=self._device)
+        LOGGER.info("모델 warm-up 완료")
 
     def _empty_result(self, frame_number: int, video_source: str) -> TrackingResult:
         return TrackingResult(
