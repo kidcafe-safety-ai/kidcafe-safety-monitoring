@@ -36,6 +36,25 @@ def make_event_payload(**overrides):
     return payload
 
 
+def make_current_status_payload(**overrides):
+    payload = {
+        "source": "camera_01",
+        "frame_number": 1230,
+        "active_track_count": 4,
+        "zone_occupancy": [
+            {
+                "zone_id": "playground_bottom_right",
+                "zone_name": "test video zone",
+                "current_count": 2,
+                "risk_level": "HIGH",
+            }
+        ],
+        "updated_at": "2026-06-08T10:15:30+09:00",
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_health_returns_common_response(client):
     response = client.get("/health")
 
@@ -180,6 +199,133 @@ def test_get_zones_returns_common_response(client):
     assert body["status"] == "success"
     assert body["message"] is None
     assert isinstance(body["data"], list)
+    assert body["data"]
+    zone = body["data"][0]
+    assert zone["zone_name"] == zone["name"]
+    assert "rules" in zone
+
+
+def test_get_status_current_returns_default_when_empty(client):
+    response = client.get("/status/current")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "success",
+        "data": {
+            "source": "unknown",
+            "frame_number": 0,
+            "active_track_count": 0,
+            "zone_occupancy": [],
+            "updated_at": None,
+        },
+        "message": None,
+    }
+
+
+def test_put_status_current_stores_and_get_returns_latest_status(client):
+    payload = make_current_status_payload()
+
+    put_response = client.put("/status/current", json=payload)
+
+    assert put_response.status_code == 200
+    assert put_response.json() == {
+        "status": "success",
+        "data": {
+            "source": "camera_01",
+            "updated": True,
+        },
+        "message": None,
+    }
+
+    get_response = client.get("/status/current")
+
+    assert get_response.status_code == 200
+    body = get_response.json()
+    assert body["status"] == "success"
+    assert body["message"] is None
+    assert body["data"] == payload
+
+
+def test_put_status_current_generates_updated_at_when_missing(client):
+    payload = make_current_status_payload()
+    payload.pop("updated_at")
+
+    response = client.put("/status/current", json=payload)
+
+    assert response.status_code == 200
+    data = client.get("/status/current").json()["data"]
+    assert data["updated_at"]
+    assert data["updated_at"] != "None"
+
+
+def test_put_status_current_overwrites_same_source(client):
+    first = make_current_status_payload(
+        frame_number=1230,
+        active_track_count=4,
+        updated_at="2026-06-08T10:15:30+09:00",
+    )
+    second = make_current_status_payload(
+        frame_number=1240,
+        active_track_count=1,
+        zone_occupancy=[
+            {
+                "zone_id": "playground_bottom_right",
+                "zone_name": "test video zone",
+                "current_count": 0,
+                "risk_level": "NORMAL",
+            }
+        ],
+        updated_at="2026-06-08T10:15:32+09:00",
+    )
+
+    assert client.put("/status/current", json=first).status_code == 200
+    assert client.put("/status/current", json=second).status_code == 200
+
+    data = client.get("/status/current").json()["data"]
+    assert data == second
+
+
+@pytest.mark.parametrize("risk_level", ["LOW", "MEDIUM"])
+def test_put_status_current_rejects_unsupported_risk_level(client, risk_level):
+    payload = make_current_status_payload(
+        zone_occupancy=[
+            {
+                "zone_id": "playground_bottom_right",
+                "zone_name": "test video zone",
+                "current_count": 1,
+                "risk_level": risk_level,
+            }
+        ]
+    )
+
+    response = client.put("/status/current", json=payload)
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"frame_number": -1},
+        {"active_track_count": -1},
+        {
+            "zone_occupancy": [
+                {
+                    "zone_id": "playground_bottom_right",
+                    "zone_name": "test video zone",
+                    "current_count": -1,
+                    "risk_level": "HIGH",
+                }
+            ]
+        },
+    ],
+)
+def test_put_status_current_rejects_negative_counts(client, overrides):
+    payload = make_current_status_payload(**overrides)
+
+    response = client.put("/status/current", json=payload)
+
+    assert response.status_code == 422
 
 
 def test_invalid_event_type_returns_422(client):
@@ -208,6 +354,14 @@ def test_invalid_bbox_length_returns_422(client):
 
 def test_invalid_foot_point_length_returns_422(client):
     payload = make_event_payload(foot_point=[1.0])
+
+    response = client.post("/events", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_invalid_confidence_returns_422(client):
+    payload = make_event_payload(confidence=1.1)
 
     response = client.post("/events", json=payload)
 

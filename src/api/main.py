@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.api.database import init_db
-from src.api.routers import events, health, summary, zones
+from src.api.routers import events, health, status, summary, zones
 
 
 @asynccontextmanager
@@ -47,5 +47,6 @@ async def conflict_exception_handler(request: Request, exc):
 
 app.include_router(health.router)
 app.include_router(events.router)
+app.include_router(status.router)
 app.include_router(summary.router)
 app.include_router(zones.router)

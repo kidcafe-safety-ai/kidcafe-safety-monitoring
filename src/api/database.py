@@ -55,3 +55,18 @@ def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_events_zone_id ON events(zone_id)"
         )
         connection.execute("CREATE INDEX IF NOT EXISTS idx_events_id ON events(id)")
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS current_status (
+                source TEXT PRIMARY KEY,
+                frame_number INTEGER NOT NULL,
+                active_track_count INTEGER NOT NULL,
+                zone_occupancy_json TEXT NOT NULL,
+                updated_at TEXT
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_current_status_updated_at "
+            "ON current_status(updated_at)"
+        )
