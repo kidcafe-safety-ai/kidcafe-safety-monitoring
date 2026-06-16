@@ -162,6 +162,18 @@ class EventManager:
 
         return events
 
+    def get_zone_occupancy(self) -> Dict[str, int]:
+        """현재 각 zone에 몇 명이 있는지 반환한다.
+
+        current_zones (track_id → set[zone_id])를 역전환해서 집계한다.
+        PUT /status/current 페이로드 생성에 사용한다.
+        """
+        occupancy: Dict[str, int] = {}
+        for zone_ids in self.current_zones.values():
+            for zone_id in zone_ids:
+                occupancy[zone_id] = occupancy.get(zone_id, 0) + 1
+        return occupancy
+
     def _clear_track_state(self, track_id: int) -> None:
         zones = self.current_zones.pop(track_id, set())
         for zone_id in zones:

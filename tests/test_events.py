@@ -148,3 +148,51 @@ class TestEventManager:
         assert len(events) == 1
         assert events[0].track_id == 2
         assert 1 in manager.current_zones  # track_id=1은 유지
+
+
+class TestGetZoneOccupancy:
+    def _make_zone(self, zone_id: str):
+        return Zone(
+            zone_id=zone_id,
+            name=zone_id,
+            type="polygon",
+            points=[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+            rules=ZoneRules(enter_alert=True, dwell_threshold_sec=3),
+        )
+
+    def _make_track(self, track_id: int):
+        return Track(
+            track_id=track_id,
+            bbox=[10, 10, 100, 200],
+            foot_point=[55, 200],
+            confidence=0.9,
+        )
+
+    def test_empty_when_no_tracks(self):
+        manager = EventManager(zones=[self._make_zone("zone_a")], fps=30.0)
+        assert manager.get_zone_occupancy() == {}
+
+    def test_single_track_single_zone(self):
+        manager = EventManager(zones=[self._make_zone("zone_a")], fps=30.0)
+        manager.process(self._make_track(1), ["zone_a"], 0, "test.mp4")
+        assert manager.get_zone_occupancy() == {"zone_a": 1}
+
+    def test_multiple_tracks_same_zone(self):
+        manager = EventManager(zones=[self._make_zone("zone_a")], fps=30.0)
+        manager.process(self._make_track(1), ["zone_a"], 0, "test.mp4")
+        manager.process(self._make_track(2), ["zone_a"], 1, "test.mp4")
+        assert manager.get_zone_occupancy() == {"zone_a": 2}
+
+    def test_tracks_in_different_zones(self):
+        zones = [self._make_zone("zone_a"), self._make_zone("zone_b")]
+        manager = EventManager(zones=zones, fps=30.0)
+        manager.process(self._make_track(1), ["zone_a"], 0, "test.mp4")
+        manager.process(self._make_track(2), ["zone_b"], 1, "test.mp4")
+        assert manager.get_zone_occupancy() == {"zone_a": 1, "zone_b": 1}
+
+    def test_occupancy_decreases_after_exit(self):
+        manager = EventManager(zones=[self._make_zone("zone_a")], fps=30.0)
+        manager.process(self._make_track(1), ["zone_a"], 0, "test.mp4")
+        assert manager.get_zone_occupancy() == {"zone_a": 1}
+        manager.process(self._make_track(1), [], 1, "test.mp4")
+        assert manager.get_zone_occupancy() == {}
