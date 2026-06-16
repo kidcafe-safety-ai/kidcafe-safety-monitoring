@@ -70,7 +70,7 @@ export default function MonitoringPage() {
   }, [loadDashboardData]);
 
   usePolling(loadRecentEvents, 3000, !isLoading);
-  usePolling(loadSummary, 5000, !isLoading);
+  usePolling(loadSummary, 10000, !isLoading);
   usePolling(loadZones, 2000, !isLoading);
 
   return (
@@ -79,9 +79,9 @@ export default function MonitoringPage() {
         <div>
           <div className="title-row">
             <h1>실시간 모니터링</h1>
-            <span className="status-pill">Phase 1.5 Mock</span>
+            <span className="status-pill">Phase 2 API Ready</span>
           </div>
-          <p>Mock 이벤트 기반 Phase 1.5 운영 대시보드</p>
+          <p>Polling 기반 실시간 안전 대시보드</p>
         </div>
       </div>
 

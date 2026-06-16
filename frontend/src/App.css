@@ -384,6 +384,11 @@ button {
   background: #fee4e2;
 }
 
+.risk-normal {
+  color: #027a48;
+  background: #d1fadf;
+}
+
 .risk-medium {
   color: #b54708;
   background: #fef0c7;

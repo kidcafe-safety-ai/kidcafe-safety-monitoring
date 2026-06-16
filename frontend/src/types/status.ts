@@ -1,10 +1,10 @@
-import type { Severity } from "./event";
+import type { CurrentRiskLevel } from "./event";
 
 export interface ZoneOccupancy {
   zone_id: string;
   zone_name: string;
   current_count: number;
-  risk_level: Severity;
+  risk_level: CurrentRiskLevel;
 }
 
 export interface CurrentStatus {

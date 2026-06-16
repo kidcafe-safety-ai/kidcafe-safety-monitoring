@@ -77,8 +77,8 @@ export default function App() {
             <span>{isDarkMode ? "Light Mode" : "Dark Mode"}</span>
           </button>
           <div className="sidebar-status">
-            <span>Phase 1.5</span>
-            <strong>Mock Dashboard</strong>
+            <span>Phase 2</span>
+            <strong>API Ready</strong>
           </div>
         </div>
       </aside>
