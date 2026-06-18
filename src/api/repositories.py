@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from src.api.database import get_connection
-from src.api.schemas import EventCreate, timestamp_to_seconds
+from src.api.schemas import CurrentStatusCreate, EventCreate, timestamp_to_seconds
 
 
 class DuplicateEventError(Exception):
@@ -30,6 +31,16 @@ def _row_to_event(row: sqlite3.Row) -> Dict[str, Any]:
         "confidence": row["confidence"],
         "video_source": row["video_source"],
         "created_at": row["created_at"],
+    }
+
+
+def _row_to_current_status(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "source": row["source"],
+        "frame_number": row["frame_number"],
+        "active_track_count": row["active_track_count"],
+        "zone_occupancy": json.loads(row["zone_occupancy_json"]),
+        "updated_at": row["updated_at"],
     }
 
 
@@ -78,6 +89,65 @@ def create_event(event: EventCreate) -> Dict[str, Any]:
         raise DuplicateEventError from exc
 
     return _row_to_event(row)
+
+
+def upsert_current_status(status: CurrentStatusCreate) -> Dict[str, Any]:
+    updated_at = status.updated_at or datetime.now(timezone.utc).astimezone().isoformat()
+    zone_occupancy = [zone.model_dump() for zone in status.zone_occupancy]
+
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO current_status (
+                source,
+                frame_number,
+                active_track_count,
+                zone_occupancy_json,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(source) DO UPDATE SET
+                frame_number = excluded.frame_number,
+                active_track_count = excluded.active_track_count,
+                zone_occupancy_json = excluded.zone_occupancy_json,
+                updated_at = excluded.updated_at
+            """,
+            (
+                status.source,
+                status.frame_number,
+                status.active_track_count,
+                json.dumps(zone_occupancy, ensure_ascii=False),
+                updated_at,
+            ),
+        )
+
+    return {
+        "source": status.source,
+        "updated": True,
+    }
+
+
+def get_current_status() -> Dict[str, Any]:
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT *
+            FROM current_status
+            ORDER BY updated_at DESC, source ASC
+            LIMIT 1
+            """
+        ).fetchone()
+
+    if row is None:
+        return {
+            "source": "unknown",
+            "frame_number": 0,
+            "active_track_count": 0,
+            "zone_occupancy": [],
+            "updated_at": None,
+        }
+
+    return _row_to_current_status(row)
 
 
 def list_events(

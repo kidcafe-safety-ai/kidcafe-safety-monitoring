@@ -2,7 +2,7 @@
 
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
-> **상태**: Phase 1.5 구현 완료 + Phase 2 확장 계약 초안
+> **상태**: Phase 1.5 구현 완료 + Phase 2 Current Status API 구현 반영
 > **관련 문서**: [`dashboard_api.md`](dashboard_api.md), [`dashboard_analysis.md`](dashboard_analysis.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md), [`roadmap.md`](roadmap.md)
 
 이 문서는 Phase 1.5에서 구현된 Backend API와 Phase 2에서 추가할 Current Status API 계약을 정리한다.
@@ -31,7 +31,8 @@
 }
 ```
 
-FastAPI 기본 validation error는 기본 `422` 응답 형식을 그대로 사용한다.
+FastAPI/Pydantic validation error는 기본 `422` 응답 형식을 그대로 사용한다.
+이번 문서 기준으로 `RequestValidationError` 공통 handler는 아직 추가하지 않는다.
 
 ---
 
@@ -61,8 +62,8 @@ API 계층에서는 별도 Pydantic schema로 매핑하며, 기존 Event datacla
 | `id` | `integer` | SQLite autoincrement PK |
 | `zone_name` | `string | null` | zone 표시 이름 |
 | `video_time_sec` | `number | null` | `timestamp`에서 계산한 초 단위 영상 시각 |
-| `confidence` | `number | null` | detector/tracker confidence |
-| `created_at` | `string` | SQLite 저장 시각 |
+| `confidence` | `number | null` | detector/tracker confidence, `0.0 <= confidence <= 1.0` |
+| `created_at` | `string` | SQLite 저장 시각, `CURRENT_TIMESTAMP` 형식 |
 
 ### Timestamp Validation
 
@@ -92,6 +93,35 @@ API 계층에서는 별도 Pydantic schema로 매핑하며, 기존 Event datacla
 
 ---
 
+## Current Status Schema
+
+`/status/current`는 Event 누적 로그가 아니라 현재 프레임 기준 최신 상태를 표현한다.
+Event는 `events` 테이블에 누적 저장하고, Current Status는 `source`별 최신 상태만 유지한다.
+
+### Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `source` | `string` | 입력 소스 ID 또는 카메라 ID |
+| `frame_number` | `integer` | 현재 상태 기준 프레임 번호, `>= 0` |
+| `active_track_count` | `integer` | 현재 감지 중인 track 수, `>= 0` |
+| `zone_occupancy` | `array` | zone별 현재 점유 상태 |
+| `zone_occupancy[].zone_id` | `string` | zone ID |
+| `zone_occupancy[].zone_name` | `string | null` | zone 표시 이름 |
+| `zone_occupancy[].current_count` | `integer` | 해당 zone의 현재 track 수, `>= 0` |
+| `zone_occupancy[].risk_level` | `"NORMAL" | "HIGH"` | Phase 2 현재 위험도 |
+| `updated_at` | `string | null` | current status 갱신 시각 |
+
+`risk_level`은 Phase 2에서 `NORMAL | HIGH`만 허용한다.
+`LOW | MEDIUM | HIGH`처럼 세분화된 위험도는 Phase 2.5 또는 Phase 3에서 검토한다.
+
+`PUT /status/current` 요청 body에 `updated_at`이 있으면 그대로 저장한다.
+`updated_at`이 없으면 Backend 수신 시각을 timezone-aware ISO 문자열로 생성해 저장한다.
+저장된 current status가 하나도 없는 경우에만 `GET /status/current`에서 `updated_at: null`을 반환한다.
+이 기준은 `current_status.updated_at`에만 적용하며, 기존 `events.created_at`은 SQLite `CURRENT_TIMESTAMP`를 유지한다.
+
+---
+
 ## API List
 
 ### Phase 1.5 (구현 완료)
@@ -105,14 +135,14 @@ API 계층에서는 별도 Pydantic schema로 매핑하며, 기존 Event datacla
 | `GET` | `/summary` | 이벤트 KPI summary 조회 |
 | `GET` | `/zones` | zone 목록 조회 |
 
-### Phase 2 추가 예정
+### Phase 2
 
 | Method | Path | Description |
 | --- | --- | --- |
 | `PUT` | `/status/current` | Vision AI 현재 감지 상태 저장/갱신 |
 | `GET` | `/status/current` | 현재 감지 상태 조회 |
 
-`/status/current`는 Event 누적 로그가 아니라 현재 상태만 저장한다. 상세 계약은 `interfaces.md` Section 7-A 참고.
+`/status/current`는 Event 누적 로그가 아니라 현재 상태만 저장한다.
 
 ---
 
@@ -313,9 +343,99 @@ ENTER/EXIT 매칭 기반 평균 체류시간 계산은 이번 작업 범위에 �
 
 ---
 
+## PUT /status/current
+
+Vision AI 파이프라인이 현재 프레임 기준 감지 상태를 저장/갱신한다.
+이 API는 이벤트 로그를 누적 저장하지 않고, `source`별 current status 최신값만 덮어쓴다.
+
+### Request
+
+```json
+{
+  "source": "camera_01",
+  "frame_number": 1230,
+  "active_track_count": 4,
+  "zone_occupancy": [
+    {
+      "zone_id": "playground_bottom_right",
+      "zone_name": "test video zone",
+      "current_count": 2,
+      "risk_level": "HIGH"
+    }
+  ],
+  "updated_at": "2026-06-08T10:15:30+09:00"
+}
+```
+
+`updated_at`은 요청 body에 있으면 그대로 저장한다.
+요청 body에 없으면 Backend가 수신 시각 기준 timezone-aware ISO 문자열을 생성해 저장한다.
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "source": "camera_01",
+    "updated": true
+  },
+  "message": null
+}
+```
+
+---
+
+## GET /status/current
+
+가장 최근에 저장된 current status를 조회한다.
+저장된 current status가 하나도 없으면 error가 아니라 기본값을 반환한다.
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "source": "camera_01",
+    "frame_number": 1230,
+    "active_track_count": 4,
+    "zone_occupancy": [
+      {
+        "zone_id": "playground_bottom_right",
+        "zone_name": "test video zone",
+        "current_count": 2,
+        "risk_level": "HIGH"
+      }
+    ],
+    "updated_at": "2026-06-08T10:15:30+09:00"
+  },
+  "message": null
+}
+```
+
+### Empty State Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "source": "unknown",
+    "frame_number": 0,
+    "active_track_count": 0,
+    "zone_occupancy": [],
+    "updated_at": null
+  },
+  "message": null
+}
+```
+
+---
+
 ## GET /zones
 
 `data/zones/sample.json`을 읽어 반환한다. 파일이 없거나 형식이 맞지 않으면 빈 리스트를 반환할 수 있다.
+API 응답에서는 `zone_name`을 보장한다.
+전환기 호환성을 위해 기존 `name` 필드는 제거하지 않는다.
 
 ### Response
 
@@ -326,6 +446,7 @@ ENTER/EXIT 매칭 기반 평균 체류시간 계산은 이번 작업 범위에 �
     {
       "zone_id": "playground_bottom_right",
       "name": "test video zone",
+      "zone_name": "test video zone",
       "type": "polygon",
       "points": [
         [0.65, 0.65],
@@ -371,6 +492,22 @@ CREATE TABLE IF NOT EXISTS events (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+`current_status` 테이블:
+
+```sql
+CREATE TABLE IF NOT EXISTS current_status (
+    source TEXT PRIMARY KEY,
+    frame_number INTEGER NOT NULL,
+    active_track_count INTEGER NOT NULL,
+    zone_occupancy_json TEXT NOT NULL,
+    updated_at TEXT
+);
+```
+
+`current_status`는 Event처럼 누적 저장하지 않는다.
+같은 `source`로 `PUT /status/current` 요청이 들어오면 기존 row를 덮어쓴다.
+`zone_occupancy`는 SQLite에는 JSON 문자열로 저장하고 API 응답에서는 배열로 반환한다.
 
 ---
 

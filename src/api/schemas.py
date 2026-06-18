@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 EventType = Literal["ENTER", "DWELL", "EXIT"]
+RiskLevel = Literal["NORMAL", "HIGH"]
 TIMESTAMP_REGEX = r"^\d{2}:[0-5]\d:[0-5]\d\.\d{3}$"
 TIMESTAMP_PATTERN = re.compile(TIMESTAMP_REGEX)
 
@@ -24,7 +25,7 @@ class EventCreate(BaseModel):
     frame_number: int
     video_source: str
     zone_name: Optional[str] = None
-    confidence: Optional[float] = None
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
     @field_validator("timestamp")
     @classmethod
@@ -69,6 +70,34 @@ class SummaryData(BaseModel):
     avg_dwell_seconds: float
 
 
+class CurrentZoneOccupancy(BaseModel):
+    zone_id: str = Field(min_length=1)
+    zone_name: Optional[str] = None
+    current_count: int = Field(ge=0)
+    risk_level: RiskLevel
+
+
+class CurrentStatusCreate(BaseModel):
+    source: str = Field(min_length=1)
+    frame_number: int = Field(ge=0)
+    active_track_count: int = Field(ge=0)
+    zone_occupancy: List[CurrentZoneOccupancy]
+    updated_at: Optional[str] = None
+
+
+class CurrentStatusOut(BaseModel):
+    source: str
+    frame_number: int
+    active_track_count: int
+    zone_occupancy: List[CurrentZoneOccupancy]
+    updated_at: Optional[str] = None
+
+
+class CurrentStatusUpdateData(BaseModel):
+    source: str
+    updated: bool
+
+
 class HealthData(BaseModel):
     service: str
     healthy: bool
@@ -101,6 +130,18 @@ class EventRecentResponse(BaseModel):
 class SummaryResponse(BaseModel):
     status: Literal["success"]
     data: SummaryData
+    message: None = None
+
+
+class CurrentStatusUpdateResponse(BaseModel):
+    status: Literal["success"]
+    data: CurrentStatusUpdateData
+    message: None = None
+
+
+class CurrentStatusResponse(BaseModel):
+    status: Literal["success"]
+    data: CurrentStatusOut
     message: None = None
 
 
