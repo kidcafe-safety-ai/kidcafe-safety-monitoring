@@ -39,6 +39,7 @@ const EVENT_TYPES: readonly EventType[] = ["ENTER", "DWELL", "EXIT"];
 const SEVERITIES: readonly Severity[] = ["LOW", "MEDIUM", "HIGH"];
 const STATUS_RISK_LEVELS: readonly CurrentRiskLevel[] = ["NORMAL", "HIGH"];
 const ZONE_TYPES: readonly ZoneType[] = ["exit", "play", "restricted", "slide"];
+export const RECENT_EVENT_LIMIT = 5;
 
 const API_BASE_URL = getEnvValue(
   import.meta.env.VITE_API_BASE_URL,
@@ -285,10 +286,12 @@ function normalizeSummaryStats(value: unknown): SummaryStats {
 
 function normalizeZoneOccupancy(value: unknown): ZoneOccupancy {
   const zone = isRecord(value) ? value : {};
+  const zoneId = readString(zone.zone_id).trim();
+  const zoneName = readString(zone.zone_name).trim();
 
   return {
-    zone_id: readString(zone.zone_id),
-    zone_name: readString(zone.zone_name),
+    zone_id: zoneId,
+    zone_name: zoneName || zoneId || "이름 없음",
     current_count: readNumber(zone.current_count),
     risk_level: normalizeStatusRiskLevel(zone.risk_level),
   };
@@ -349,12 +352,17 @@ export async function getEvents(): Promise<ApiResponse<SafetyEvent[]>> {
   return successResponse(result.data);
 }
 
-export async function getRecentEvents(limit = 5): Promise<ApiResponse<SafetyEvent[]>> {
+export async function getRecentEvents(
+  limit = RECENT_EVENT_LIMIT,
+): Promise<ApiResponse<SafetyEvent[]>> {
   if (!isApiMode()) {
     return successResponse(mockEvents.slice(0, limit));
   }
 
-  const safeLimit = Math.max(1, Math.floor(readNumber(limit, 5)));
+  const safeLimit = Math.max(
+    1,
+    Math.floor(readNumber(limit, RECENT_EVENT_LIMIT)),
+  );
   const result = await loadApiData(
     `/events/recent?limit=${encodeURIComponent(String(safeLimit))}`,
     normalizeSafetyEvents,
@@ -398,7 +406,11 @@ export async function getDashboardSummary(): Promise<ApiResponse<DashboardSummar
       normalizeCurrentStatus,
       createEmptyCurrentStatus(),
     ),
-    loadApiData("/events/recent", normalizeSafetyEvents, []),
+    loadApiData(
+      `/events/recent?limit=${RECENT_EVENT_LIMIT}`,
+      normalizeSafetyEvents,
+      [],
+    ),
   ]);
   const dashboardSummary = buildDashboardSummary(
     summaryResult.data,

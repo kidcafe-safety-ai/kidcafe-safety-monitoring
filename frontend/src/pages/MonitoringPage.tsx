@@ -23,7 +23,7 @@ export default function MonitoringPage() {
   const loadDashboardData = useCallback(async () => {
     const [summaryData, eventData, zoneData] = await Promise.all([
       getDashboardSummary(),
-      getRecentEvents(5),
+      getRecentEvents(),
       getZoneStatus(),
     ]);
 
@@ -39,7 +39,7 @@ export default function MonitoringPage() {
   }, []);
 
   const loadRecentEvents = useCallback(async () => {
-    const eventData = await getRecentEvents(5);
+    const eventData = await getRecentEvents();
     setRecentEvents(eventData.data);
     setApiErrors((previous) => ({
       ...previous,
