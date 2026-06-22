@@ -1,30 +1,77 @@
 import { AlertTriangle, Clock3, ShieldAlert, Users } from "lucide-react";
-import { useEffect, useState } from "react";
-import { getRecentEvents, getSummary, getZoneStatus } from "../api/eventsApi";
+import { useCallback, useEffect, useState } from "react";
+import { getDashboardSummary, getRecentEvents, getZoneStatus } from "../api/eventsApi";
 import KpiCard from "../components/KpiCard";
 import RecentEventList from "../components/RecentEventList";
 import ZoneStatusPanel from "../components/ZoneStatusPanel";
+import { usePolling } from "../hooks/usePolling";
 import type { DashboardSummary, SafetyEvent, ZoneStatus } from "../types/event";
 
 export default function MonitoringPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [recentEvents, setRecentEvents] = useState<SafetyEvent[]>([]);
   const [zones, setZones] = useState<ZoneStatus[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [apiErrors, setApiErrors] = useState({
+    recentEvents: false,
+    summary: false,
+    zones: false,
+  });
+
+  const hasApiError = apiErrors.recentEvents || apiErrors.summary || apiErrors.zones;
+
+  const loadDashboardData = useCallback(async () => {
+    const [summaryData, eventData, zoneData] = await Promise.all([
+      getDashboardSummary(),
+      getRecentEvents(),
+      getZoneStatus(),
+    ]);
+
+    setSummary(summaryData.data);
+    setRecentEvents(eventData.data);
+    setZones(zoneData.data);
+    setApiErrors({
+      recentEvents: eventData.status === "error",
+      summary: summaryData.status === "error",
+      zones: zoneData.status === "error",
+    });
+    setIsLoading(false);
+  }, []);
+
+  const loadRecentEvents = useCallback(async () => {
+    const eventData = await getRecentEvents();
+    setRecentEvents(eventData.data);
+    setApiErrors((previous) => ({
+      ...previous,
+      recentEvents: eventData.status === "error",
+    }));
+  }, []);
+
+  const loadSummary = useCallback(async () => {
+    const summaryData = await getDashboardSummary();
+    setSummary(summaryData.data);
+    setApiErrors((previous) => ({
+      ...previous,
+      summary: summaryData.status === "error",
+    }));
+  }, []);
+
+  const loadZones = useCallback(async () => {
+    const zoneData = await getZoneStatus();
+    setZones(zoneData.data);
+    setApiErrors((previous) => ({
+      ...previous,
+      zones: zoneData.status === "error",
+    }));
+  }, []);
 
   useEffect(() => {
-    async function loadDashboardData() {
-      const [summaryData, eventData, zoneData] = await Promise.all([
-        getSummary(),
-        getRecentEvents(),
-        getZoneStatus(),
-      ]);
-      setSummary(summaryData.data);
-      setRecentEvents(eventData.data);
-      setZones(zoneData.data);
-    }
-
     loadDashboardData();
-  }, []);
+  }, [loadDashboardData]);
+
+  usePolling(loadRecentEvents, 3000, !isLoading);
+  usePolling(loadSummary, 10000, !isLoading);
+  usePolling(loadZones, 2000, !isLoading);
 
   return (
     <main className="page">
@@ -32,11 +79,18 @@ export default function MonitoringPage() {
         <div>
           <div className="title-row">
             <h1>실시간 모니터링</h1>
-            <span className="status-pill">Phase 1.5 Mock</span>
+            <span className="status-pill">Phase 2 API Ready</span>
           </div>
-          <p>Mock 이벤트 기반 Phase 1.5 운영 대시보드</p>
+          <p>Polling 기반 실시간 안전 대시보드</p>
         </div>
       </div>
+
+      {isLoading ? <div className="state-banner">데이터를 불러오는 중입니다.</div> : null}
+      {hasApiError ? (
+        <div className="state-banner error">
+          API 연결에 실패했습니다. mock 또는 기본값으로 화면을 표시합니다.
+        </div>
+      ) : null}
 
       <section className="kpi-grid">
         <KpiCard
@@ -70,6 +124,9 @@ export default function MonitoringPage() {
           <span>Live Video 예정</span>
         </div>
         <aside className="side-stack">
+          {!isLoading && recentEvents.length === 0 ? (
+            <div className="state-banner empty">표시할 이벤트가 없습니다.</div>
+          ) : null}
           <RecentEventList events={recentEvents} />
           <ZoneStatusPanel zones={zones} />
         </aside>

@@ -33,6 +33,12 @@ Phase 1.5에서는 Backend API와 동일하게 `HH:MM:SS.mmm` 형식을 사용�
 
 향후 FastAPI 연결 시 page/component 코드는 유지하고 `frontend/src/api/eventsApi.ts` 내부 구현만 교체한다.
 
+Phase 2에서는 React가 mock 데이터에서 FastAPI API 데이터로 전환될 예정이다.
+React page/component는 Backend 응답 구조를 직접 다루지 않고 `eventsApi.ts`를 통해 화면용 타입을 사용한다.
+`DashboardSummary`는 `/summary`, `/status/current`, `/events/recent`를 조합해서 구성한다.
+`/status/current`가 아직 없을 수 있으므로 API 실패 fallback을 제공한다.
+Phase 2 초기 실시간 갱신은 WebSocket이 아니라 polling 기반으로 준비한다.
+
 ## 완료 기준
 - React 앱 실행
 - mock 기반 2개 화면 구현

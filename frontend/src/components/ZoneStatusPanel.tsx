@@ -21,7 +21,7 @@ export default function ZoneStatusPanel({ zones }: ZoneStatusPanelProps) {
             <div className="zone-count">
               <strong>{zone.current_count}</strong>
               <span className={`risk-badge risk-${zone.risk_level?.toLowerCase()}`}>
-                {zone.risk_level ?? "LOW"}
+                {zone.risk_level ?? "NORMAL"}
               </span>
             </div>
           </article>

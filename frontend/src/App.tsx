@@ -1,9 +1,10 @@
-import { BarChart3, Monitor, Moon, Sun } from "lucide-react";
+import { BarChart3, MapPinned, Monitor, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import EventsPage from "./pages/EventsPage";
 import MonitoringPage from "./pages/MonitoringPage";
+import ZoneSettingsPage from "./pages/ZoneSettingsPage";
 
-type PageKey = "monitoring" | "events";
+type PageKey = "monitoring" | "events" | "zone-settings";
 type Theme = "light" | "dark";
 
 const THEME_STORAGE_KEY = "kidcafe-dashboard-theme";
@@ -23,6 +24,12 @@ export default function App() {
 
   const isDarkMode = theme === "dark";
   const ThemeIcon = isDarkMode ? Sun : Moon;
+  const ActivePage =
+    page === "monitoring"
+      ? MonitoringPage
+      : page === "events"
+        ? EventsPage
+        : ZoneSettingsPage;
 
   return (
     <div className="app-shell" data-theme={theme}>
@@ -51,6 +58,14 @@ export default function App() {
             <BarChart3 size={18} strokeWidth={2.2} />
             <span>이벤트 기록 / 통계</span>
           </button>
+          <button
+            className={page === "zone-settings" ? "active" : ""}
+            onClick={() => setPage("zone-settings")}
+            type="button"
+          >
+            <MapPinned size={18} strokeWidth={2.2} />
+            <span>안전구역 / 알림 설정</span>
+          </button>
         </nav>
         <div className="sidebar-footer">
           <button
@@ -62,13 +77,13 @@ export default function App() {
             <span>{isDarkMode ? "Light Mode" : "Dark Mode"}</span>
           </button>
           <div className="sidebar-status">
-            <span>Phase 1.5</span>
-            <strong>Mock Dashboard</strong>
+            <span>Phase 2</span>
+            <strong>API Ready</strong>
           </div>
         </div>
       </aside>
       <div className="content">
-        {page === "monitoring" ? <MonitoringPage /> : <EventsPage />}
+        <ActivePage />
       </div>
     </div>
   );

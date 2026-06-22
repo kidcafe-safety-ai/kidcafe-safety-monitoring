@@ -1,0 +1,19 @@
+import { useEffect } from "react";
+
+export function usePolling(
+  callback: () => void,
+  intervalMs: number,
+  enabled = true,
+) {
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    callback();
+
+    const timer = window.setInterval(callback, intervalMs);
+
+    return () => window.clearInterval(timer);
+  }, [callback, intervalMs, enabled]);
+}

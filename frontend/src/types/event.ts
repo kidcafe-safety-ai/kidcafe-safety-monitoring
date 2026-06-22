@@ -2,6 +2,8 @@ export type EventType = "ENTER" | "DWELL" | "EXIT";
 
 export type Severity = "LOW" | "MEDIUM" | "HIGH";
 
+export type CurrentRiskLevel = "NORMAL" | "HIGH";
+
 export type ZoneType = "exit" | "play" | "restricted" | "slide";
 
 export interface SafetyEvent {
@@ -34,5 +36,5 @@ export interface ZoneStatus {
   zone_name: string;
   current_count: number;
   zone_type?: ZoneType;
-  risk_level?: Severity;
+  risk_level?: CurrentRiskLevel;
 }
