@@ -4,7 +4,7 @@ Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
 한이음 드림업 프로젝트 (2026.04 ~ 2026.10)
 
-![status](https://img.shields.io/badge/status-Phase_1.5_done-brightgreen)
+![status](https://img.shields.io/badge/status-Phase_2.0_done-brightgreen)
 ![python](https://img.shields.io/badge/python-3.10-blue)
 ![tests](https://img.shields.io/badge/tests-pytest_passed-green)
 ![license](https://img.shields.io/badge/license-Internal-lightgrey)
@@ -15,17 +15,19 @@ Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
 KidCafe Safety AI는 YOLO + ByteTrack + Geofencing 기반으로 위험구역 진입 및 장시간 체류를 감지하는 Vision AI 안전 모니터링 시스템이다.
 
-**현재 상태: MVP 1차 완료 + Phase 1.5 완료**
+**현재 상태: Phase 2.0 완료 — 실시간 입력 + FastAPI/SQLite + React API 연동**
 
 ```text
-Vision AI Pipeline
-→ Event Schema v1 (ENTER / DWELL / EXIT)
-→ FastAPI + SQLite
-→ React Dashboard (Phase 1.5 기준 UI)
+Webcam / RTSP / File
+→ YOLO26n + ByteTrack
+→ ENTER / DWELL / EXIT 이벤트
+→ FastAPI POST /events + PUT /status/current
+→ SQLite 저장
+→ React Dashboard (REST polling 기반)
 ```
 
 > Streamlit 대시보드는 MVP 검증용으로 사용되었으며 현재는 비활성 상태다.
-> React Dashboard (`frontend/`) 가 Phase 1.5 기준 운영 UI다.
+> React Dashboard (`frontend/`)는 Phase 2 기준 REST polling 기반 운영 UI다.
 
 ---
 
@@ -142,7 +144,7 @@ pytest -q
 ```
 kidcafe-safety-monitoring/
 ├── src/
-│   ├── api/                 # FastAPI 서버 (Phase 1.5 추가)
+│   ├── api/                 # FastAPI 서버
 │   │   ├── main.py
 │   │   ├── schemas.py
 │   │   ├── database.py
@@ -154,11 +156,11 @@ kidcafe-safety-monitoring/
 │   ├── events/              # 상태머신
 │   ├── visualization/       # 결과 영상/차트 legacy 유틸 (Streamlit app/pages 종료)
 │   └── main.py              # 파이프라인 진입점
-├── frontend/                # React Dashboard (Phase 1.5 추가)
+├── frontend/                # React Dashboard
 │   ├── src/
 │   │   ├── pages/           # MonitoringPage, EventsPage
 │   │   ├── components/      # KpiCard, EventTable, EventChart 등
-│   │   ├── api/             # eventsApi.ts (mock → Phase 2에서 FastAPI 교체)
+│   │   ├── api/             # eventsApi.ts (VITE_API_MODE 기반 mock/API 전환)
 │   │   ├── mocks/           # Phase 1.5 mock 데이터
 │   │   └── types/           # event.ts
 │   └── package.json
@@ -185,15 +187,13 @@ kidcafe-safety-monitoring/
 
 ---
 
-## 역할 분담 (Phase 1.5 기준)
+## 역할 분담 (Phase 2 기준)
 
 | 팀원 | 담당 | 주력 모듈 |
 |------|------|---------|
-| **A** | Vision AI / 모델 기준선 / 실시간 입력 준비 | tracking, events, geofencing, scripts/ |
-| **B** | FastAPI / SQLite / Backend | src/api/ |
-| **C** | React Dashboard | frontend/ |
-
-> Phase 2: A는 실시간 입력 연결, B는 API 안정화, C는 mock → API 연동
+| **A** | Vision AI / 실시간 입력 파이프라인 | tracking, events, geofencing, input, integrations, scripts/ |
+| **B** | FastAPI / SQLite / Backend API | src/api/ |
+| **C** | React Dashboard / API 연동 | frontend/ |
 
 ---
 
@@ -304,13 +304,13 @@ pytest --cov=src --cov-report=term-missing
 | FastAPI + SQLite 최소 API | Done — Phase 1.5 |
 | React mock Dashboard 2페이지 | Done — Phase 1.5 |
 | 실시간 입력 인터페이스 초안 | Done — Phase 1.5 |
-| 웹캠 / RTSP 실시간 입력 연결 | Phase 2 |
-| React mock → API 연동 | Phase 2 |
-| Current Status API (`/status/current`) | Phase 2 |
-| WebSocket 실시간 push | Phase 2.5 |
+| 웹캠 / RTSP 실시간 입력 연결 | Done — Phase 2 |
+| React mock → API 연동 | Done — Phase 2 |
+| Current Status API (`/status/current`) | Done — Phase 2 |
+| WebSocket 실시간 push | Phase 2.5 이후 검토 |
 | ReID / 낙상 / 충돌 감지 | Phase 3 |
 
-Phase 2 개발은 **2026-06-08 착수**. 핵심 목표: 웹캠 기반 end-to-end 실시간 연결.
+Phase 2는 실시간 입력, API 저장/조회, React API 연동까지 완료했다. Phase 2.5에서는 시연 가능한 안정화에 집중한다.
 
 ---
 

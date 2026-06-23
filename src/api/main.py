@@ -1,4 +1,4 @@
-"""FastAPI entry point for KidCafe Safety AI Phase 1.5 backend."""
+"""FastAPI entry point for KidCafe Safety AI Phase 2 backend."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="KidCafe Safety API", version="1.5.0", lifespan=lifespan)
+app = FastAPI(title="KidCafe Safety API", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

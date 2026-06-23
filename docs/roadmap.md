@@ -1,6 +1,6 @@
 # KidCafe Safety AI — 개발 로드맵
 
-> 최종 수정: 2026-06-01
+> 최종 수정: 2026-06-23
 > MVP baseline: `v0.1.0-mvp`
 > 본 문서는 MVP 1차 종료 이후 최종 제출까지의 상위 개발 로드맵이다.
 > 한이음 일정은 2025년 창의도전형 공고 기준으로 작성했으며, 2026년 공고 확인 후 갱신한다.
@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | ~5/31 | MVP 1차 종료 | 파일 영상 기반 MVP 기준선 고정 |
 | 6/1~6/8 | Phase 1.5 | 서비스 구조 전환 준비 — 완료 |
-| 6/8~6/21 | Phase 2 | 실시간 입력 연결 |
+| 6/8~6/21 | Phase 2 | 실시간 입력 연결 — 완료 |
 | 6/22~6/30 | Phase 2.5 | 실시간 운영 대시보드 1차 완성 |
 | 7월 | Phase 3 | 안전 감지 고도화 |
 | 8월 | Phase 4 | 모델·추적 고도화 및 1차 공모전 준비 |
@@ -70,29 +70,29 @@
 
 ---
 
-## 6/8~6/21 — Phase 2: 실시간 입력 연결
+## 6/8~6/21 — Phase 2: 실시간 입력 연결 — 완료
 
 **목표**: 저장 영상 기반 구조를 웹캠 / RTSP / IP 카메라 기반 실시간 구조로 전환한다.
 
-### 핵심 작업
+### 완료 항목
 
 **A**
-- WebcamSource 구현 (우선)
-- RTSPSource 구현 또는 실패 원인 문서화 (fallback 가능)
-- YOLO26n 기준 실시간 추론 테스트
-- 이벤트를 FastAPI `POST /events`로 전송
-- `PUT /status/current`로 현재 감지 상태 전송
-- latency / FPS / frame drop 측정
+- [x] WebcamSource 구현
+- [x] RTSPSource 구현 (credential sanitize 포함)
+- [x] YOLO26n 기준 실시간 추론 테스트
+- [x] 이벤트를 FastAPI `POST /events`로 전송
+- [x] `PUT /status/current`로 현재 감지 상태 전송 (2초 주기)
+- [x] latency / FPS 측정 및 `docs/realtime_test.md` 기록
 
 **B**
-- `PUT /status/current` / `GET /status/current` API 구현
-- 실시간 이벤트 저장 검증
-- API 안정화
+- [x] `PUT /status/current` / `GET /status/current` API 구현
+- [x] SQLite upsert (`INSERT ... ON CONFLICT DO UPDATE`)
+- [x] 실시간 이벤트 저장 검증
 
 **C**
-- `eventsApi.ts` mock → FastAPI 실제 호출로 교체
-- `/events/recent` polling (3초), `/summary` polling (10초), `/status/current` polling (2초)
-- loading / error / empty 상태 처리
+- [x] `eventsApi.ts` mock → FastAPI 실제 호출 전환 (`VITE_API_MODE`)
+- [x] `/events/recent` polling (3초), `/summary` polling (10초), `/status/current` polling (2초)
+- [x] loading / error / empty 상태 처리
 
 ### 우선순위 원칙
 
@@ -103,17 +103,13 @@
 4. Current Status는 Event 누적이 아니라 /status/current 별도 처리
 ```
 
-### 비고
-
-- 시험 기간(6/17~6/23) 고려, 핵심 기능 6/16 이전 완성 목표
-- RTSP 실패 시 원인 문서화도 완료 기준으로 인정
-
 ### 산출물
 
-- 웹캠 실시간 입력 파이프라인
-- FastAPI 이벤트 송수신 + current status API
-- React API 연동
-- `docs/realtime_test.md` 실험 로그
+- [x] 웹캠 실시간 입력 파이프라인 (`src/input/`, `src/integrations/`)
+- [x] FastAPI 이벤트 송수신 + current status API (`src/api/routers/status.py`)
+- [x] React API 연동 (`frontend/src/api/eventsApi.ts`, `usePolling`)
+- [x] `docs/realtime_test.md` 실험 로그
+- [ ] `v0.2.0-realtime` 태그 (문서 PR 머지 후 생성 예정)
 
 ---
 

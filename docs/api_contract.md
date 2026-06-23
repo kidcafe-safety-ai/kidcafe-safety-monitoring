@@ -2,10 +2,11 @@
 
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
-> **상태**: Phase 1.5 구현 완료 + Phase 2 Current Status API 구현 반영
+> **최종 수정**: 2026-06-23 (Phase 2.0 종료 기준 반영)
+> **상태**: Phase 2.0 구현 완료 — Event API + Current Status API + React 연동
 > **관련 문서**: [`dashboard_api.md`](dashboard_api.md), [`dashboard_analysis.md`](dashboard_analysis.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md), [`roadmap.md`](roadmap.md)
 
-이 문서는 Phase 1.5에서 구현된 Backend API와 Phase 2에서 추가할 Current Status API 계약을 정리한다.
+이 문서는 Phase 1.5 ~ Phase 2.0에서 구현된 Backend API 계약을 정리한다.
 
 ---
 
@@ -135,7 +136,7 @@ Event는 `events` 테이블에 누적 저장하고, Current Status는 `source`�
 | `GET` | `/summary` | 이벤트 KPI summary 조회 |
 | `GET` | `/zones` | zone 목록 조회 |
 
-### Phase 2
+### Phase 2 (구현 완료)
 
 | Method | Path | Description |
 | --- | --- | --- |
