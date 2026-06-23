@@ -162,3 +162,71 @@ ultralytics: 8.4.56
 - 문제: 없음
 - 원인 추정: -
 - 다음 액션: API 서버 기동 후 end-to-end (웹캠 → API → SQLite → React) 연동 확인
+
+---
+
+## 2026-06-23 — Phase 2.0 E2E 인수 테스트 (webcam + FastAPI + React)
+
+### 테스트 정보
+
+- 날짜: 2026-06-23
+- 작성자: 정종민
+- 브랜치: docs/close-phase-2
+- 입력 소스: webcam (device=0, 640x480)
+- 모델: yolo26n.pt
+- device: mps (Apple Silicon, auto 선택)
+- 실행 명령어:
+  ```bash
+  .venv/bin/python -m src.main \
+    --source-type webcam \
+    --source 0 \
+    --api-url http://localhost:8000 \
+    --model yolo26n.pt \
+    --infer-device auto \
+    --width 640 --height 480 \
+    --frames-limit 300 \
+    --show
+  ```
+
+### 환경
+
+```text
+해상도:       640x480
+CAP_FPS:      30.0
+infer_device: mps (auto 선택)
+ultralytics:  8.4.56
+FastAPI:      uvicorn src.api.main:app --reload --port 8000
+React:        VITE_API_MODE=api VITE_API_BASE_URL=http://localhost:8000 npm run dev
+```
+
+### 측정 지표 (300프레임 기준)
+
+- FPS: 약 14~16 (steady-state)
+- frame drop: 없음
+- 총 이벤트: 24건 (ENTER/EXIT)
+- 감지 track_id: 1, 7
+- zone: playground_bottom_right
+
+### E2E 흐름 확인 결과
+
+```text
+[x] 웹캠 300프레임 정상 처리
+[x] ENTER / EXIT 이벤트 정상 생성 (24건)
+[x] FastAPI POST /events 수신 정상
+[x] PUT /status/current 전송 정상 (2초 주기)
+[x] SQLite events 저장 확인
+[x] GET /status/current 응답 확인 (active_track_count 표시)
+[x] GET /events/recent 응답 확인 (ENTER/EXIT 목록)
+[x] React API mode에서 KPI / zone 상태 / 최근 이벤트 표시 확인
+```
+
+### 결과
+
+- **Phase 2.0 E2E smoke test 성공**
+- 웹캠 → YOLO26n + ByteTrack → 이벤트 생성 → FastAPI → SQLite → React 전 구간 정상 동작 확인
+- API 전송 포함 시 steady-state ~14 FPS 유지
+
+### 이슈
+
+- 없음. 이벤트 흔들림(ENTER→EXIT 빈번 반복)은 zone 경계 통과 동작이며 Phase 2.5 debounce 검토 대상.
+- 장시간 안정성 검증은 Phase 2.5 P0 항목으로 이동.

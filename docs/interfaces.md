@@ -206,8 +206,8 @@ EXIT
 ```text
 outputs/events.jsonl    # 이벤트 로그 (한 줄 = Event JSON)
 outputs/result.mp4      # bbox + track_id + zone + 이벤트 오버레이 결과 영상
-POST /events            # Phase 2 예정: FastAPI로 이벤트 전송
-PUT /status/current     # Phase 2 예정: 현재 감지 상태 전송
+POST /events            # Phase 2 구현 완료
+PUT /status/current     # Phase 2 구현 완료
 ```
 
 ### B (FastAPI / SQLite / Backend)
@@ -225,7 +225,7 @@ PUT /status/current (Vision AI → FastAPI)
 
 ```text
 GET /events, /events/recent, /summary, /zones   # Phase 1.5 구현 완료
-GET /status/current                             # Phase 2 예정
+GET /status/current                             # Phase 2 구현 완료
 outputs/kidcafe_events.db  # SQLite 이벤트 누적 저장
 ```
 
@@ -258,7 +258,7 @@ GET /events          # 이벤트 목록 (필터/페이지 진입 시)
 - SQLite 이벤트 저장 (`outputs/kidcafe_events.db`)
 - React mock Dashboard (`frontend/`)
 
-**Phase 2 (실시간 연결)**
+**Phase 2 (실시간 연결) — 완료**
 
 - 웹캠 / RTSP 실시간 입력
 - Event → `POST /events` 전송
@@ -332,7 +332,8 @@ Phase 2 API 연동 시 `frontend/src/types/event.ts`의 `DashboardSummary`를 �
 
 mock → API 교체 시 KPI 카드별 데이터 소스를 위 기준으로 매핑한다.
 
-> `risk_level`은 Phase 2에서 optional 필드이며, 실제 위험도 계산은 Phase 3 안전정책 고도화에서 확정한다.
+> `risk_level`: `"NORMAL" | "HIGH"` — Phase 2 required 필드. Vision AI가 `PUT /status/current` 전송 시 반드시 포함한다.
+> 세분화된 위험도(`LOW | MEDIUM | HIGH` 등)는 Phase 3 안전정책 고도화에서 확정한다.
 
 ---
 
@@ -424,10 +425,10 @@ RTSPSource
 
 ### 주의사항
 
-- Phase 1.5에서는 입력 인터페이스 초안만 확정하고 실제 RTSP 구현은 Phase 2에서 진행한다.
+- Phase 2에서 FileVideoSource / WebcamSource / RTSPSource 구현을 완료했다.
+- reconnect 고도화와 장시간 안정화는 Phase 2.5에서 검증한다.
 - 기존 파일 영상 MVP 파이프라인은 깨지지 않아야 한다.
 - `Event.video_source`는 파일 경로 또는 camera_id로 사용한다.
-- 위 인터페이스는 MVP에 포함되지 않으며 Phase 2에서 설계·구현한다.
 
 ---
 
