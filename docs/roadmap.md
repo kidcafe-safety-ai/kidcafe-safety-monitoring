@@ -198,14 +198,60 @@ Phase 3   = 안전 감지 기능을 고도화한다
 - ReID / 낙상 / 충돌 감지
 - Zone Settings FastAPI 연동
 - 다중 카메라 고도화
-- Docker Compose
 ```
+
+### Docker 도입 범위
+
+Phase 2.5에서는 시연 재현성과 팀원 실행 환경 통일을 위해 Docker Compose를 제한적으로 도입한다.
+
+도입 범위:
+
+```text
+- FastAPI
+- React
+- SQLite volume
+- .env.example
+- docker-compose.yml
+```
+
+제외 범위:
+
+```text
+- Vision AI 웹캠 파이프라인
+- YOLO 추론 환경
+- GPU / MPS 설정
+- USB 카메라 passthrough
+- RTSP 운영 안정화
+```
+
+Docker 도입 시 역할:
+
+```text
+A
+- Vision AI 파이프라인은 Docker에 포함하지 않고 기존처럼 로컬 실행 유지
+- --api-url http://localhost:8000 으로 Docker FastAPI에 이벤트 / CurrentStatus 전송 확인
+
+B
+- FastAPI 컨테이너 구성
+- 8000 포트 노출
+- SQLite outputs volume 저장 확인
+- /health, /events, /events/recent, /summary, /status/current API smoke test 확인
+
+C
+- React 컨테이너 또는 실행 설정 정리
+- VITE_API_BASE_URL=http://localhost:8000
+- VITE_API_MODE=api
+- React Dashboard에서 Docker FastAPI 호출 및 화면 표시 확인
+```
+
+Docker는 배포 목적이 아니라, 개발 / 시연 실행 환경을 통일하기 위한 목적으로 도입한다.
 
 ### 산출물
 
 - 내장 웹캠 / USB 웹캠 기반 E2E 안정화 결과
 - React 운영 대시보드 v1
 - `docs/realtime_test.md` Phase 2.5 테스트 기록
+- 개발 / 시연 재현성 확보용 Docker Compose 초안
 - 중간평가용 시연 결과물
 
 ---
