@@ -99,7 +99,7 @@
 ```text
 1. 웹캠 기반 end-to-end 먼저 완성
 2. 실시간 영상 스트리밍보다 실시간 이벤트 저장/조회 우선
-3. WebSocket은 Phase 2 제외 → Phase 2.5 이후 검토
+3. WebSocket은 Phase 2 / Phase 2.5 제외 → Phase 3 이후 검토
 4. Current Status는 Event 누적이 아니라 /status/current 별도 처리
 ```
 
