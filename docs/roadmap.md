@@ -1,6 +1,6 @@
 # KidCafe Safety AI — 개발 로드맵
 
-> 최종 수정: 2026-06-23
+> 최종 수정: 2026-06-24
 > MVP baseline: `v0.1.0-mvp`
 > 본 문서는 MVP 1차 종료 이후 최종 제출까지의 상위 개발 로드맵이다.
 > 한이음 일정은 2025년 창의도전형 공고 기준으로 작성했으며, 2026년 공고 확인 후 갱신한다.
@@ -14,7 +14,7 @@
 | ~5/31 | MVP 1차 종료 | 파일 영상 기반 MVP 기준선 고정 |
 | 6/1~6/8 | Phase 1.5 | 서비스 구조 전환 준비 — 완료 |
 | 6/8~6/21 | Phase 2 | 실시간 입력 연결 — 완료 |
-| 6/22~6/30 | Phase 2.5 | 실시간 운영 대시보드 1차 완성 |
+| 6/22~6/30 | Phase 2.5 | 실시간 운영 대시보드 v1 안정화 |
 | 7월 | Phase 3 | 안전 감지 고도화 |
 | 8월 | Phase 4 | 모델·추적 고도화 및 1차 공모전 준비 |
 | 9월 | Phase 5 | 성과 정리 및 2차 평가 준비 |
@@ -109,30 +109,104 @@
 - [x] FastAPI 이벤트 송수신 + current status API (`src/api/routers/status.py`)
 - [x] React API 연동 (`frontend/src/api/eventsApi.ts`, `usePolling`)
 - [x] `docs/realtime_test.md` 실험 로그
-- [ ] `v0.2.0-realtime` 태그 (문서 PR 머지 후 생성 예정)
+- [x] `v0.2.0-realtime` 태그 생성
 
 ---
 
-## 6/22~6/30 — Phase 2.5: 실시간 운영 대시보드 1차 완성
+## 6/22~6/30 — Phase 2.5: 실시간 운영 대시보드 안정화
 
-**목표**: 중간평가 시점에 제출 가능한 실시간 운영 대시보드 v1을 완성한다.
+**목표**: Phase 2.0에서 구현한 실시간 연결 구조를 기반으로, 중간평가 및 시연 가능한 실시간 운영 대시보드 v1을 완성한다.
 
-### 핵심 작업
+### Phase 정의
 
-- 실시간 모니터링 화면
-- 이벤트 기록 / 통계 화면
-- 실시간 이벤트 표시
-- 운영자용 대시보드 v1
-- SQLite / JSONL / CSV 저장 방식 정리
-- 실시간 서비스 MVP 종료
-- 6월 개발 결과 문서화
-- 한이음 중간점검 제출 보고서 작성
+```text
+Phase 2.0 = 각 모듈을 연결한다
+Phase 2.5 = 연결된 흐름을 시연 가능한 수준으로 안정화한다
+Phase 3   = 안전 감지 기능을 고도화한다
+```
+
+### 핵심 원칙
+
+```text
+- 웹캠 기반 end-to-end 흐름을 최우선으로 안정화
+- React는 REST polling 기반 유지
+- WebSocket, ReID, 낙상, 충돌은 Phase 3 이후
+- Event Schema v1 / CurrentStatus 구조 유지
+- 이벤트 흔들림은 기록하고 실제 보정은 Phase 3에서 처리
+```
+
+### 역할별 작업 범위
+
+**A — Vision AI / 실시간 입력 안정화**
+
+```text
+- 내장 웹캠 3~5분 E2E 테스트
+- API 서버 미기동 / 재기동 상황 테스트
+- FPS / latency / frame drop 측정
+- ENTER / EXIT 이벤트 흔들림 기록
+- docs/realtime_test.md 실험 결과 업데이트
+```
+
+**B — FastAPI / SQLite 안정화**
+
+```text
+- POST /events 저장 안정성 검증
+- PUT /status/current 저장 안정성 검증
+- GET /status/current 조회 안정성 검증
+- API validation / error response 정리
+- CORS / React 개발 서버 연동 확인
+- 필요 시 /events 조회 최적화 검토
+```
+
+**C — React Dashboard 안정화 + USB 웹캠 테스트**
+
+```text
+- 실제 API 기반 화면 안정화
+- loading / error / empty 상태 처리 개선
+- KPI 문구 정확화
+- 이벤트 기록 / 통계 화면 완성도 개선
+- USB 웹캠 연결 확인 (camera index 0 / 1 / 2 테스트)
+- USB 웹캠 3~5분 E2E 실행 및 결과 PM 공유
+- React build 통과 확인
+```
+
+### RTSP / IP 카메라 기준
+
+```text
+- 장비 미확보 상태이므로 Phase 2.5에서는 실측 테스트 보류
+- 장비 확보 시 연결 성공 또는 실패 원인 문서화
+- 실제 RTSP URL / 계정 / 비밀번호는 문서나 PR에 포함하지 않음
+- RTSPSource 구현 구조는 유지
+```
+
+### Phase 2.5 완료 기준
+
+```text
+1. 내장 웹캠 기반 end-to-end 흐름이 3~5분 이상 안정적으로 동작한다.
+2. USB 웹캠 환경에서도 동일 흐름을 테스트한다.
+3. 이벤트가 FastAPI와 SQLite를 거쳐 React에 표시된다.
+4. CurrentStatus가 React KPI와 zone 상태에 반영된다.
+5. API 서버 장애 상황에서 화면과 pipeline이 크게 깨지지 않는다.
+6. 실행 방법과 테스트 결과가 docs/realtime_test.md에 기록된다.
+7. 중간평가에서 시연 가능한 수준의 대시보드 v1이 준비된다.
+```
+
+### Phase 2.5 제외 범위
+
+```text
+- WebSocket 실시간 push
+- ReID / 낙상 / 충돌 감지
+- Zone Settings FastAPI 연동
+- 다중 카메라 고도화
+- Docker Compose
+```
 
 ### 산출물
 
-- 실시간 운영 대시보드 v1
-- 실시간 서비스 MVP
-- 중간평가용 결과물
+- 내장 웹캠 / USB 웹캠 기반 E2E 안정화 결과
+- React 운영 대시보드 v1
+- `docs/realtime_test.md` Phase 2.5 테스트 기록
+- 중간평가용 시연 결과물
 
 ---
 
