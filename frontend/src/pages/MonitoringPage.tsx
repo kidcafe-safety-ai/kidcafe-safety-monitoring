@@ -1,14 +1,25 @@
 import { AlertTriangle, Clock3, ShieldAlert, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { getDashboardSummary, getRecentEvents, getZoneStatus } from "../api/eventsApi";
+import { getCurrentStatus, getDashboardSummary, getRecentEvents } from "../api/eventsApi";
 import KpiCard from "../components/KpiCard";
 import RecentEventList from "../components/RecentEventList";
 import ZoneStatusPanel from "../components/ZoneStatusPanel";
 import { usePolling } from "../hooks/usePolling";
 import type { DashboardSummary, SafetyEvent, ZoneStatus } from "../types/event";
+import type { CurrentStatus } from "../types/status";
+
+function getZonesFromCurrentStatus(currentStatus: CurrentStatus): ZoneStatus[] {
+  return currentStatus.zone_occupancy.map((zone) => ({
+    zone_id: zone.zone_id,
+    zone_name: zone.zone_name,
+    current_count: zone.current_count,
+    risk_level: zone.risk_level,
+  }));
+}
 
 export default function MonitoringPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [activeTrackCount, setActiveTrackCount] = useState<number | null>(null);
   const [recentEvents, setRecentEvents] = useState<SafetyEvent[]>([]);
   const [zones, setZones] = useState<ZoneStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -19,21 +30,26 @@ export default function MonitoringPage() {
   });
 
   const hasApiError = apiErrors.recentEvents || apiErrors.summary || apiErrors.zones;
+  const dangerZoneOccupancy = zones
+    .filter((zone) => zone.risk_level === "HIGH")
+    .reduce((sum, zone) => sum + zone.current_count, 0);
+  const recentEventCount = recentEvents.length;
 
   const loadDashboardData = useCallback(async () => {
-    const [summaryData, eventData, zoneData] = await Promise.all([
+    const [summaryData, eventData, currentStatusData] = await Promise.all([
       getDashboardSummary(),
       getRecentEvents(),
-      getZoneStatus(),
+      getCurrentStatus(),
     ]);
 
     setSummary(summaryData.data);
     setRecentEvents(eventData.data);
-    setZones(zoneData.data);
+    setActiveTrackCount(currentStatusData.data.active_track_count);
+    setZones(getZonesFromCurrentStatus(currentStatusData.data));
     setApiErrors({
       recentEvents: eventData.status === "error",
       summary: summaryData.status === "error",
-      zones: zoneData.status === "error",
+      zones: currentStatusData.status === "error",
     });
     setIsLoading(false);
   }, []);
@@ -56,12 +72,13 @@ export default function MonitoringPage() {
     }));
   }, []);
 
-  const loadZones = useCallback(async () => {
-    const zoneData = await getZoneStatus();
-    setZones(zoneData.data);
+  const loadCurrentStatus = useCallback(async () => {
+    const currentStatusData = await getCurrentStatus();
+    setActiveTrackCount(currentStatusData.data.active_track_count);
+    setZones(getZonesFromCurrentStatus(currentStatusData.data));
     setApiErrors((previous) => ({
       ...previous,
-      zones: zoneData.status === "error",
+      zones: currentStatusData.status === "error",
     }));
   }, []);
 
@@ -71,7 +88,7 @@ export default function MonitoringPage() {
 
   usePolling(loadRecentEvents, 3000, !isLoading);
   usePolling(loadSummary, 10000, !isLoading);
-  usePolling(loadZones, 2000, !isLoading);
+  usePolling(loadCurrentStatus, 2000, !isLoading);
 
   return (
     <main className="page">
@@ -97,7 +114,7 @@ export default function MonitoringPage() {
           icon={Users}
           status="실시간 기준"
           title="현재 감지 인원"
-          value={summary?.active_tracks ?? "-"}
+          value={activeTrackCount ?? "-"}
         />
         <KpiCard
           icon={AlertTriangle}
@@ -109,13 +126,13 @@ export default function MonitoringPage() {
           icon={ShieldAlert}
           status="주의 필요"
           title="위험구역 체류 인원"
-          value={summary?.danger_zone_occupancy ?? "-"}
+          value={isLoading ? "-" : dangerZoneOccupancy}
         />
         <KpiCard
           icon={Clock3}
           status="최근 10분"
           title="최근 이벤트 수"
-          value={summary?.recent_event_count ?? "-"}
+          value={isLoading ? "-" : recentEventCount}
         />
       </section>
 

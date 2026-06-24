@@ -311,31 +311,13 @@ function normalizeCurrentStatus(value: unknown): CurrentStatus {
   };
 }
 
-function countDangerZoneOccupancy(zoneOccupancy: ZoneOccupancy[]) {
-  return zoneOccupancy
-    .filter((zone) => zone.risk_level === "HIGH")
-    .reduce((sum, zone) => sum + zone.current_count, 0);
-}
-
-function buildDashboardSummary(
-  summary: SummaryStats,
-  currentStatus: CurrentStatus,
-  recentEvents: SafetyEvent[],
-): DashboardSummary {
+function buildDashboardSummary(summary: SummaryStats): DashboardSummary {
   return {
-    active_tracks: currentStatus.active_track_count,
+    active_tracks: 0,
     today_event_count: summary.today_event_count ?? summary.total_events ?? 0,
-    danger_zone_occupancy: countDangerZoneOccupancy(
-      currentStatus.zone_occupancy,
-    ),
-    recent_event_count: recentEvents.length,
+    danger_zone_occupancy: 0,
+    recent_event_count: 0,
   };
-}
-
-function firstErrorMessage(...results: LoadedApiData<unknown>[]) {
-  return (
-    results.find((result) => result.errorMessage !== null)?.errorMessage ?? null
-  );
 }
 
 export async function getEvents(): Promise<ApiResponse<SafetyEvent[]>> {
@@ -399,32 +381,11 @@ export async function getDashboardSummary(): Promise<ApiResponse<DashboardSummar
     return successResponse(mockSummary);
   }
 
-  const [summaryResult, statusResult, recentResult] = await Promise.all([
-    loadApiData("/summary", normalizeSummaryStats, {}),
-    loadApiData(
-      "/status/current",
-      normalizeCurrentStatus,
-      createEmptyCurrentStatus(),
-    ),
-    loadApiData(
-      `/events/recent?limit=${RECENT_EVENT_LIMIT}`,
-      normalizeSafetyEvents,
-      [],
-    ),
-  ]);
-  const dashboardSummary = buildDashboardSummary(
-    summaryResult.data,
-    statusResult.data,
-    recentResult.data,
-  );
-  const errorMessage = firstErrorMessage(
-    summaryResult,
-    statusResult,
-    recentResult,
-  );
+  const summaryResult = await loadApiData("/summary", normalizeSummaryStats, {});
+  const dashboardSummary = buildDashboardSummary(summaryResult.data);
 
-  if (errorMessage !== null) {
-    return fallbackResponse(dashboardSummary, errorMessage);
+  if (summaryResult.errorMessage !== null) {
+    return fallbackResponse(dashboardSummary, summaryResult.errorMessage);
   }
 
   return successResponse(dashboardSummary);

@@ -230,3 +230,195 @@ React:        VITE_API_MODE=api VITE_API_BASE_URL=http://localhost:8000 npm run 
 
 - 없음. 이벤트 흔들림(ENTER→EXIT 빈번 반복)은 zone 경계 통과 동작이며 Phase 2.5 debounce 검토 대상.
 - 장시간 안정성 검증은 Phase 2.5 P0 항목으로 이동.
+
+---
+
+## 2026-06-24 — Phase 2.5 React Dashboard API mode 표시 검증
+
+### 테스트 정보
+
+- 날짜: 2026-06-24
+- 작성자: 현수 (C / Frontend)
+- 브랜치: feature/react-dashboard
+- 입력 소스: FastAPI 테스트 데이터 주입
+- 모델: 해당 없음 (React Dashboard 표시 검증)
+- 실행 명령어:
+  ```powershell
+  $env:VITE_API_MODE='api'
+  $env:VITE_API_BASE_URL='http://localhost:8000'
+  npm.cmd run dev --prefix frontend -- --host 127.0.0.1 --port 3000 --strictPort
+  ```
+
+### 검증 대상
+
+- `GET /status/current`
+  - 현재 감지 인원 KPI
+  - zone 상태 패널
+  - 2초 polling
+- `GET /events/recent`
+  - 최근 이벤트 목록
+  - 최근 이벤트 수 KPI
+  - 3초 polling
+- `GET /summary`
+  - 오늘 발생 이벤트 수 KPI
+  - 10초 polling
+- `GET /events`
+  - 이벤트 기록 / 통계 화면의 차트와 테이블
+
+### 적용된 React Dashboard 수정 확인
+
+- 현재 감지 인원 KPI는 `summary.active_tracks` 대신 `/status/current` 2초 polling state인 `activeTrackCount`를 직접 사용하도록 정리했다.
+- zone 상태는 `/status/current.zone_occupancy` 기준으로 표시한다.
+- `ZoneStatusPanel`은 zone 배열이 비어 있으면 `현재 감지된 구역 상태가 없습니다.` empty 문구를 표시한다.
+- `getDashboardSummary()`는 `/summary`만 호출하도록 축소했다.
+- 위험구역 체류 인원 KPI는 `zones` state에서 `risk_level === "HIGH"`인 구역의 `current_count` 합계로 계산한다.
+- 최근 이벤트 수 KPI는 `recentEvents.length`를 사용한다.
+- `/summary` 10초 polling 시 `/status/current`, `/events/recent`가 추가 호출되는 중복 구조를 제거했다.
+
+### 테스트 데이터
+
+`PUT /status/current`
+
+```json
+{
+  "source": "unknown",
+  "frame_number": 2402,
+  "active_track_count": 2,
+  "zone_occupancy": [
+    {
+      "zone_id": "codex_high_zone",
+      "zone_name": "E2E High Zone",
+      "current_count": 2,
+      "risk_level": "HIGH"
+    },
+    {
+      "zone_id": "codex_normal_zone",
+      "zone_name": "E2E Normal Zone",
+      "current_count": 0,
+      "risk_level": "NORMAL"
+    }
+  ]
+}
+```
+
+`POST /events`
+
+```json
+{
+  "event_id": "codex_e2e_20260624204159",
+  "timestamp": "00:01:23.456",
+  "event_type": "DWELL",
+  "track_id": 9001,
+  "zone_id": "codex_high_zone",
+  "zone_name": "E2E 테스트 위험구역",
+  "bbox": [10, 20, 110, 220],
+  "foot_point": [60, 220],
+  "frame_number": 2401,
+  "video_source": "codex_e2e",
+  "confidence": 0.99
+}
+```
+
+### API 응답 확인
+
+```text
+GET /status/current
+- active_track_count: 2
+- zone_occupancy: 2개
+- HIGH zone current_count: 2
+
+GET /events/recent?limit=5
+- data: 1건
+- event_type: DWELL
+- track_id: 9001
+- zone_id: codex_high_zone
+
+GET /events
+- total: 1
+- count: 1
+
+GET /summary
+- total_events: 1
+- dwell_count: 1
+- total_tracks: 1
+- video_count: 1
+```
+
+### React 표시 확인
+
+Monitoring 화면:
+
+```text
+현재 감지 인원: 2
+오늘 발생 이벤트 수: 1
+위험구역 체류 인원: 2
+최근 이벤트 수: 1
+최근 이벤트: 1건 / DWELL / Track 9001 / codex_high_zone
+위험구역 상태: 2개 구역
+- E2E High Zone / codex_high_zone / 2 / HIGH
+- E2E Normal Zone / codex_normal_zone / 0 / NORMAL
+```
+
+이벤트 기록 / 통계 화면:
+
+```text
+이벤트 타입별 발생 수
+- ENTER: 0
+- DWELL: 1
+- EXIT: 0
+
+이벤트 테이블
+- 1건
+- 00:01:23.456 / DWELL / 9001 / codex_high_zone / 2401 / codex_e2e
+```
+
+### Network polling 확인
+
+실제 API mode React 화면에서 확인한 steady-state 호출 주기:
+
+```text
+GET /status/current: 약 2초
+GET /events/recent?limit=5: 약 3초
+GET /summary: 약 10초
+GET /events: 이벤트 기록 / 통계 화면 진입 시 호출
+```
+
+`/summary` 10초 polling 시점에 `/status/current`, `/events/recent`가 추가로 한 번 더 튀던 중복 호출은 제거됐다. 10초 지점에 `/status/current`가 같이 보이는 경우는 2초 polling 주기가 10초 배수와 겹친 정상 호출이다.
+
+### API 실패 / fallback 확인
+
+닫힌 API base URL(`http://localhost:8999`)을 쓰는 별도 React dev server로 실패 상황을 확인했다.
+
+```text
+요청 실패: net::ERR_CONNECTION_REFUSED
+화면 표시:
+- API 연결에 실패했습니다. mock 또는 기본값으로 화면을 표시합니다.
+- 현재 감지 인원: 0
+- 오늘 발생 이벤트 수: 0
+- 위험구역 체류 인원: 0
+- 최근 이벤트 수: 0
+- 최근 이벤트: 0건
+- 위험구역 상태: 0개 구역
+- 현재 감지된 구역 상태가 없습니다.
+```
+
+### 상태별 확인
+
+- loading: 초기 요청 중 `데이터를 불러오는 중입니다.` banner 표시 확인
+- error: API 실패 banner 표시 확인
+- empty: 이벤트 없음 / zone 없음 상태에서 empty 문구 표시 확인
+- success: 테스트 current status와 이벤트가 React 화면에 실제 표시됨
+
+### 결과
+
+- 성공
+- FastAPI → SQLite → React Dashboard 실제 표시 흐름 확인
+- CurrentStatus가 현재 감지 인원 KPI와 zone 상태에 반영됨
+- 최근 이벤트와 이벤트 기록 화면이 실제 API 데이터 기준으로 표시됨
+- `/summary`는 Monitoring 화면의 오늘 발생 이벤트 수 KPI에 반영됨
+- 이벤트 기록 / 통계 화면의 차트와 테이블은 현재 `/events` 데이터를 기준으로 구성됨
+
+### 이슈
+
+- 테스트로 주입한 `codex_e2e_20260624204159` 이벤트와 `unknown` current status는 SQLite에 남아 있다. 필요하면 별도 cleanup 또는 테스트 DB 분리 방식을 검토한다.
+- 이벤트 기록 / 통계 화면이 반드시 `/summary` 기반이어야 한다면, 현재 `/events` 기반 차트/테이블 구조는 후속 논의가 필요하다.

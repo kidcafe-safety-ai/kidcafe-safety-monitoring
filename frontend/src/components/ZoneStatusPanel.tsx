@@ -12,20 +12,24 @@ export default function ZoneStatusPanel({ zones }: ZoneStatusPanelProps) {
         <span>{zones.length}개 구역</span>
       </div>
       <div className="zone-list">
-        {zones.map((zone) => (
-          <article className="zone-item" key={zone.zone_id}>
-            <div>
-              <strong>{zone.zone_name}</strong>
-              <p>{zone.zone_id}</p>
-            </div>
-            <div className="zone-count">
-              <strong>{zone.current_count}</strong>
-              <span className={`risk-badge risk-${zone.risk_level?.toLowerCase()}`}>
-                {zone.risk_level ?? "NORMAL"}
-              </span>
-            </div>
-          </article>
-        ))}
+        {zones.length === 0 ? (
+          <div className="state-banner empty">현재 감지된 구역 상태가 없습니다.</div>
+        ) : (
+          zones.map((zone) => (
+            <article className="zone-item" key={zone.zone_id}>
+              <div>
+                <strong>{zone.zone_name}</strong>
+                <p>{zone.zone_id}</p>
+              </div>
+              <div className="zone-count">
+                <strong>{zone.current_count}</strong>
+                <span className={`risk-badge risk-${zone.risk_level?.toLowerCase()}`}>
+                  {zone.risk_level ?? "NORMAL"}
+                </span>
+              </div>
+            </article>
+          ))
+        )}
       </div>
     </section>
   );
