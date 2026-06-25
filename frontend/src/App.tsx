@@ -1,10 +1,27 @@
-import { BarChart3, MapPinned, Monitor, Moon, Sun } from "lucide-react";
+import {
+  BarChart3,
+  Bell,
+  FileText,
+  MapPinned,
+  Monitor,
+  Moon,
+  Settings,
+  Sun,
+} from "lucide-react";
 import { useEffect, useState } from "react";
+import SystemSettingsModal from "./components/SystemSettingsModal";
+import AlertHistoryPage from "./pages/AlertHistoryPage";
 import EventsPage from "./pages/EventsPage";
 import MonitoringPage from "./pages/MonitoringPage";
+import ReportPage from "./pages/ReportPage";
 import ZoneSettingsPage from "./pages/ZoneSettingsPage";
 
-type PageKey = "monitoring" | "events" | "zone-settings";
+type PageKey =
+  | "monitoring"
+  | "alert-history"
+  | "events"
+  | "report"
+  | "zone-settings";
 type Theme = "light" | "dark";
 
 const THEME_STORAGE_KEY = "kidcafe-dashboard-theme";
@@ -17,6 +34,7 @@ function getInitialTheme(): Theme {
 export default function App() {
   const [page, setPage] = useState<PageKey>("monitoring");
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const [isSystemSettingsOpen, setIsSystemSettingsOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -27,8 +45,12 @@ export default function App() {
   const ActivePage =
     page === "monitoring"
       ? MonitoringPage
+      : page === "alert-history"
+        ? AlertHistoryPage
       : page === "events"
         ? EventsPage
+      : page === "report"
+        ? ReportPage
         : ZoneSettingsPage;
 
   return (
@@ -51,12 +73,28 @@ export default function App() {
             <span>실시간 모니터링</span>
           </button>
           <button
+            className={page === "alert-history" ? "active" : ""}
+            onClick={() => setPage("alert-history")}
+            type="button"
+          >
+            <Bell size={18} strokeWidth={2.2} />
+            <span>알림 기록</span>
+          </button>
+          <button
             className={page === "events" ? "active" : ""}
             onClick={() => setPage("events")}
             type="button"
           >
             <BarChart3 size={18} strokeWidth={2.2} />
             <span>이벤트 기록 / 통계</span>
+          </button>
+          <button
+            className={page === "report" ? "active" : ""}
+            onClick={() => setPage("report")}
+            type="button"
+          >
+            <FileText size={18} strokeWidth={2.2} />
+            <span>리포트 생성</span>
           </button>
           <button
             className={page === "zone-settings" ? "active" : ""}
@@ -83,8 +121,23 @@ export default function App() {
         </div>
       </aside>
       <div className="content">
+        <div className="content-toolbar">
+          <button
+            aria-label="시스템 설정 열기"
+            className="settings-icon-button"
+            onClick={() => setIsSystemSettingsOpen(true)}
+            title="시스템 설정"
+            type="button"
+          >
+            <Settings size={19} strokeWidth={2.2} />
+          </button>
+        </div>
         <ActivePage />
       </div>
+      <SystemSettingsModal
+        isOpen={isSystemSettingsOpen}
+        onClose={() => setIsSystemSettingsOpen(false)}
+      />
     </div>
   );
 }
