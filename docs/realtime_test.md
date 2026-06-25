@@ -1,11 +1,13 @@
 # Realtime Test Log
 
-Phase 2 실시간 입력 실험 기록 문서.
+Phase 2 이후 실시간 입력 실험 기록 문서.
 테스트마다 아래 양식을 복사해서 날짜 기준으로 추가한다.
 
 ---
 
 ## 양식
+
+### Phase 2 기본 양식
 
 ```md
 ## YYYY-MM-DD — [입력 소스] [모델] 테스트
@@ -39,6 +41,59 @@ Phase 2 실시간 입력 실험 기록 문서.
 - 문제:
 - 원인 추정:
 - 다음 액션:
+```
+
+### Phase 2.5 안정화 테스트 양식
+
+```md
+## YYYY-MM-DD — Phase 2.5 realtime stability test
+
+### 테스트 정보
+
+- 날짜:
+- 담당자:
+- 브랜치:
+- 입력 소스: webcam (내장 / USB)
+- camera index:
+- 활성 zone:
+- 해상도:
+- 모델:
+- device:
+- 실행 시간 (분):
+- frame limit:
+
+### 실행 명령어
+
+.venv/bin/python -m src.main \
+  --source-type webcam \
+  --source <index> \
+  --api-url http://localhost:8000 \
+  --model yolo26n.pt \
+  --infer-device auto \
+  --width 640 --height 480 \
+  --frames-limit <N> \
+  --show
+
+### 측정 결과
+
+- 평균 FPS:
+- frame drop:
+- 이벤트 수 (ENTER / EXIT):
+- ENTER / EXIT 흔들림 여부:
+- API 전송:
+- SQLite 저장:
+- React 표시:
+- API 재기동 테스트:
+
+### 결과
+
+- 성공 / 부분 성공 / 실패:
+
+### 이슈
+
+- 문제:
+- 원인:
+- 후속 조치:
 ```
 
 ---

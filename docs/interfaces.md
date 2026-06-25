@@ -264,7 +264,7 @@ GET /events          # 이벤트 목록 (필터/페이지 진입 시)
 - Event → `POST /events` 전송
 - Current Status → `PUT /status/current` 전송
 - React polling 기반 실시간 갱신
-- WebSocket은 Phase 2.5 이후 검토
+- WebSocket은 Phase 3 이후 검토
 
 ---
 
@@ -346,11 +346,11 @@ mock → API 교체 시 KPI 카드별 데이터 소스를 위 기준으로 매�
 | `GET /summary` | 10초 |
 | `GET /events` | 페이지 진입 또는 필터 변경 시 |
 
-WebSocket은 Phase 2에서 제외하며 Phase 2.5 이후 검토한다.
+WebSocket은 Phase 2.5에서도 제외하며 Phase 3 이후 검토한다.
 
 ---
 
-## 8. Phase 2 InputSource 인터페이스 초안
+## 8. Phase 2 InputSource 인터페이스
 
 Phase 2에서는 파일 영상, 웹캠, RTSP/IP 카메라 입력을 동일한 Vision AI 파이프라인으로 처리하기 위해 입력 소스를 추상화한다.
 

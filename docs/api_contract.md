@@ -534,7 +534,7 @@ C 역할은 WebSocket 대신 polling으로 실시간성을 확보한다.
 | `GET /summary` | 10초 |
 | `GET /events` | 페이지 진입 또는 필터 변경 시 |
 
-WebSocket은 Phase 2에서 제외하고 Phase 2.5 이후 검토한다.
+WebSocket은 Phase 2.5에서도 제외하며 Phase 3 이후 검토한다.
 
 ---
 
