@@ -96,6 +96,69 @@ Phase 2 이후 실시간 입력 실험 기록 문서.
 - 후속 조치:
 ```
 
+### Phase 2.5 backend API smoke test 양식
+
+이 양식은 B 역할(FastAPI / SQLite) 점검용이다. USB 웹캠 실측, React 화면 확인, Docker 실행 확인은 필수 항목이 아니며 직접 확인하지 않았으면 `N/A`로 기록한다.
+
+````md
+## YYYY-MM-DD — Phase 2.5 backend API smoke test
+
+### 테스트 정보
+
+- 날짜:
+- 담당자:
+- 브랜치:
+- FastAPI 실행 명령어:
+- DB 파일 경로:
+- 테스트 DB 환경변수:
+
+### 실행 명령어
+
+PowerShell 예시:
+
+```powershell
+$env:KIDCAFE_DB_PATH = "<temp-or-local-test-db-path>"
+uvicorn src.api.main:app --reload --port 8000
+curl.exe http://localhost:8000/health
+curl.exe http://localhost:8000/zones
+curl.exe http://localhost:8000/summary
+curl.exe http://localhost:8000/status/current
+curl.exe http://localhost:8000/events/recent
+```
+
+`POST /events`, `PUT /status/current`는 curl.exe, Swagger, 또는 pytest로 확인한다.
+
+### API smoke 결과
+
+- GET /health:
+- GET /zones:
+- POST /events:
+- GET /events:
+- GET /events/recent:
+- GET /summary:
+- PUT /status/current:
+- GET /status/current:
+- CORS 개발 origin 확인:
+- React polling 확인 여부: N/A 또는 확인 결과
+
+### Git 포함 제외 확인
+
+- `outputs/` 산출물 포함 여부:
+- DB 파일 포함 여부:
+- `.env` 포함 여부:
+- `*.pt` 포함 여부:
+
+### 결과
+
+- 성공 / 부분 성공 / 실패:
+
+### 이슈
+
+- 문제:
+- 원인:
+- 후속 조치:
+````
+
 ---
 
 ## 기록
