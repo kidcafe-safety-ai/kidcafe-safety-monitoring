@@ -80,6 +80,21 @@ function createEmptyCurrentStatus(): CurrentStatus {
   return { ...emptyCurrentStatus, zone_occupancy: [] };
 }
 
+function createMockCurrentStatus(): CurrentStatus {
+  return {
+    source: "mock",
+    frame_number: 0,
+    active_track_count: mockSummary.active_tracks,
+    zone_occupancy: mockZoneStatus.map((zone) => ({
+      zone_id: zone.zone_id,
+      zone_name: zone.zone_name,
+      current_count: zone.current_count,
+      risk_level: zone.risk_level ?? "NORMAL",
+    })),
+    updated_at: null,
+  };
+}
+
 function successResponse<T>(data: T): ApiResponse<T> {
   return {
     status: "success",
@@ -360,7 +375,7 @@ export async function getRecentEvents(
 
 export async function getCurrentStatus(): Promise<ApiResponse<CurrentStatus>> {
   if (!isApiMode()) {
-    return successResponse(createEmptyCurrentStatus());
+    return successResponse(createMockCurrentStatus());
   }
 
   const result = await loadApiData(

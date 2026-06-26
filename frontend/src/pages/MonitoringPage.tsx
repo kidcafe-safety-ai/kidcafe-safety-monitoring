@@ -33,6 +33,8 @@ export default function MonitoringPage() {
   const dangerZoneOccupancy = zones
     .filter((zone) => zone.risk_level === "HIGH")
     .reduce((sum, zone) => sum + zone.current_count, 0);
+  const dangerZoneOccupancyValue =
+    apiErrors.zones && zones.length === 0 ? "-" : dangerZoneOccupancy;
   const recentEventCount = recentEvents.length;
 
   const loadDashboardData = useCallback(async () => {
@@ -44,8 +46,10 @@ export default function MonitoringPage() {
 
     setSummary(summaryData.data);
     setRecentEvents(eventData.data);
-    setActiveTrackCount(currentStatusData.data.active_track_count);
-    setZones(getZonesFromCurrentStatus(currentStatusData.data));
+    if (currentStatusData.status !== "error") {
+      setActiveTrackCount(currentStatusData.data.active_track_count);
+      setZones(getZonesFromCurrentStatus(currentStatusData.data));
+    }
     setApiErrors({
       recentEvents: eventData.status === "error",
       summary: summaryData.status === "error",
@@ -74,8 +78,10 @@ export default function MonitoringPage() {
 
   const loadCurrentStatus = useCallback(async () => {
     const currentStatusData = await getCurrentStatus();
-    setActiveTrackCount(currentStatusData.data.active_track_count);
-    setZones(getZonesFromCurrentStatus(currentStatusData.data));
+    if (currentStatusData.status !== "error") {
+      setActiveTrackCount(currentStatusData.data.active_track_count);
+      setZones(getZonesFromCurrentStatus(currentStatusData.data));
+    }
     setApiErrors((previous) => ({
       ...previous,
       zones: currentStatusData.status === "error",
@@ -126,7 +132,7 @@ export default function MonitoringPage() {
           icon={ShieldAlert}
           status="주의 필요"
           title="위험구역 체류 인원"
-          value={isLoading ? "-" : dangerZoneOccupancy}
+          value={isLoading ? "-" : dangerZoneOccupancyValue}
         />
         <KpiCard
           icon={Clock3}
