@@ -1,0 +1,4 @@
+# Minimal runtime dependencies for the FastAPI/SQLite backend container.
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+pydantic==2.7.1
