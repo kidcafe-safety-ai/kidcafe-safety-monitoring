@@ -99,6 +99,9 @@ Phase 2 이후 실시간 입력 실험 기록 문서.
 ### Phase 2.5 backend API smoke test 양식
 
 이 양식은 B 역할(FastAPI / SQLite) 점검용이다. USB 웹캠 실측, React 화면 확인, Docker 실행 확인은 필수 항목이 아니며 직접 확인하지 않았으면 `N/A`로 기록한다.
+기존 `tests/test_api_basic.py`와 신규 `tests/test_api_stability.py`를 함께 사용해 Phase 2.5 B 역할의 Backend API smoke 범위를 확인한다.
+`tests/test_api_basic.py`는 `POST /events`, `GET /events`, `GET /events/recent`, `GET /summary`, `GET /zones`, `PUT /status/current`, `GET /status/current` 기본 동작을 회귀 확인한다.
+`tests/test_api_stability.py`는 CORS preflight, FastAPI validation error 응답 형식, CurrentStatus의 `zone_name` optional 처리, `KIDCAFE_DB_PATH` 기반 테스트 DB 분리 기준을 보강 확인한다.
 
 ````md
 ## YYYY-MM-DD — Phase 2.5 backend API smoke test
@@ -139,6 +142,9 @@ curl.exe http://localhost:8000/events/recent
 - PUT /status/current:
 - GET /status/current:
 - CORS 개발 origin 확인:
+- FastAPI validation error 응답 형식:
+- CurrentStatus zone_name optional 처리:
+- 테스트 DB 분리:
 - React polling 확인 여부: N/A 또는 확인 결과
 
 ### Git 포함 제외 확인

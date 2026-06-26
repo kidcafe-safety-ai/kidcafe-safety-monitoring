@@ -78,4 +78,14 @@ def test_status_current_accepts_optional_zone_name(client):
         "updated": True,
     }
     assert get_response.status_code == 200
-    assert get_response.json()["data"] == payload
+    data = get_response.json()["data"]
+    zone_occupancy = data["zone_occupancy"]
+
+    assert data["source"] == "camera_optional_zone_name"
+    assert data["frame_number"] == 10
+    assert data["active_track_count"] == 1
+    assert len(zone_occupancy) == 1
+    assert zone_occupancy[0]["zone_id"] == "playground_bottom_right"
+    assert zone_occupancy[0]["zone_name"] is None
+    assert zone_occupancy[0]["current_count"] == 1
+    assert zone_occupancy[0]["risk_level"] == "HIGH"
