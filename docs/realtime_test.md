@@ -96,6 +96,75 @@ Phase 2 이후 실시간 입력 실험 기록 문서.
 - 후속 조치:
 ```
 
+### Phase 2.5 backend API smoke test 양식
+
+이 양식은 B 역할(FastAPI / SQLite) 점검용이다. USB 웹캠 실측, React 화면 확인, Docker 실행 확인은 필수 항목이 아니며 직접 확인하지 않았으면 `N/A`로 기록한다.
+기존 `tests/test_api_basic.py`와 신규 `tests/test_api_stability.py`를 함께 사용해 Phase 2.5 B 역할의 Backend API smoke 범위를 확인한다.
+`tests/test_api_basic.py`는 `POST /events`, `GET /events`, `GET /events/recent`, `GET /summary`, `GET /zones`, `PUT /status/current`, `GET /status/current` 기본 동작을 회귀 확인한다.
+`tests/test_api_stability.py`는 CORS preflight, FastAPI validation error 응답 형식, CurrentStatus의 `zone_name` optional 처리, `KIDCAFE_DB_PATH` 기반 테스트 DB 분리 기준을 보강 확인한다.
+
+````md
+## YYYY-MM-DD — Phase 2.5 backend API smoke test
+
+### 테스트 정보
+
+- 날짜:
+- 담당자:
+- 브랜치:
+- FastAPI 실행 명령어:
+- DB 파일 경로:
+- 테스트 DB 환경변수:
+
+### 실행 명령어
+
+PowerShell 예시:
+
+```powershell
+$env:KIDCAFE_DB_PATH = "<temp-or-local-test-db-path>"
+uvicorn src.api.main:app --reload --port 8000
+curl.exe http://localhost:8000/health
+curl.exe http://localhost:8000/zones
+curl.exe http://localhost:8000/summary
+curl.exe http://localhost:8000/status/current
+curl.exe http://localhost:8000/events/recent
+```
+
+`POST /events`, `PUT /status/current`는 curl.exe, Swagger, 또는 pytest로 확인한다.
+
+### API smoke 결과
+
+- GET /health:
+- GET /zones:
+- POST /events:
+- GET /events:
+- GET /events/recent:
+- GET /summary:
+- PUT /status/current:
+- GET /status/current:
+- CORS 개발 origin 확인:
+- FastAPI validation error 응답 형식:
+- CurrentStatus zone_name optional 처리:
+- 테스트 DB 분리:
+- React polling 확인 여부: N/A 또는 확인 결과
+
+### Git 포함 제외 확인
+
+- `outputs/` 산출물 포함 여부:
+- DB 파일 포함 여부:
+- `.env` 포함 여부:
+- `*.pt` 포함 여부:
+
+### 결과
+
+- 성공 / 부분 성공 / 실패:
+
+### 이슈
+
+- 문제:
+- 원인:
+- 후속 조치:
+````
+
 ---
 
 ## 기록
@@ -477,3 +546,189 @@ GET /events: 이벤트 기록 / 통계 화면 진입 시 호출
 
 - 테스트로 주입한 `codex_e2e_20260624204159` 이벤트와 `unknown` current status는 SQLite에 남아 있다. 필요하면 별도 cleanup 또는 테스트 DB 분리 방식을 검토한다.
 - 이벤트 기록 / 통계 화면이 반드시 `/summary` 기반이어야 한다면, 현재 `/events` 기반 차트/테이블 구조는 후속 논의가 필요하다.
+
+---
+
+## 2026-06-25 — Phase 2.5 webcam E2E 안정화 테스트
+
+### 목적
+
+Phase 2.0에서 성공한 webcam E2E 흐름이 Phase 2.5 기준으로 반복 실행 가능한지 확인한다.
+
+### 통과 기준
+
+- 300프레임 smoke test 정상 종료
+- 2700프레임 장시간 테스트 정상 종료
+- API 전송 / SQLite 저장 / React 표시 확인
+- API 장애 시 pipeline 크래시 없음
+
+### 테스트 정보
+
+- 날짜: 2026-06-25
+- 작성자: 정종민 (A / Vision AI)
+- 브랜치: test/phase-2-5-realtime-stability
+- 입력 소스: webcam 내장 (device=0)
+- 해상도: 640x480
+- 모델: yolo26n.pt
+- device: mps (auto 선택, Apple Silicon)
+- zones: data/zones/sample.json (zone: playground_bottom_right)
+
+### 실행 명령어
+
+```bash
+# smoke test
+.venv/bin/python -m src.main \
+  --source-type webcam --source 0 \
+  --api-url http://localhost:8000 \
+  --model yolo26n.pt --infer-device auto \
+  --width 640 --height 480 --frames-limit 300 --show
+
+# 장시간 안정화 테스트
+.venv/bin/python -m src.main \
+  --source-type webcam --source 0 \
+  --api-url http://localhost:8000 \
+  --model yolo26n.pt --infer-device auto \
+  --width 640 --height 480 --frames-limit 2700 --show
+```
+
+### 환경
+
+```text
+해상도:       640x480
+CAP_FPS:      30.0
+infer_device: mps (auto 선택)
+FastAPI:      uvicorn src.api.main:app --reload --port 8000
+React:        VITE_API_MODE=api VITE_API_BASE_URL=http://localhost:8000 npm run dev
+DB:           outputs/kidcafe_events.db
+```
+
+### 1단계 — 300프레임 smoke test
+
+```text
+처리 frame: 300
+이벤트: 4건 (ENTER×2, EXIT×2)
+track_id: 1 (전체 구간 안정)
+FPS: 13.4~22.1 (steady-state ~15 FPS)
+API 전송: 정상
+SQLite 저장: 정상
+React 표시: 최근 이벤트 표시 확인
+```
+
+결과: **성공**
+
+### 2단계 — 2700프레임 장시간 안정화 테스트 (~3분)
+
+```text
+처리 frame: 2700
+이벤트: 40건
+  - ENTER: 20건
+  - EXIT:  19건
+  - DWELL:  1건 (track_id=1, frame 1709)
+FPS: 9.9~22.1 (steady-state ~14-15 FPS)
+frame read 실패 / 중단: 없음
+API 전송: 정상
+SQLite 저장: 정상 (최근 10건 확인)
+React KPI: 현재 감지 인원 변동 표시 확인
+React zone: playground_bottom_right HIGH 상태 표시 확인
+React 최근 이벤트: ENTER/EXIT/DWELL 표시 확인
+```
+
+#### /status/current 확인
+
+```json
+{
+  "source": "webcam:0",
+  "frame_number": 2693,
+  "active_track_count": 1,
+  "zone_occupancy": [
+    {
+      "zone_id": "playground_bottom_right",
+      "zone_name": "test video zone",
+      "current_count": 1,
+      "risk_level": "HIGH"
+    }
+  ]
+}
+```
+
+#### SQLite 최근 10건
+
+```text
+EXIT|40|playground_bottom_right|2663|webcam:0
+ENTER|40|playground_bottom_right|2660|webcam:0
+ENTER|1|playground_bottom_right|2653|webcam:0
+EXIT|1|playground_bottom_right|2564|webcam:0
+ENTER|1|playground_bottom_right|2496|webcam:0
+EXIT|34|playground_bottom_right|2355|webcam:0
+ENTER|34|playground_bottom_right|2353|webcam:0
+EXIT|1|playground_bottom_right|2343|webcam:0
+EXIT|34|playground_bottom_right|2342|webcam:0
+ENTER|34|playground_bottom_right|2336|webcam:0
+```
+
+결과: **성공**
+
+### 3단계 — API 장애 테스트 (600프레임)
+
+FastAPI를 실행 중 종료(Ctrl+C)한 상태에서 Vision AI 600프레임 계속 실행.
+
+```text
+API 종료 시점: frame ~210
+WARNING 발생: 4회 (PUT /status/current 실패)
+pipeline 유지: 정상 (WARNING 후 계속 진행)
+600프레임 정상 완료: 확인
+React fallback 표시: API 연결 실패 banner 표시 확인
+```
+
+WARNING 로그 예시:
+
+```text
+[WARNING] PUT /status/current 요청 실패 (API 서버 확인 필요):
+HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded
+(Caused by NewConnectionError: [Errno 61] Connection refused)
+```
+
+결과: **성공 — API 종료 시 pipeline 크래시 없음, WARNING 후 계속 진행**
+
+### 이벤트 흔들림 관찰
+
+```text
+- 화면 밖 이탈 후 재입장 시 ByteTrack이 새 track_id 할당
+  → 단명 track_id 다수 발생 (5, 23, 25, 27, 28, 33, 34, 40)
+- zone 경계 근처에서 ENTER/EXIT 빠른 반복 관찰
+  → 대표 사례: track_id=28, frame 1807~1814 (7프레임 내 ENTER/EXIT 3회 반복)
+- 원인: zone 경계 근처 foot_point 진동 + bbox 흔들림
+- Phase 3 debounce / hysteresis 고도화 근거로 기록
+```
+
+### RTSP / IP 카메라
+
+RTSP/IP 카메라 테스트는 Phase 2.5에서 수행하지 않음. 장비 미확보 상태.
+RTSPSource 구조는 코드베이스에 존재하며, 장비 확보 후 Phase 3 또는 별도 테스트에서 수행 예정.
+
+### 최소 통과 기준 체크리스트
+
+```text
+[x] 300프레임 smoke test 성공
+[x] 2700프레임 장시간 테스트 성공 (~3분)
+[x] FastAPI POST /events 수신 확인
+[x] PUT /status/current 수신 확인
+[x] SQLite 저장 확인
+[x] React 최근 이벤트 표시 확인
+[x] React KPI / zone 상태 표시 확인
+[x] API 서버 종료 시 pipeline 유지 확인
+[x] 결과 docs/realtime_test.md 기록
+```
+
+### 결과
+
+- **Phase 2.5 A 역할 안정화 테스트 성공**
+- 웹캠 → YOLO26n + ByteTrack → 이벤트 생성 → FastAPI → SQLite → React 전 구간 정상 동작 확인
+- API 장애 시 pipeline 크래시 없이 WARNING 후 계속 진행
+- 이벤트 흔들림(경계 ENTER/EXIT 반복, track_id 단명) 관찰 완료 → Phase 3 debounce 설계 입력
+
+### 후속 조치
+
+- Phase 2.5 처리: A 단독 안정화 테스트 기준 추가 수정 없음
+- Phase 3로 이관: zone 경계 debounce / hysteresis, track_id 재할당 suppression
+- C (USB 웹캠) 테스트 결과 수신 후 별도 섹션으로 추가 예정
