@@ -39,6 +39,8 @@ docs/docker_phase_2_5.md
 
 `requirements-api.txt`는 FastAPI 서버 실행에 필요한 최소 의존성만 포함한다. Vision AI 추론용 `torch`, `ultralytics`, `opencv-python`은 API 컨테이너에 포함하지 않는다.
 
+`Dockerfile.api`는 `/zones` API가 기본 zone 정의를 읽을 수 있도록 `data/zones/` 디렉터리를 컨테이너에 포함한다.
+
 ## 환경변수
 
 API 서버는 SQLite DB 경로로 `KIDCAFE_DB_PATH`를 사용한다.
