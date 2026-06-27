@@ -1,22 +1,22 @@
 # Phase 2.5 Docker 실행 가이드
 
 > **작성일**: 2026-06-27
-> **범위**: FastAPI + SQLite volume 1차 Docker 구성
+> **범위**: FastAPI + SQLite volume + React Dashboard Docker 구성
 
-이 문서는 Phase 2.5 기준 Backend Docker 실행 방법을 정리한다.
+이 문서는 Phase 2.5 기준 FastAPI와 React Dashboard Docker 실행 방법을 정리한다.
 
-이번 Docker 작업의 목적은 운영 배포가 아니라, 중간평가와 시연 전에 FastAPI API 서버 실행 환경을 재현 가능하게 만드는 것이다.
+이번 Docker 작업의 목적은 운영 배포가 아니라, 중간평가와 시연 전에 FastAPI API 서버와 React Dashboard 실행 환경을 재현 가능하게 만드는 것이다.
 
 ## 포함 범위
 
 - FastAPI API 서버 컨테이너 실행
 - SQLite DB 파일을 `outputs/` bind mount로 유지
+- React Dashboard 컨테이너 실행
+- React Dashboard API mode 연결
 - `/health`, `/status/current`, `/events/recent` API smoke 확인
 
 ## 제외 범위
 
-- React Dashboard Docker 실행
-- `frontend` Dockerfile
 - Vision AI pipeline Docker 실행
 - YOLO / torch / ultralytics / opencv 추론 환경 포함
 - USB 웹캠 passthrough
@@ -24,7 +24,7 @@
 - Event Schema / CurrentStatus / API contract 변경
 - DB schema 변경
 
-React Docker 구성은 후속 C 역할 PR에서 다룬다. Vision AI 웹캠 pipeline은 Phase 2.5 기준 로컬 실행을 유지한다.
+Vision AI 웹캠 pipeline은 Phase 2.5 기준 로컬 실행을 유지한다.
 
 ## 파일 구조
 
@@ -34,6 +34,9 @@ docker-compose.yml
 requirements-api.txt
 .dockerignore
 .env.example
+frontend/Dockerfile
+frontend/.dockerignore
+frontend/.env.example
 docs/docker_phase_2_5.md
 ```
 
@@ -41,13 +44,20 @@ docs/docker_phase_2_5.md
 
 `Dockerfile.api`는 `/zones` API가 기본 zone 정의를 읽을 수 있도록 `data/zones/` 디렉터리를 컨테이너에 포함한다.
 
+`frontend/Dockerfile`은 React Dashboard 의존성을 설치하고 build 검증 후 Vite dev server를 `0.0.0.0:3000`으로 실행한다.
+
 ## 환경변수
 
 API 서버는 SQLite DB 경로로 `KIDCAFE_DB_PATH`를 사용한다.
+React Dashboard는 Vite 환경변수로 API mode와 API base URL을 설정한다.
 
 ```env
 KIDCAFE_DB_PATH=/app/outputs/kidcafe_events.db
+VITE_API_MODE=api
+VITE_API_BASE_URL=http://localhost:8000
 ```
+
+React 코드는 브라우저에서 실행되므로 `VITE_API_BASE_URL`은 Docker service name이 아니라 호스트에서 접근 가능한 `http://localhost:8000`을 사용한다.
 
 Docker Compose는 기본적으로 `.env` 파일을 자동으로 읽는다. 로컬 실행 시 아래처럼 예시 파일을 복사해서 사용할 수 있다.
 
@@ -78,6 +88,7 @@ docker compose up --build -d
 ```
 
 API 서버는 호스트 기준 `http://localhost:8000`에서 접근한다.
+React Dashboard는 호스트 기준 `http://localhost:3000`에서 접근한다.
 
 ## Smoke Test
 
@@ -104,6 +115,8 @@ curl "http://localhost:8000/events/recent?limit=10"
 - `/health`: `status: "success"`, `healthy: true`
 - `/status/current`: current status가 없으면 `source: "unknown"` 기본값 반환
 - `/events/recent?limit=10`: 이벤트가 없으면 빈 배열 반환
+- `http://localhost:3000`: React Dashboard 접속 가능
+- React Network 요청 기준 `/status/current`, `/events/recent`, `/summary`가 `http://localhost:8000`으로 호출됨
 
 ## SQLite 저장 경로
 
