@@ -7,6 +7,8 @@
 
 이번 Docker 작업의 목적은 운영 배포가 아니라, 중간평가와 시연 전에 FastAPI API 서버와 React Dashboard 실행 환경을 재현 가능하게 만드는 것이다.
 
+> **주의**: 현재 `frontend` 컨테이너는 Vite dev server(`npm run dev`)로 실행한다. 따라서 이 구성은 Phase 2.5 시연·통합 검증용이며 운영 배포용 Docker 구성은 아니다. 운영 배포에 필요한 정적 파일 서버, reverse proxy, TLS, production 최적화는 이번 범위에 포함하지 않는다.
+
 ## 포함 범위
 
 - FastAPI API 서버 컨테이너 실행
@@ -21,6 +23,8 @@
 - YOLO / torch / ultralytics / opencv 추론 환경 포함
 - USB 웹캠 passthrough
 - RTSP 운영 안정화
+- React production 정적 파일 배포 및 reverse proxy 구성
+- TLS, 운영 도메인, production 성능 최적화
 - Event Schema / CurrentStatus / API contract 변경
 - DB schema 변경
 
@@ -44,7 +48,7 @@ docs/docker_phase_2_5.md
 
 `Dockerfile.api`는 `/zones` API가 기본 zone 정의를 읽을 수 있도록 `data/zones/` 디렉터리를 컨테이너에 포함한다.
 
-`frontend/Dockerfile`은 React Dashboard 의존성을 설치하고 build 검증 후 Vite dev server를 `0.0.0.0:3000`으로 실행한다.
+`frontend/Dockerfile`은 React Dashboard 의존성을 설치하고 build 검증 후 Vite dev server를 `0.0.0.0:3000`으로 실행한다. Docker image 생성 중 `npm run build`를 수행하지만 이는 TypeScript/Vite build 통과 여부를 확인하기 위한 단계이며, 컨테이너의 실제 runtime은 `npm run dev`이다.
 
 ## 환경변수
 
