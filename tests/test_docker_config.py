@@ -53,7 +53,47 @@ def test_compose_exposes_api_and_persists_sqlite_outputs() -> None:
     assert "KIDCAFE_DB_PATH" in compose
     assert "/app/outputs/kidcafe_events.db" in compose
     assert "./outputs:/app/outputs" in compose
-    assert "frontend" not in compose
+
+
+def test_compose_exposes_frontend_dashboard_in_api_mode() -> None:
+    compose = read_file("docker-compose.yml")
+
+    assert "frontend" in compose
+    assert "context: ./frontend" in compose
+    assert "dockerfile: Dockerfile" in compose
+    assert "3000:3000" in compose
+    assert "VITE_API_MODE" in compose
+    assert "api" in compose
+    assert "VITE_API_BASE_URL" in compose
+    assert "http://localhost:8000" in compose
+    assert "backend:8000" not in compose
+    assert "condition: service_healthy" in compose
+
+
+def test_frontend_dockerfile_runs_vite_on_port_3000() -> None:
+    dockerfile = read_file("frontend/Dockerfile")
+
+    assert "node:" in dockerfile
+    assert "npm ci" in dockerfile
+    assert "npm run build" in dockerfile
+    assert "--host" in dockerfile
+    assert "0.0.0.0" in dockerfile
+    assert "--port" in dockerfile
+    assert "3000" in dockerfile
+
+
+def test_frontend_dockerignore_excludes_node_artifacts() -> None:
+    dockerignore = read_file("frontend/.dockerignore")
+
+    required_patterns = [
+        "node_modules",
+        "dist",
+        ".vite",
+        "*.tsbuildinfo",
+        ".env",
+    ]
+    for pattern in required_patterns:
+        assert pattern in dockerignore
 
 
 def test_dockerignore_excludes_runtime_artifacts() -> None:

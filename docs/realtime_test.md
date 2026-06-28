@@ -732,3 +732,204 @@ RTSPSource 구조는 코드베이스에 존재하며, 장비 확보 후 Phase 3 
 - Phase 2.5 처리: A 단독 안정화 테스트 기준 추가 수정 없음
 - Phase 3로 이관: zone 경계 debounce / hysteresis, track_id 재할당 suppression
 - C (USB 웹캠) 테스트 결과 수신 후 별도 섹션으로 추가 예정
+
+---
+
+## 2026-06-28 — Windows USB 웹캠 Phase 2.5 반복 E2E 테스트
+
+### 테스트 정보
+
+- 날짜: 2026-06-28
+- 작성자: 현수 (C / Frontend)
+- 브랜치: `feature/react-dashboard`
+- USB 웹캠: Logitech HD Pro Webcam C920 (`OpenCV index=0`)
+- 내장 웹캠: 720p HD Camera (`OpenCV index=1`)
+- 모델: `yolo26n.pt`
+- 추론 장치: CPU (`torch 2.5.1+cpu`, CUDA 사용 불가)
+- OpenCV: 4.8.1
+- ultralytics: 8.4.75
+- zone: `data/zones/sample.json` (`playground_bottom_right`)
+- FastAPI / React: Docker Compose 실행
+
+장치 탐색 결과 C920은 1920x1080 입력이 가능한 `index=0`, 내장 카메라는 최대 1280x720인 `index=1`로 식별했다. `index=0`, `index=1` 모두 프레임 read에 성공했고 `index=2`, `index=3`은 열리지 않았다.
+
+### 실행 명령어
+
+```powershell
+# 640x480 추론 smoke test
+.\venv\Scripts\python.exe scripts\test_webcam.py `
+  --camera-device 0 --frames 90 --conf 0.4 `
+  --width 640 --height 480 --infer-device cpu
+
+# Full HD 추론 비교
+.\venv\Scripts\python.exe scripts\test_webcam.py `
+  --camera-device 0 --frames 30 --conf 0.4 `
+  --width 1920 --height 1080 --infer-device cpu
+
+# FastAPI / SQLite E2E 측정
+.\venv\Scripts\python.exe scripts\test_webcam.py `
+  --camera-device 0 --frames 300 --conf 0.4 `
+  --width 640 --height 480 --infer-device cpu `
+  --api-url http://localhost:8000
+
+# 실제 메인 파이프라인 실행
+.\venv\Scripts\python.exe -m src.main `
+  --source-type webcam --source 0 `
+  --api-url http://localhost:8000 `
+  --model yolo26n.pt --infer-device cpu `
+  --width 640 --height 480 --frames-limit 180 --conf 0.4 `
+  --output outputs/usb_c920_events.jsonl `
+  --csv-output outputs/usb_c920_events.csv `
+  --summary-output outputs/usb_c920_summary.json `
+  --overlay-output outputs/usb_c920_result.mp4
+
+# API 장애 시나리오
+.\venv\Scripts\python.exe scripts\test_webcam.py `
+  --camera-device 0 --frames 60 --conf 0.4 `
+  --width 640 --height 480 --infer-device cpu `
+  --api-url http://localhost:8999
+```
+
+### 1단계 — 원시 캡처 안정성
+
+| 요청 해상도 | 측정 프레임 | 성공 | drop | 측정 시간 | 캡처 FPS |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 640x480 | 300 | 300 | 0 | 9.93초 | 30.21 |
+| 1920x1080 | 90 | 90 | 0 | 17.92초 | 5.02 |
+
+- 두 해상도 모두 프레임 read 실패는 없었다.
+- C920은 Full HD에서 `CAP_FPS=5.0`으로 협상되어 640x480보다 캡처 속도가 크게 낮아졌다.
+- 현재 Windows CPU 환경의 실시간 추론 기본값은 640x480이 적합하다.
+
+### 2단계 — 해상도별 YOLO 추론
+
+| 해상도 | 프레임 | avg FPS | avg latency | p95 | max | drop | 이벤트 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 640x480 | 90 | 3.20 | 289.1ms | 326.8ms | 2023.5ms | 0 | 없음 |
+| 1920x1080 | 30 | 3.50 | 219.0ms | 221.8ms | 1201.0ms | 0 | ENTER 2, EXIT 2 |
+
+- 첫 640x480 실행은 모델/CPU 초기 warm-up 영향으로 평균 FPS가 낮게 측정됐다.
+- Full HD에서도 추론 및 이벤트 생성은 성공했지만 카메라 입력 자체가 5 FPS로 제한됐다.
+- 두 실행 모두 track 감지와 정상 종료를 확인했다.
+
+### 3단계 — 300프레임 FastAPI / SQLite E2E
+
+```text
+processed_frames: 300
+dropped_frames: 0
+total_elapsed_sec: 48.14
+avg_fps: 6.23
+avg_latency_ms: 153.4
+p95_latency_ms: 209.6
+max_latency_ms: 967.0
+events: ENTER 3 / DWELL 1 / EXIT 2
+API 전송: 성공 6 / 실패 0
+```
+
+API 및 DB 반영 결과:
+
+```text
+테스트 전 GET /summary total_events: 1
+테스트 후 GET /summary total_events: 7
+GET /status/current source: webcam:0
+GET /status/current frame_number: 270
+GET /status/current active_track_count: 1
+GET /status/current zone_occupancy: 1개
+SQLite webcam:0 이벤트: 6건
+SQLite 유형: ENTER 3 / DWELL 1 / EXIT 2
+```
+
+결과: **성공 — 이벤트 6건 전송 및 SQLite 저장, CurrentStatus 반영 확인**
+
+### 4단계 — 실제 `src.main` 180프레임 E2E
+
+```text
+processed_frames: 180
+events: ENTER 1 / DWELL 1 / EXIT 0
+POST /events: 2회
+PUT /status/current: 14회
+API 4xx / 5xx: 0회
+최종 CurrentStatus frame_number: 172
+최종 active_track_count: 1
+```
+
+생성 산출물:
+
+```text
+outputs/usb_c920_events.jsonl
+outputs/usb_c920_events.csv
+outputs/usb_c920_summary.json
+outputs/usb_c920_result.mp4 (925,504 bytes)
+```
+
+`usb_c920_summary.json` 결과:
+
+```json
+{
+  "total_events": 2,
+  "enter_count": 1,
+  "dwell_count": 1,
+  "exit_count": 0,
+  "total_tracks": 1,
+  "video_count": 1,
+  "avg_dwell_seconds": 5.0
+}
+```
+
+300프레임 측정과 메인 파이프라인 실행을 합친 SQLite `webcam:0` 이벤트는 총 8건이며 유형은 ENTER 4, DWELL 2, EXIT 2로 확인됐다.
+
+결과: **성공 — 실제 CLI, 2초 CurrentStatus 전송, 로컬 산출물 및 API 저장 정상**
+
+### 5단계 — API 장애 60프레임 테스트
+
+연결되지 않는 `http://localhost:8999`를 API URL로 지정했다.
+
+```text
+processed_frames: 60
+dropped_frames: 0
+events: ENTER 4 / EXIT 4
+API 전송: 성공 0 / 실패 8
+pipeline 종료 코드: 0
+avg_fps: 0.99
+avg_latency_ms: 973.4
+p95_latency_ms: 4419.1
+max_latency_ms: 9751.1
+```
+
+- API 요청 실패가 발생해도 파이프라인은 크래시 없이 60프레임을 완료했다.
+- 동기식 HTTP timeout이 이벤트마다 누적되어 처리 속도가 정상 API E2E의 6.23 FPS에서 0.99 FPS로 감소했다.
+- 기능 안정성은 통과했지만 API 장애 시 추론 성능 저하는 후속 개선 대상으로 기록한다.
+
+결과: **부분 성공 — 파이프라인 유지 성공, 장애 중 처리량 저하 확인**
+
+### React Dashboard 연결 확인
+
+```text
+GET http://localhost:3000: 200
+GET /health: 200
+GET /status/current: 200
+GET /events/recent?limit=10: 200
+GET /summary: 200
+VITE_API_MODE: api
+VITE_API_BASE_URL: http://localhost:8000
+```
+
+- React Dashboard가 실제 API mode로 제공되는 것을 확인했다.
+- 웹캠 이벤트와 CurrentStatus가 화면에서 사용하는 API 응답에 반영된 것을 확인했다.
+- 이번 자동 테스트에서는 브라우저 화면의 육안 표시 및 Network polling 캡처는 별도로 수행하지 않았다.
+
+### 결과
+
+- **USB C920 Phase 2.5 반복 테스트 성공**
+- 장치 연결, 640x480 및 Full HD 캡처, YOLO 추론, ENTER/DWELL/EXIT 생성, FastAPI 전송, SQLite 저장, CurrentStatus 갱신, React API mode 제공까지 확인했다.
+- Windows CPU 환경에서는 640x480을 기본 해상도로 사용하는 것이 적절하다.
+- Full HD는 프레임 누락은 없지만 카메라 협상 FPS가 5로 제한된다.
+
+### 이슈 및 후속 조치
+
+1. API 장애 시 동기식 요청 timeout으로 추론 FPS가 크게 감소한다.
+   - Phase 2.5에서는 크래시 없이 계속 실행되는 기준은 충족한다.
+   - 후속 개선 시 비동기 전송, 전송 queue 또는 더 짧은 connect timeout을 검토한다.
+2. zone 경계에서 짧은 ENTER/EXIT 반복이 다시 관찰됐다.
+   - 기존 Phase 3 debounce / hysteresis 개선 항목을 유지한다.
+3. UI 육안 확인과 polling 주기 캡처는 운영자 브라우저에서 한 번 더 확인한다.
