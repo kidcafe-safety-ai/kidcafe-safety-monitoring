@@ -731,7 +731,7 @@ RTSPSource 구조는 코드베이스에 존재하며, 장비 확보 후 Phase 3 
 
 - Phase 2.5 처리: A 단독 안정화 테스트 기준 추가 수정 없음
 - Phase 3로 이관: zone 경계 debounce / hysteresis, track_id 재할당 suppression
-- C (USB 웹캠) 테스트 결과 수신 후 별도 섹션으로 추가 예정
+- C (USB 웹캠) 테스트 결과: 2026-06-28 섹션에 추가 완료
 
 ---
 
@@ -747,7 +747,7 @@ RTSPSource 구조는 코드베이스에 존재하며, 장비 확보 후 Phase 3 
 - 모델: `yolo26n.pt`
 - 추론 장치: CPU (`torch 2.5.1+cpu`, CUDA 사용 불가)
 - OpenCV: 4.8.1
-- ultralytics: 8.4.75
+- ultralytics: 8.4.75 (로컬 Windows 실험 환경 기준; 저장소 기준 버전은 8.4.56)
 - zone: `data/zones/sample.json` (`playground_bottom_right`)
 - FastAPI / React: Docker Compose 실행
 
@@ -933,3 +933,75 @@ VITE_API_BASE_URL: http://localhost:8000
 2. zone 경계에서 짧은 ENTER/EXIT 반복이 다시 관찰됐다.
    - 기존 Phase 3 debounce / hysteresis 개선 항목을 유지한다.
 3. UI 육안 확인과 polling 주기 캡처는 운영자 브라우저에서 한 번 더 확인한다.
+
+---
+
+## 2026-06-28 — Phase 2.5 macOS Docker E2E 검증
+
+### 테스트 정보
+
+- 날짜: 2026-06-28
+- 작성자: 종민 (A / Vision AI)
+- 브랜치: test/phase-2-5-docker-e2e-macos
+- 환경: macOS, Docker Desktop 4.79.0, Docker Engine 29.5.3, Docker Compose v5.1.4
+- 입력 소스: Mac 내장 웹캠 (device index 0), 640×480
+- 모델: yolo26n.pt, infer-device: mps (auto)
+
+### 실행 명령어
+
+```bash
+docker compose up --build -d
+
+.venv/bin/python -m src.main \
+  --source-type webcam \
+  --source 0 \
+  --api-url http://localhost:8000 \
+  --model yolo26n.pt \
+  --infer-device auto \
+  --width 640 \
+  --height 480 \
+  --frames-limit 300 \
+  --output outputs/a_docker_events.jsonl \
+  --csv-output outputs/a_docker_events.csv \
+  --summary-output outputs/a_docker_summary.json \
+  --overlay-output outputs/a_docker_result.mp4 \
+  --show
+```
+
+### Docker 실행 결과
+
+| 항목 | 결과 |
+| --- | --- |
+| kidcafe-api | healthy |
+| frontend | Up |
+| FastAPI | http://localhost:8000 |
+| React Dashboard | http://localhost:3000 |
+
+### Vision AI 처리 결과
+
+| 항목 | 결과 |
+| --- | --- |
+| processed_frames | 300 |
+| dropped_frames | 0 |
+| avg_fps | 약 11~15 FPS |
+| events | 9건 (ENTER 5, EXIT 4) |
+| pipeline 종료 코드 | 0 (정상) |
+
+### API 확인
+
+- `PUT /status/current`: source=webcam:0, frame_number=299, active_track_count=1 전송 확인
+- `GET /events/recent`: 9건 반환 (ENTER / EXIT)
+- `GET /summary`: total_events=9 정상
+- SQLite DB: ENTER 5건, EXIT 4건 저장 확인
+
+### Docker 재시작 후 DB 유지 확인
+
+- `docker compose down` → `docker compose up -d` 후 `GET /summary`의 `total_events=9` 유지 확인
+- SQLite DB의 ENTER 5건, EXIT 4건과 CurrentStatus 유지 확인
+- bind mount(`./outputs:/app/outputs`) 구조 정상 동작 확인
+
+### 결론
+
+- 로컬 Vision AI → Docker FastAPI → SQLite → React Dashboard E2E 흐름 정상 동작
+- macOS + Docker 환경에서 Phase 2.5 재현 가능한 실행 환경 검증 완료
+- 웹캠 → YOLO + ByteTrack → 이벤트 9건 생성 → Docker FastAPI POST /events → SQLite 저장 전 구간 확인
