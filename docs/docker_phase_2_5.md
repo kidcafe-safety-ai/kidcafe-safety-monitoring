@@ -147,13 +147,13 @@ outputs/kidcafe_events.db
 
 ## Vision AI 연동 기준
 
-추후 로컬 Vision AI pipeline에서 Docker API 서버로 이벤트를 전송할 때는 아래 API URL을 사용한다.
+로컬 Vision AI pipeline에서 Docker API 서버로 이벤트를 전송할 때는 아래 API URL을 사용한다.
 
 ```bash
 --api-url http://localhost:8000
 ```
 
-이번 PR에서는 Vision AI Docker 실행과 카메라 장치 연결을 다루지 않는다.
+Vision AI는 로컬에서 실행하고 Docker API 연동만 검증한다.
 
 ## 종료
 
@@ -164,3 +164,13 @@ docker compose down
 ```
 
 SQLite DB 파일을 포함한 `outputs/`는 bind mount로 유지된다. DB 파일을 삭제하려면 로컬 `outputs/kidcafe_events.db`를 직접 정리한다.
+
+## macOS 검증 완료
+
+- 날짜: 2026-06-28
+- 환경: macOS, Docker Desktop 4.79.0, Docker Engine 29.5.3, Docker Compose v5.1.4
+- `docker compose up --build -d` 정상 실행 확인
+- kidcafe-api healthy, frontend Up 확인
+- `/health`, `/status/current`, `/events/recent`, `/summary` smoke test 통과
+- 로컬 Vision AI(mac 내장 웹캠) → Docker FastAPI → SQLite E2E 흐름 확인
+- `docker compose down` → `docker compose up -d` 후 DB 유지 확인
