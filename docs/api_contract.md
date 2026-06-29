@@ -280,13 +280,23 @@ Event는 `events` 테이블에 누적 저장하고, Current Status는 `source`�
 
 ## GET /events/recent
 
-최신 이벤트를 `id DESC` 기준으로 조회한다.
+최신 이벤트를 조회한다. `minutes`가 없으면 기존과 같이 시간 제한 없이
+`id DESC` 기준으로 조회한다. `minutes`가 있으면 Backend 현재 UTC 시각을
+기준으로 최근 N분 동안 저장된 이벤트만 조회한다.
+
+시간 필터는 영상 내부 상대 시각인 `event.timestamp`가 아니라 UTC
+`YYYY-MM-DD HH:MM:SS` 형식의 `events.created_at`에 적용한다. 범위는
+`created_at >= cutoff_utc AND created_at <= now_utc`이며, 미래 시각의 이벤트는
+제외한다. 필터 결과는 `created_at DESC, id DESC`로 정렬한 후 `limit`을 적용한다.
 
 ### Query Parameters
 
 | Parameter | Type | Default | Constraint |
 | --- | --- | --- | --- |
 | `limit` | `integer` | `10` | `1 <= limit <= 100` |
+| `minutes` | `integer` | 없음 | 선택 사항, `1 <= minutes <= 1440` |
+
+예: `GET /events/recent?minutes=10&limit=5`
 
 ### Response
 
@@ -324,6 +334,16 @@ Event는 `events` 테이블에 누적 저장하고, Current Status는 `source`�
 Phase 1.5에서는 DB에 dwell duration을 저장하지 않으므로 `avg_dwell_seconds`는 `0.0`으로 반환한다.
 ENTER/EXIT 매칭 기반 평균 체류시간 계산은 이번 작업 범위에 포함하지 않는다.
 
+- `total_events`는 기간 제한이 없는 전체 누적 이벤트 수다. 기존 의미를 유지한다.
+- `today_event_count`는 `Asia/Seoul` 기준 오늘 저장된 이벤트 수다.
+- `recent_10min_event_count`는 Backend 현재 시각 기준 최근 10분 동안 저장된 전체 이벤트 수다.
+- 오늘 집계는 영상 내부 상대 시각인 `event.timestamp`가 아니라 `events.created_at`을 사용한다.
+- 최근 10분 집계도 `events.created_at`을 사용하며, 정확히 10분 전은 포함하고 미래 시각은 제외한다.
+- `created_at`은 SQLite `CURRENT_TIMESTAMP`가 저장한 UTC `YYYY-MM-DD HH:MM:SS` 형식이며, 조회 경계도 같은 형식으로 비교한다.
+- 조회 범위는 서울 기준 오늘 시작 시각 이상, 내일 시작 시각 미만이다.
+- Frontend는 `today_event_count`가 없거나 집계에 실패했을 때 `total_events` 또는 임의의 `0`으로 대체하지 않는다.
+- Frontend는 `recent_10min_event_count`가 없거나 집계에 실패했을 때 최대 5건인 최근 목록 길이 또는 임의의 `0`으로 대체하지 않는다.
+
 ### Response
 
 ```json
@@ -331,6 +351,8 @@ ENTER/EXIT 매칭 기반 평균 체류시간 계산은 이번 작업 범위에 �
   "status": "success",
   "data": {
     "total_events": 3,
+    "today_event_count": 2,
+    "recent_10min_event_count": 1,
     "enter_count": 1,
     "dwell_count": 1,
     "exit_count": 1,

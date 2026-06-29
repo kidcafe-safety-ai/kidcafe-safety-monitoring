@@ -26,9 +26,9 @@ export interface SafetyEvent {
 
 export interface DashboardSummary {
   active_tracks: number;
-  today_event_count: number;
+  today_event_count: number | null;
   danger_zone_occupancy: number;
-  recent_event_count: number;
+  recent_event_count: number | null;
 }
 
 export interface ZoneStatus {
