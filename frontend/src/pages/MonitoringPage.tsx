@@ -1,12 +1,19 @@
 import { AlertTriangle, Clock3, ShieldAlert, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { getCurrentStatus, getDashboardSummary, getRecentEvents } from "../api/eventsApi";
+import {
+  getCurrentStatus,
+  getDashboardSummary,
+  getRecentEvents,
+  RECENT_EVENT_LIMIT,
+} from "../api/eventsApi";
 import KpiCard from "../components/KpiCard";
 import RecentEventList from "../components/RecentEventList";
 import ZoneStatusPanel from "../components/ZoneStatusPanel";
 import { usePolling } from "../hooks/usePolling";
 import type { DashboardSummary, SafetyEvent, ZoneStatus } from "../types/event";
 import type { CurrentStatus } from "../types/status";
+
+const RECENT_EVENT_MINUTES = 10;
 
 function getZonesFromCurrentStatus(currentStatus: CurrentStatus): ZoneStatus[] {
   return currentStatus.zone_occupancy.map((zone) => ({
@@ -35,12 +42,12 @@ export default function MonitoringPage() {
     .reduce((sum, zone) => sum + zone.current_count, 0);
   const dangerZoneOccupancyValue =
     apiErrors.zones && zones.length === 0 ? "-" : dangerZoneOccupancy;
-  const recentEventCount = recentEvents.length;
+  const recentEventCount = summary?.recent_event_count ?? "-";
 
   const loadDashboardData = useCallback(async () => {
     const [summaryData, eventData, currentStatusData] = await Promise.all([
       getDashboardSummary(),
-      getRecentEvents(),
+      getRecentEvents(RECENT_EVENT_LIMIT, { minutes: RECENT_EVENT_MINUTES }),
       getCurrentStatus(),
     ]);
 
@@ -59,7 +66,9 @@ export default function MonitoringPage() {
   }, []);
 
   const loadRecentEvents = useCallback(async () => {
-    const eventData = await getRecentEvents();
+    const eventData = await getRecentEvents(RECENT_EVENT_LIMIT, {
+      minutes: RECENT_EVENT_MINUTES,
+    });
     setRecentEvents(eventData.data);
     setApiErrors((previous) => ({
       ...previous,

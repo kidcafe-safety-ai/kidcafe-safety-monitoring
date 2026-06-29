@@ -25,6 +25,7 @@ interface PaginatedResponse<T> {
 interface SummaryStats {
   total_events?: number;
   today_event_count?: number;
+  recent_10min_event_count?: number;
   enter_count?: number;
   dwell_count?: number;
   exit_count?: number;
@@ -49,9 +50,9 @@ const API_MODE = getEnvValue(import.meta.env.VITE_API_MODE, "mock");
 
 const emptySummary: DashboardSummary = {
   active_tracks: 0,
-  today_event_count: 0,
+  today_event_count: null,
   danger_zone_occupancy: 0,
-  recent_event_count: 0,
+  recent_event_count: null,
 };
 
 const emptyCurrentStatus: CurrentStatus = {
@@ -293,6 +294,9 @@ function normalizeSummaryStats(value: unknown): SummaryStats {
   return {
     total_events: readOptionalNumber(summary.total_events),
     today_event_count: readOptionalNumber(summary.today_event_count),
+    recent_10min_event_count: readOptionalNumber(
+      summary.recent_10min_event_count,
+    ),
     enter_count: readOptionalNumber(summary.enter_count),
     dwell_count: readOptionalNumber(summary.dwell_count),
     exit_count: readOptionalNumber(summary.exit_count),
@@ -329,9 +333,9 @@ function normalizeCurrentStatus(value: unknown): CurrentStatus {
 function buildDashboardSummary(summary: SummaryStats): DashboardSummary {
   return {
     active_tracks: 0,
-    today_event_count: summary.today_event_count ?? summary.total_events ?? 0,
+    today_event_count: summary.today_event_count ?? null,
     danger_zone_occupancy: 0,
-    recent_event_count: 0,
+    recent_event_count: summary.recent_10min_event_count ?? null,
   };
 }
 
@@ -351,17 +355,27 @@ export async function getEvents(): Promise<ApiResponse<SafetyEvent[]>> {
 
 export async function getRecentEvents(
   limit = RECENT_EVENT_LIMIT,
+  options?: { minutes?: number },
 ): Promise<ApiResponse<SafetyEvent[]>> {
-  if (!isApiMode()) {
-    return successResponse(mockEvents.slice(0, limit));
-  }
-
   const safeLimit = Math.max(
     1,
     Math.floor(readNumber(limit, RECENT_EVENT_LIMIT)),
   );
+  if (!isApiMode()) {
+    return successResponse(mockEvents.slice(0, safeLimit));
+  }
+
+  const searchParams = new URLSearchParams({ limit: String(safeLimit) });
+  if (options?.minutes !== undefined) {
+    const safeMinutes = Math.min(
+      1440,
+      Math.max(1, Math.floor(readNumber(options.minutes, 1))),
+    );
+    searchParams.set("minutes", String(safeMinutes));
+  }
+
   const result = await loadApiData(
-    `/events/recent?limit=${encodeURIComponent(String(safeLimit))}`,
+    `/events/recent?${searchParams.toString()}`,
     normalizeSafetyEvents,
     [],
   );

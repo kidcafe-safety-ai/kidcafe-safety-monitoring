@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from src.api.database import get_connection
 from src.api.schemas import CurrentStatusCreate, EventCreate, timestamp_to_seconds
@@ -13,6 +14,44 @@ from src.api.schemas import CurrentStatusCreate, EventCreate, timestamp_to_secon
 
 class DuplicateEventError(Exception):
     """Raised when event_id already exists."""
+
+
+SEOUL_TIMEZONE = ZoneInfo("Asia/Seoul")
+SQLITE_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+def _utc_now() -> datetime:
+    """Return an aware UTC time through a test-replaceable clock."""
+    return datetime.now(timezone.utc)
+
+
+def _sqlite_timestamp(value: datetime) -> str:
+    """Format an aware datetime like SQLite CURRENT_TIMESTAMP."""
+    return value.astimezone(timezone.utc).strftime(SQLITE_TIMESTAMP_FORMAT)
+
+
+def _seoul_day_utc_bounds(now_utc: datetime) -> tuple[str, str]:
+    """Return Seoul's current day boundaries in SQLite UTC text format."""
+    seoul_today = now_utc.astimezone(SEOUL_TIMEZONE).date()
+    start_seoul = datetime.combine(seoul_today, time.min, tzinfo=SEOUL_TIMEZONE)
+    end_seoul = datetime.combine(
+        seoul_today + timedelta(days=1),
+        time.min,
+        tzinfo=SEOUL_TIMEZONE,
+    )
+    return (
+        _sqlite_timestamp(start_seoul),
+        _sqlite_timestamp(end_seoul),
+    )
+
+
+def _recent_utc_bounds(now_utc: datetime, minutes: int) -> tuple[str, str]:
+    """Return an inclusive recent window in SQLite UTC text format."""
+    normalized_now = now_utc.astimezone(timezone.utc).replace(microsecond=0)
+    return (
+        _sqlite_timestamp(normalized_now - timedelta(minutes=minutes)),
+        _sqlite_timestamp(normalized_now),
+    )
 
 
 def _row_to_event(row: sqlite3.Row) -> Dict[str, Any]:
@@ -92,7 +131,9 @@ def create_event(event: EventCreate) -> Dict[str, Any]:
 
 
 def upsert_current_status(status: CurrentStatusCreate) -> Dict[str, Any]:
-    updated_at = status.updated_at or datetime.now(timezone.utc).astimezone().isoformat()
+    updated_at = (
+        status.updated_at or datetime.now(timezone.utc).astimezone().isoformat()
+    )
     zone_occupancy = [zone.model_dump() for zone in status.zone_occupancy]
 
     with get_connection() as connection:
@@ -188,32 +229,72 @@ def list_events(
     }
 
 
-def recent_events(limit: int) -> List[Dict[str, Any]]:
+def recent_events(
+    limit: int,
+    minutes: Optional[int] = None,
+) -> List[Dict[str, Any]]:
     with get_connection() as connection:
-        rows = connection.execute(
-            "SELECT * FROM events ORDER BY id DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
+        if minutes is None:
+            rows = connection.execute(
+                "SELECT * FROM events ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        else:
+            cutoff_utc, now_utc = _recent_utc_bounds(_utc_now(), minutes)
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM events
+                WHERE created_at >= ? AND created_at <= ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (cutoff_utc, now_utc, limit),
+            ).fetchall()
     return [_row_to_event(row) for row in rows]
 
 
 def get_summary() -> Dict[str, Any]:
+    now_utc = _utc_now()
+    today_start_utc, tomorrow_start_utc = _seoul_day_utc_bounds(now_utc)
+    recent_cutoff_utc, recent_now_utc = _recent_utc_bounds(now_utc, 10)
+
     with get_connection() as connection:
         row = connection.execute(
             """
             SELECT
                 COUNT(*) AS total_events,
+                SUM(
+                    CASE
+                        WHEN created_at >= ? AND created_at < ? THEN 1
+                        ELSE 0
+                    END
+                ) AS today_event_count,
+                SUM(
+                    CASE
+                        WHEN created_at >= ? AND created_at <= ? THEN 1
+                        ELSE 0
+                    END
+                ) AS recent_10min_event_count,
                 SUM(CASE WHEN event_type = 'ENTER' THEN 1 ELSE 0 END) AS enter_count,
                 SUM(CASE WHEN event_type = 'DWELL' THEN 1 ELSE 0 END) AS dwell_count,
                 SUM(CASE WHEN event_type = 'EXIT' THEN 1 ELSE 0 END) AS exit_count,
                 COUNT(DISTINCT track_id) AS total_tracks,
                 COUNT(DISTINCT video_source) AS video_count
             FROM events
-            """
+            """,
+            (
+                today_start_utc,
+                tomorrow_start_utc,
+                recent_cutoff_utc,
+                recent_now_utc,
+            ),
         ).fetchone()
 
     return {
         "total_events": row["total_events"],
+        "today_event_count": row["today_event_count"] or 0,
+        "recent_10min_event_count": row["recent_10min_event_count"] or 0,
         "enter_count": row["enter_count"] or 0,
         "dwell_count": row["dwell_count"] or 0,
         "exit_count": row["exit_count"] or 0,

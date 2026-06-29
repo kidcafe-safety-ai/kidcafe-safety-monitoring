@@ -1,10 +1,13 @@
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
+from src.api import repositories
+from src.api.database import get_connection
 from src.api.main import app
 
 
@@ -168,7 +171,92 @@ def test_get_events_recent_returns_limited_latest_events(client):
     ]
 
 
-def test_get_summary_returns_required_kpis(client):
+def test_get_events_recent_minutes_filters_created_at_boundaries(
+    client,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        repositories,
+        "_utc_now",
+        lambda: datetime(2026, 6, 29, 3, 0, tzinfo=timezone.utc),
+    )
+    events_by_created_at = [
+        (make_event_payload(timestamp="00:00:10.000"), "2026-06-29 02:49:59"),
+        (make_event_payload(timestamp="23:59:59.999"), "2026-06-29 02:50:00"),
+        (make_event_payload(timestamp="00:00:00.000"), "2026-06-29 03:00:00"),
+        (make_event_payload(timestamp="00:00:00.000"), "2026-06-29 03:00:01"),
+    ]
+
+    for payload, _ in events_by_created_at:
+        assert client.post("/events", json=payload).status_code == 201
+
+    with get_connection() as connection:
+        for payload, created_at in events_by_created_at:
+            connection.execute(
+                "UPDATE events SET created_at = ? WHERE event_id = ?",
+                (created_at, payload["event_id"]),
+            )
+
+    response = client.get(
+        "/events/recent",
+        params={"minutes": 10, "limit": 5},
+    )
+
+    assert response.status_code == 200
+    assert [item["event_id"] for item in response.json()["data"]] == [
+        events_by_created_at[2][0]["event_id"],
+        events_by_created_at[1][0]["event_id"],
+    ]
+    assert client.get("/summary").json()["data"]["recent_10min_event_count"] == 2
+
+
+def test_recent_summary_count_is_not_limited_and_ties_are_deterministic(
+    client,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        repositories,
+        "_utc_now",
+        lambda: datetime(2026, 6, 29, 3, 0, tzinfo=timezone.utc),
+    )
+    recent_payloads = [make_event_payload() for _ in range(7)]
+
+    for payload in recent_payloads:
+        assert client.post("/events", json=payload).status_code == 201
+
+    with get_connection() as connection:
+        connection.execute(
+            "UPDATE events SET created_at = ?",
+            ("2026-06-29 02:59:00",),
+        )
+
+    summary = client.get("/summary").json()["data"]
+    recent = client.get(
+        "/events/recent",
+        params={"minutes": 10, "limit": 5},
+    ).json()["data"]
+
+    assert summary["recent_10min_event_count"] == 7
+    assert len(recent) == 5
+    assert [item["event_id"] for item in recent] == [
+        payload["event_id"] for payload in reversed(recent_payloads[-5:])
+    ]
+
+
+@pytest.mark.parametrize("minutes", [0, 1441])
+def test_get_events_recent_rejects_minutes_outside_range(client, minutes):
+    response = client.get("/events/recent", params={"minutes": minutes})
+
+    assert response.status_code == 422
+
+
+def test_get_summary_returns_required_kpis(client, monkeypatch):
+    monkeypatch.setattr(
+        repositories,
+        "_utc_now",
+        lambda: datetime(2026, 6, 29, 3, 0, tzinfo=timezone.utc),
+    )
+
     for payload in [
         make_event_payload(event_type="ENTER", track_id=1, video_source="a.mp4"),
         make_event_payload(event_type="DWELL", track_id=1, video_source="a.mp4"),
@@ -176,12 +264,20 @@ def test_get_summary_returns_required_kpis(client):
     ]:
         assert client.post("/events", json=payload).status_code == 201
 
+    with get_connection() as connection:
+        connection.execute(
+            "UPDATE events SET created_at = ?",
+            ("2026-06-29 00:00:00",),
+        )
+
     response = client.get("/summary")
 
     assert response.status_code == 200
     data = response.json()["data"]
     assert data == {
         "total_events": 3,
+        "today_event_count": 3,
+        "recent_10min_event_count": 0,
         "enter_count": 1,
         "dwell_count": 1,
         "exit_count": 1,
@@ -189,6 +285,62 @@ def test_get_summary_returns_required_kpis(client):
         "video_count": 2,
         "avg_dwell_seconds": 0.0,
     }
+
+
+def test_get_summary_counts_seoul_today_from_created_at_boundaries(
+    client,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        repositories,
+        "_utc_now",
+        lambda: datetime(2026, 6, 29, 3, 0, tzinfo=timezone.utc),
+    )
+    events_by_created_at = [
+        (make_event_payload(timestamp="23:59:59.999"), "2026-06-28 14:59:59"),
+        (make_event_payload(timestamp="00:00:00.000"), "2026-06-28 15:00:00"),
+        (make_event_payload(timestamp="00:00:00.000"), "2026-06-29 14:59:59"),
+        (make_event_payload(timestamp="00:00:00.000"), "2026-06-29 15:00:00"),
+    ]
+
+    for payload, _ in events_by_created_at:
+        assert client.post("/events", json=payload).status_code == 201
+
+    with get_connection() as connection:
+        for payload, created_at in events_by_created_at:
+            connection.execute(
+                "UPDATE events SET created_at = ? WHERE event_id = ?",
+                (created_at, payload["event_id"]),
+            )
+
+    data = client.get("/summary").json()["data"]
+
+    assert data["total_events"] == 4
+    assert data["today_event_count"] == 2
+
+
+def test_get_summary_returns_zero_when_seoul_today_has_no_events(
+    client,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        repositories,
+        "_utc_now",
+        lambda: datetime(2026, 6, 29, 3, 0, tzinfo=timezone.utc),
+    )
+    payload = make_event_payload()
+    assert client.post("/events", json=payload).status_code == 201
+
+    with get_connection() as connection:
+        connection.execute(
+            "UPDATE events SET created_at = ? WHERE event_id = ?",
+            ("2026-06-28 14:59:59", payload["event_id"]),
+        )
+
+    data = client.get("/summary").json()["data"]
+
+    assert data["total_events"] == 1
+    assert data["today_event_count"] == 0
 
 
 def test_get_zones_returns_common_response(client):

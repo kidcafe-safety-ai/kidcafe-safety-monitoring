@@ -62,6 +62,8 @@ class EventListData(BaseModel):
 
 class SummaryData(BaseModel):
     total_events: int
+    today_event_count: int
+    recent_10min_event_count: int
     enter_count: int
     dwell_count: int
     exit_count: int
