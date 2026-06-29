@@ -1,6 +1,6 @@
 # KidCafe Safety AI — 개발 로드맵
 
-> 최종 수정: 2026-06-24
+> 최종 수정: 2026-06-29
 > MVP baseline: `v0.1.0-mvp`
 > 본 문서는 MVP 1차 종료 이후 최종 제출까지의 상위 개발 로드맵이다.
 > 한이음 일정은 2025년 창의도전형 공고 기준으로 작성했으며, 2026년 공고 확인 후 갱신한다.
@@ -14,7 +14,7 @@
 | ~5/31 | MVP 1차 종료 | 파일 영상 기반 MVP 기준선 고정 |
 | 6/1~6/8 | Phase 1.5 | 서비스 구조 전환 준비 — 완료 |
 | 6/8~6/21 | Phase 2 | 실시간 입력 연결 — 완료 |
-| 6/22~6/30 | Phase 2.5 | 실시간 운영 대시보드 v1 안정화 |
+| 6/22~6/30 | Phase 2.5 | 실시간 운영 대시보드 v1 안정화 — 완료 |
 | 7월 | Phase 3 | 안전 감지 고도화 |
 | 8월 | Phase 4 | 모델·추적 고도화 및 1차 공모전 준비 |
 | 9월 | Phase 5 | 성과 정리 및 2차 평가 준비 |
@@ -113,7 +113,7 @@
 
 ---
 
-## 6/22~6/30 — Phase 2.5: 실시간 운영 대시보드 안정화
+## 6/22~6/30 — Phase 2.5: 실시간 운영 대시보드 안정화 — 완료
 
 **목표**: Phase 2.0에서 구현한 실시간 연결 구조를 기반으로, 중간평가 및 시연 가능한 실시간 운영 대시보드 v1을 완성한다.
 
@@ -140,43 +140,49 @@ Phase 3   = 안전 감지 기능을 고도화한다
 **A — Vision AI / 실시간 입력 안정화**
 
 ```text
-- 내장 웹캠 3~5분 E2E 테스트
-- API 서버 미기동 / 재기동 상황 테스트
-- FPS / latency / frame drop 측정
-- ENTER / EXIT 이벤트 흔들림 기록
-- docs/realtime_test.md 실험 결과 업데이트
+[x] 내장 웹캠 3~5분 E2E 테스트 (300프레임 / 2700프레임)
+[x] API 서버 미기동 / 재기동 상황 테스트
+[x] FPS / latency / frame drop 측정
+[x] ENTER / EXIT 이벤트 흔들림 기록
+[x] docs/realtime_test.md 실험 결과 업데이트
+[x] macOS Docker Compose E2E 검증 (내장 웹캠 → Docker FastAPI)
 ```
 
 **B — FastAPI / SQLite 안정화**
 
 ```text
-- POST /events 저장 안정성 검증
-- PUT /status/current 저장 안정성 검증
-- GET /status/current 조회 안정성 검증
-- API validation / error response 정리
-- CORS / React 개발 서버 연동 확인
-- 필요 시 /events 조회 최적화 검토
+[x] POST /events 저장 안정성 검증
+[x] PUT /status/current 저장 안정성 검증
+[x] GET /status/current 조회 안정성 검증
+[x] API validation / error response 정리
+[x] CORS / React 개발 서버 연동 확인
+[x] Docker Compose FastAPI 컨테이너 구성 및 검증
+[x] SQLite bind mount (./outputs:/app/outputs) 확인
 ```
 
 **C — React Dashboard 안정화 + USB 웹캠 테스트**
 
 ```text
-- 실제 API 기반 화면 안정화
-- loading / error / empty 상태 처리 개선
-- KPI 문구 정확화
-- 이벤트 기록 / 통계 화면 완성도 개선
-- USB 웹캠 연결 확인 (camera index 0 / 1 / 2 테스트)
-- USB 웹캠 3~5분 E2E 실행 및 결과 PM 공유
-- React build 통과 확인
+[x] 실제 API 기반 화면 안정화
+[x] loading / error / empty 상태 처리 개선
+[x] KPI 문구 정확화
+[x] 이벤트 기록 / 통계 화면 완성도 개선
+[x] USB C920 웹캠 연결 확인 (camera index 0 / 1)
+[x] USB 웹캠 반복 E2E 검증 (Windows, 단일 3~5분 실행 대신 반복 시나리오로 완료 인정)
+    - 300프레임 API/SQLite E2E
+    - 180프레임 메인 pipeline
+    - 60프레임 API 장애 테스트
+[x] React build 통과 확인
+[x] Docker Compose React 컨테이너 구성 및 API mode 검증
 ```
 
 ### RTSP / IP 카메라 기준
 
 ```text
-- 장비 미확보 상태이므로 Phase 2.5에서는 실측 테스트 보류
-- 장비 확보 시 연결 성공 또는 실패 원인 문서화
+- RTSPSource 인터페이스 구현 완료 (credential sanitize 포함)
+- Phase 2.5에서 실장비 미확보로 실측 테스트 미수행
+- 장비 확보 후 별도 테스트 브랜치에서 연동 검증 예정
 - 실제 RTSP URL / 계정 / 비밀번호는 문서나 PR에 포함하지 않음
-- RTSPSource 구현 구조는 유지
 ```
 
 ### Phase 2.5 완료 기준
@@ -248,11 +254,20 @@ Docker는 배포 목적이 아니라, 개발 / 시연 실행 환경을 통일하
 
 ### 산출물
 
-- 내장 웹캠 / USB 웹캠 기반 E2E 안정화 결과
-- React 운영 대시보드 v1
-- `docs/realtime_test.md` Phase 2.5 테스트 기록
-- 개발 / 시연 재현성 확보용 Docker Compose 초안
-- 중간평가용 시연 결과물
+- [x] 내장 웹캠 / USB 웹캠 기반 E2E 안정화 결과
+- [x] React 운영 대시보드 v1
+- [x] `docs/realtime_test.md` Phase 2.5 테스트 기록
+- [x] Docker Compose 구현 및 Windows(USB C920) / macOS(내장 웹캠) 검증 완료
+- [ ] 중간평가 보고서 (마감 2026-07-14 18:00, Phase 3 7/7~7/14 일정으로 이관 — Phase 2.5 종료 blocker 아님)
+
+### Phase 3 인계 기술 부채
+
+```text
+- API 비동기 전송 또는 전송 queue: API 장애 시 동기 timeout으로 FPS 0.99 저하
+- debounce / hysteresis: zone 경계에서 ENTER/EXIT 빠른 반복 발생
+- React Live View: 영상 영역 placeholder 상태, 설계 검토 필요
+- FPS 재측정 및 최적화: Windows CPU 환경 avg 6.23 FPS, 개선 여지 있음
+```
 
 ---
 

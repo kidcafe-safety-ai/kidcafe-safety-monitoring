@@ -4,7 +4,7 @@ Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
 한이음 드림업 프로젝트 (2026.04 ~ 2026.10)
 
-![status](https://img.shields.io/badge/status-Phase_2.0_done-brightgreen)
+![status](https://img.shields.io/badge/status-Phase_2.5_done-brightgreen)
 ![python](https://img.shields.io/badge/python-3.10-blue)
 ![tests](https://img.shields.io/badge/tests-pytest_passed-green)
 ![license](https://img.shields.io/badge/license-Internal-lightgrey)
@@ -15,19 +15,24 @@ Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
 KidCafe Safety AI는 YOLO + ByteTrack + Geofencing 기반으로 위험구역 진입 및 장시간 체류를 감지하는 Vision AI 안전 모니터링 시스템이다.
 
-**현재 상태: Phase 2.0 완료 — 실시간 입력 + FastAPI/SQLite + React API 연동**
+**현재 상태: Phase 2.5 완료 — 실시간 운영 대시보드 v1 안정화 완료**
 
 ```text
-Webcam / RTSP / File
+Webcam / RTSP / File   ← 로컬 실행
 → YOLO26n + ByteTrack
 → ENTER / DWELL / EXIT 이벤트
-→ FastAPI POST /events + PUT /status/current
-→ SQLite 저장
-→ React Dashboard (REST polling 기반)
+→ FastAPI POST /events + PUT /status/current  ← Docker 실행 가능
+→ SQLite 저장                                  ← Docker volume
+→ React Dashboard (REST polling 기반)          ← Docker 실행 가능
 ```
 
+검증 환경:
+
+- macOS: 내장 웹캠 + Docker Compose (FastAPI·React·SQLite)
+- Windows: USB C920 웹캠 + Docker Compose
+
 > Streamlit 대시보드는 MVP 검증용으로 사용되었으며 현재는 비활성 상태다.
-> React Dashboard (`frontend/`)는 Phase 2 기준 REST polling 기반 운영 UI다.
+> React Dashboard (`frontend/`)는 REST polling 기반 운영 UI다. Docker frontend는 시연·검증용 Vite dev server로 운영 배포 구성은 아니다.
 
 ---
 
@@ -35,7 +40,7 @@ Webcam / RTSP / File
 
 ### 권장 환경
 - Python 3.10.x
-- macOS / Ubuntu tested
+- macOS / Windows / Ubuntu tested
 
 ### 1. 환경 셋업
 
@@ -115,7 +120,46 @@ npm run dev
 npm run build
 ```
 
-### 6. 결과 확인
+### 6. Docker Compose 실행 (FastAPI + React + SQLite)
+
+Vision AI는 로컬에서 실행하고, FastAPI·React·SQLite는 Docker Compose로 실행한다.
+
+```bash
+# .env 준비 (최초 1회)
+cp .env.example .env
+
+# 빌드 및 실행
+docker compose up --build
+
+# 백그라운드 실행
+docker compose up --build -d
+
+# 종료
+docker compose down
+```
+
+| 서비스 | 주소 |
+|--------|------|
+| FastAPI | http://localhost:8000 |
+| React Dashboard | http://localhost:3000 |
+
+> Docker frontend 컨테이너는 Vite dev server(`npm run dev`)로 실행한다. 시연·통합 검증용이며 운영 배포 구성은 아니다.
+
+Vision AI는 Docker 실행 중인 FastAPI로 이벤트를 전송한다.
+
+```bash
+.venv/bin/python -m src.main \
+  --source-type webcam \
+  --source 0 \
+  --api-url http://localhost:8000 \
+  --model yolo26n.pt \
+  --infer-device auto \
+  --width 640 --height 480 \
+  --frames-limit 300 \
+  --show
+```
+
+### 7. 결과 확인
 
 ```bash
 # 이벤트 로그
@@ -131,7 +175,7 @@ open outputs/result.mp4              # macOS
 # start outputs/result.mp4           # Windows
 ```
 
-### 7. 테스트
+### 8. 테스트
 
 ```bash
 pytest -q
@@ -158,12 +202,15 @@ kidcafe-safety-monitoring/
 │   └── main.py              # 파이프라인 진입점
 ├── frontend/                # React Dashboard
 │   ├── src/
-│   │   ├── pages/           # MonitoringPage, EventsPage
-│   │   ├── components/      # KpiCard, EventTable, EventChart 등
+│   │   ├── pages/           # MonitoringPage, EventsPage (API), AlertHistoryPage, ReportPage, ZoneSettingsPage (Mock)
+│   │   ├── components/      # KpiCard, EventTable, EventChart, SystemSettingsModal 등
 │   │   ├── api/             # eventsApi.ts (VITE_API_MODE 기반 mock/API 전환)
-│   │   ├── mocks/           # Phase 1.5 mock 데이터
+│   │   ├── mocks/           # mock 데이터
 │   │   └── types/           # event.ts
+│   ├── Dockerfile           # React 컨테이너 (Vite dev server)
 │   └── package.json
+├── Dockerfile.api           # FastAPI 컨테이너
+├── docker-compose.yml       # FastAPI + React + SQLite volume
 ├── scripts/                 # 벤치마크 도구 (Phase 1.5)
 │   ├── run_benchmark.py
 │   └── draw_zone.py
@@ -176,7 +223,8 @@ kidcafe-safety-monitoring/
 │   ├── roadmap.md           # Phase 로드맵
 │   ├── api_contract.md      # B/C API 기준
 │   ├── model_benchmark.md   # Phase 1.5 모델 비교 결과
-│   ├── realtime_test.md     # Phase 2 실시간 실험 로그
+│   ├── docker_phase_2_5.md  # Docker 실행 가이드 (Phase 2.5)
+│   ├── realtime_test.md     # Phase 2~2.5 실시간 실험 로그
 │   └── ...
 ├── tests/
 │   └── test_*.py
@@ -187,7 +235,7 @@ kidcafe-safety-monitoring/
 
 ---
 
-## 역할 분담 (Phase 2 기준)
+## 역할 분담 (Phase 2.5 기준)
 
 | 팀원 | 담당 | 주력 모듈 |
 |------|------|---------|
@@ -304,13 +352,20 @@ pytest --cov=src --cov-report=term-missing
 | FastAPI + SQLite 최소 API | Done — Phase 1.5 |
 | React mock Dashboard 2페이지 | Done — Phase 1.5 |
 | 실시간 입력 인터페이스 초안 | Done — Phase 1.5 |
-| 웹캠 / RTSP 실시간 입력 연결 | Done — Phase 2 |
+| 웹캠 실시간 입력 연결 | Done — Phase 2 |
+| RTSPSource 인터페이스 | 구현 완료, 실장비 검증 보류 |
 | React mock → API 연동 | Done — Phase 2 |
 | Current Status API (`/status/current`) | Done — Phase 2 |
-| WebSocket 실시간 push | Phase 2.5 이후 검토 |
-| ReID / 낙상 / 충돌 감지 | Phase 3 |
+| React Dashboard API mode 안정화 | Done — Phase 2.5 |
+| Docker Compose (FastAPI·React·SQLite) | Done — Phase 2.5 |
+| 내장 웹캠 E2E 안정화 (macOS) | Done — Phase 2.5 |
+| USB C920 E2E 테스트 (Windows) | Done — Phase 2.5 |
+| React Live View (영상 영역) | placeholder, Phase 3 검토 |
+| WebSocket 실시간 push | 필요성 기반 재검토 예정 |
+| 낙상 / 충돌 의심 PoC | Phase 3 |
+| ReID / StrongSORT / BoT-SORT | Phase 4 |
 
-Phase 2는 실시간 입력, API 저장/조회, React API 연동까지 완료했다. Phase 2.5에서는 시연 가능한 안정화에 집중한다.
+Phase 2.5에서 실시간 운영 대시보드 v1 안정화와 Docker 재현 환경 구축을 완료했다.
 
 ---
 
@@ -330,9 +385,10 @@ Phase 2는 실시간 입력, API 저장/조회, React API 연동까지 완료했
 | ADR-008 | Dashboard API 모듈 분리 및 요약 출력 추가 | C 대시보드 연동을 위한 API/출력 확장 |
 | ADR-009 | 파일 영상 기반 MVP 1차 종료 및 Phase 2 분리 | Streamlit 검증용 확정, React/FastAPI는 Phase 2 |
 | ADR-010 | Streamlit 종료 및 React Dashboard 전환 | Phase 1.5 운영 UI 확정 |
-| ADR-011 | Phase 2 실시간 갱신은 polling 우선 | WebSocket은 Phase 2.5 이후 |
+| ADR-011 | Phase 2/2.5 실시간 갱신은 polling 유지 | WebSocket은 필요성 기반 재검토 예정 |
 | ADR-012 | Event 로그와 Current Status 분리 | 현재 인원은 Event 누적으로 계산 불가 |
 | ADR-013 | Phase 2는 웹캠 기반 end-to-end 우선 | RTSP는 fallback 가능 |
+| ADR-014 | Phase 2.5 제한적 Docker 도입 | 운영 배포 아닌 실행 환경 통일과 시연 재현성 확보 |
 
 ---
 
@@ -355,11 +411,15 @@ Phase 2는 실시간 입력, API 저장/조회, React API 연동까지 완료했
 
 | 한계 | 원인 | 개선 계획 |
 |------|------|----------------|
-| CCTV 거리 탐지 약함 | YOLOv8n (MVP 경량 모델) | Phase 2: YOLO26n 실시간 테스트 |
-| 작은 객체 bbox 깜빡임 | 작은 객체 confidence 흔들림 | Phase 2: 모델 업그레이드 + 후처리 |
-| track_id 자주 변경 | ReID 없음 | Phase 3: OSNet 기반 ReID 도입 |
-| 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | Phase 3: StrongSORT 또는 ReID 보강 |
-| 필터 / 알림 / 자녀 리포트 | 운영 고도화 기능 | Phase 2.5 이후 우선순위 재검토 |
+| 원거리·소형 객체 탐지 한계 | 경량 모델 및 촬영 환경 한계 | Phase 4: 라벨 데이터 평가 및 fine-tuning 검토 |
+| 작은 객체 bbox 깜빡임 | 작은 객체 confidence 흔들림 | Phase 3: 후처리 보강 |
+| track_id 자주 변경 | ReID 없음 | Phase 4: OSNet 기반 ReID 도입 |
+| 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | Phase 4: StrongSORT 또는 ReID 보강 |
+| ENTER/EXIT 경계 흔들림 | zone 경계 foot_point 진동 | Phase 3: debounce / hysteresis 적용 |
+| API 장애 시 추론 FPS 저하 | 동기식 HTTP timeout 누적 | Phase 3: 비동기 전송 또는 전송 queue |
+| 추론 FPS 최적화 여지 | CPU 환경 동기 처리 | Phase 3: FPS 재측정 및 최적화 |
+| React Live View 미구현 | 영상 스트리밍 미포함 | Phase 3: Live View 설계 검토 |
+| 알림·리포트·설정 Backend 미연동 | Mock Prototype 상태 | 후속 Phase에서 API 계약 후 연동 |
 > 상세 분석: [`docs/tracking_analysis.md`](docs/tracking_analysis.md)
 
 ---

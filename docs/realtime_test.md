@@ -169,6 +169,8 @@ curl.exe http://localhost:8000/events/recent
 
 ## 기록
 
+> Phase 2.5 완료 기준: 2026-06-28 macOS Docker E2E 검증 통과. 상세 결과는 하단 각 섹션 참고.
+
 ---
 
 ## 2026-06-10 — webcam yolo26n Phase 2 초기 연결 테스트
