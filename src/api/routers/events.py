@@ -16,7 +16,6 @@ from src.api.schemas import (
     success_response,
 )
 
-
 router = APIRouter()
 
 
@@ -56,5 +55,8 @@ def get_events(
 
 
 @router.get("/events/recent", response_model=EventRecentResponse)
-def get_recent_events(limit: int = Query(default=10, ge=1, le=100)):
-    return success_response(repositories.recent_events(limit=limit))
+def get_recent_events(
+    limit: int = Query(default=10, ge=1, le=100),
+    minutes: Optional[int] = Query(default=None, ge=1, le=1440),
+):
+    return success_response(repositories.recent_events(limit=limit, minutes=minutes))
