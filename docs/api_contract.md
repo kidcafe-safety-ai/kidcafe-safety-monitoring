@@ -2,11 +2,11 @@
 
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
-> **최종 수정**: 2026-06-23 (Phase 2.0 종료 기준 반영)
-> **상태**: Phase 2.0 구현 완료 — Event API + Current Status API + React 연동
+> **최종 수정**: 2026-06-29 (Phase 2.5 KPI 집계 계약 반영)
+> **상태**: Phase 2.5 구현 완료 — Event API + Current Status API + KPI 집계 + React 연동
 > **관련 문서**: [`dashboard_api.md`](dashboard_api.md), [`dashboard_analysis.md`](dashboard_analysis.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md), [`roadmap.md`](roadmap.md)
 
-이 문서는 Phase 1.5 ~ Phase 2.0에서 구현된 Backend API 계약을 정리한다.
+이 문서는 Phase 1.5 ~ Phase 2.5에서 구현된 Backend API 계약을 정리한다.
 
 ---
 

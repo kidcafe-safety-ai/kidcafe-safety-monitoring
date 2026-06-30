@@ -138,6 +138,10 @@ HH:MM:SS.mmm
 * C의 모니터링 페이지에서 이벤트 탐색 가능
 * 실제 처리 시각이 필요하면 processed_at 별도 필드 필요 (Phase 2)
 
+### Update
+
+2026-06-29: 이벤트의 `timestamp`는 영상 상대 시각으로 유지한다. Dashboard의 오늘/최근 집계는 실제 저장 시각인 `events.created_at`을 사용한다. 오늘 집계는 Asia/Seoul 기준이며 최근 집계는 Backend UTC 현재 시각 기준 10분 범위다.
+
 ---
 
 ## ADR-006: 결과 영상 코덱으로 mp4v 채택

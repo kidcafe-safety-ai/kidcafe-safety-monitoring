@@ -174,6 +174,7 @@ Phase 3   = 안전 감지 기능을 고도화한다
     - 60프레임 API 장애 테스트
 [x] React build 통과 확인
 [x] Docker Compose React 컨테이너 구성 및 API mode 검증
+[x] 오늘 이벤트 / 최근 10분 이벤트 KPI 집계 기준 정합성 수정
 ```
 
 ### RTSP / IP 카메라 기준

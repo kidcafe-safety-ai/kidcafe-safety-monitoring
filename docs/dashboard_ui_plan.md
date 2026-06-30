@@ -6,7 +6,7 @@ React 기반 운영 대시보드 구현
 ## 화면 범위
 - 실시간 모니터링 (MonitoringPage)
 - 이벤트 기록 / 통계 (EventsPage)
-- Zone 설정 (ZoneSettingsPage) — Phase 2 mock prototype
+- Zone 설정 (ZoneSettingsPage) — Phase 2.5 Mock Prototype
 
 ## Event Schema v1
 필수 필드는 MVP 이벤트 로그와 FastAPI 응답 구조를 맞추기 위한 기준이다.
@@ -25,7 +25,7 @@ Dashboard 확장 필드는 화면 표시를 위한 선택 필드다.
 
 예시: `00:00:10.600`
 
-MVP 파일 영상 기준 상대 시각이며, 실제 운영 시각이 필요한 경우 Phase 3 이후 `created_at` 또는 `occurred_at` 확장을 검토한다.
+이벤트 `timestamp`는 영상 상대 시각을 유지한다. 오늘 및 최근 이벤트 집계는 SQLite 저장 시각인 `created_at`을 사용한다. 실제 이벤트 발생 시각이 별도로 필요하면 Phase 3 이후 `occurred_at` 추가를 검토한다.
 
 ## API 전환 구조 — Phase 2.5 완료
 
@@ -55,9 +55,11 @@ MonitoringPage에서 각 API를 독립 polling한다.
 
 | API | 담당 데이터 | 호출 주기 |
 |---|---|---|
-| `GET /summary` | 오늘 이벤트 KPI | 10초 |
+| `GET /summary` | 오늘 이벤트 수 · 최근 10분 이벤트 수 KPI | 10초 |
 | `GET /status/current` | 현재 감지 인원 · zone 상태 | 2초 |
-| `GET /events/recent` | 최근 이벤트 · 최근 이벤트 수 | 3초 |
+| `GET /events/recent?minutes=10&limit=5` | 최근 10분 이벤트 목록 | 3초 |
+
+`recent_event_count`는 목록 길이가 아니라 `/summary`의 `recent_10min_event_count`를 사용한다.
 
 WebSocket은 실시간 push 필요성이 명확해진 이후 재검토한다.
 
