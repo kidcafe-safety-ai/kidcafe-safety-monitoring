@@ -321,16 +321,35 @@ CurrentStatus → 현재 상태, 최신 값 갱신 → PUT /status/current
 }
 ```
 
-### C 역할 — DashboardSummary 타입 분리 (Phase 2 전환 기준)
+### C 역할 — Dashboard KPI 데이터 소스 (Phase 2.5 기준)
 
-Phase 2 API 연동 시 `frontend/src/types/event.ts`의 `DashboardSummary`를 다음 기준으로 분리한다.
+MonitoringPage의 KPI와 목록은 다음 기준으로 매핑한다.
 
 ```text
-/summary 응답 기반:          today_event_count, 이벤트 타입별 count
-/status/current 응답 기반:   active_tracks, danger_zone_occupancy
+/summary.today_event_count
+→ DashboardSummary.today_event_count
+
+/summary.recent_10min_event_count
+→ DashboardSummary.recent_event_count
+
+/status/current.active_track_count
+→ MonitoringPage activeTrackCount state
+
+/status/current.zone_occupancy
+→ MonitoringPage zones state / danger zone occupancy
+
+/events/recent?minutes=10&limit=5
+→ 최근 10분 이벤트 목록
 ```
 
-mock → API 교체 시 KPI 카드별 데이터 소스를 위 기준으로 매핑한다.
+`DashboardSummary.active_tracks`와 `danger_zone_occupancy`는 기존 mock 호환을 위해 남아 있으며, API mode 화면은 `/status/current` 값을 사용한다.
+
+추가 원칙:
+
+- 오늘 이벤트(`today_event_count`): `Asia/Seoul` 기준
+- 최근 10분(`recent_10min_event_count`): Backend UTC 현재 시각 기준
+- 집계 기준 컬럼: `event.timestamp`(영상 상대 시각)가 아닌 `events.created_at`(저장 시각)
+- `today_event_count`, `recent_10min_event_count` 집계 실패 시 `0`이나 목록 길이로 대체하지 않는다.
 
 > `risk_level`: `"NORMAL" | "HIGH"` — Phase 2 required 필드. Vision AI가 `PUT /status/current` 전송 시 반드시 포함한다.
 > 세분화된 위험도(`LOW | MEDIUM | HIGH` 등)는 Phase 3 안전정책 고도화에서 확정한다.
@@ -342,7 +361,7 @@ mock → API 교체 시 KPI 카드별 데이터 소스를 위 기준으로 매�
 | API | 호출 주기 |
 |---|---|
 | `GET /status/current` | 2초 |
-| `GET /events/recent` | 3초 |
+| `GET /events/recent?minutes=10&limit=5` | 3초 |
 | `GET /summary` | 10초 |
 | `GET /events` | 페이지 진입 또는 필터 변경 시 |
 

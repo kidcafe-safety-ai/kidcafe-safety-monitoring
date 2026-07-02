@@ -169,6 +169,8 @@ curl.exe http://localhost:8000/events/recent
 
 ## 기록
 
+> Phase 2.5 완료 기준: 2026-06-28 macOS Docker E2E 검증 통과. 상세 결과는 하단 각 섹션 참고.
+
 ---
 
 ## 2026-06-10 — webcam yolo26n Phase 2 초기 연결 테스트
@@ -358,6 +360,10 @@ React:        VITE_API_MODE=api VITE_API_BASE_URL=http://localhost:8000 npm run 
 ---
 
 ## 2026-06-24 — Phase 2.5 React Dashboard API mode 표시 검증
+
+> **Update (2026-06-29)**: 현재 구현에서는 최근 이벤트 목록을
+> `/events/recent?minutes=10&limit=5`로 조회하고, 최근 10분 이벤트 수 KPI는
+> `/summary.recent_10min_event_count`를 사용한다. 아래 내용은 당시 검증 기록이다.
 
 ### 테스트 정보
 

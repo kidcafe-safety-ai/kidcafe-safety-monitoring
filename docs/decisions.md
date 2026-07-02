@@ -138,6 +138,10 @@ HH:MM:SS.mmm
 * C의 모니터링 페이지에서 이벤트 탐색 가능
 * 실제 처리 시각이 필요하면 processed_at 별도 필드 필요 (Phase 2)
 
+### Update
+
+2026-06-29: 이벤트의 `timestamp`는 영상 상대 시각으로 유지한다. Dashboard의 오늘/최근 집계는 실제 저장 시각인 `events.created_at`을 사용한다. 오늘 집계는 Asia/Seoul 기준이며 최근 집계는 Backend UTC 현재 시각 기준 10분 범위다.
+
 ---
 
 ## ADR-006: 결과 영상 코덱으로 mp4v 채택
@@ -327,6 +331,10 @@ Phase 2에서는 polling으로 실시간성을 확보한다. WebSocket은 Phase 
 - polling 기반으로도 2~3초 주기로 충분한 실시간성 확보가 가능하다.
 - 개발 복잡도를 낮추고 Phase 2 일정 리스크를 줄인다.
 
+### Update
+
+2026-06-29: Phase 2.5에서도 REST polling을 유지했다. `/status/current` 2초, `/events/recent` 3초, `/summary` 10초 주기로 안정적으로 동작함을 확인했다. WebSocket은 실시간 push 필요성이 명확해진 이후 재검토한다.
+
 ---
 
 ## ADR-012: Event 로그와 Current Status 데이터 분리
@@ -368,3 +376,42 @@ Phase 2에서 웹캠과 RTSP 입력을 모두 연결해야 하나, 시험 기간
 
 - 웹캠은 환경 의존성이 낮아 빠르게 검증 가능하다.
 - RTSP는 네트워크, 코덱, 지연 문제 등 예측 불가한 오류가 발생할 수 있다.
+
+---
+
+## ADR-014: Phase 2.5 제한적 Docker 도입
+
+**Date**: 2026-06-27
+**Status**: Accepted
+
+### Context
+
+Phase 2.5에서 팀원 간 실행 환경 차이(macOS / Windows)로 FastAPI·React 실행 방법이 달라졌다. 중간평가 전에 시연 환경을 재현 가능하게 통일할 필요가 있었다.
+
+### Decision
+
+FastAPI, React Dashboard, SQLite volume을 Docker Compose로 묶어 실행 환경을 통일한다. Vision AI 추론 환경은 Docker에 포함하지 않는다.
+
+포함:
+- FastAPI (`Dockerfile.api`, port 8000)
+- React Dashboard (`frontend/Dockerfile`, port 3000, Vite dev server)
+- SQLite bind mount (`./outputs:/app/outputs`)
+
+제외:
+- Vision AI 웹캠 파이프라인
+- YOLO / torch / ultralytics / opencv 추론 환경
+- GPU / MPS 설정
+- USB 카메라 passthrough
+- RTSP 운영 안정화
+
+### Reason
+
+- 운영 배포가 아닌 개발·시연 환경 통일이 목적이다.
+- Vision AI는 GPU/MPS와 카메라 장치 의존성이 있어 Docker 격리 이점보다 복잡도가 높다.
+- FastAPI와 React는 의존성이 단순하고 컨테이너화 이점이 명확하다.
+
+### Consequences
+
+- Vision AI는 로컬에서 실행하고 `--api-url http://localhost:8000`으로 Docker FastAPI에 연동한다.
+- Docker frontend는 Vite dev server 기반이며 운영 배포 구성(정적 파일 서버, reverse proxy, TLS)은 별도 검토가 필요하다.
+- macOS(내장 웹캠)와 Windows(USB C920) 환경에서 Docker Compose E2E 검증 완료.
