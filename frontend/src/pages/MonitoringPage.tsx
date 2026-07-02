@@ -111,7 +111,7 @@ export default function MonitoringPage() {
         <div>
           <div className="title-row">
             <h1>실시간 모니터링</h1>
-            <span className="status-pill">Phase 2 API Ready</span>
+            <span className="status-pill">Phase 2.5 Stable</span>
           </div>
           <p>Polling 기반 실시간 안전 대시보드</p>
         </div>

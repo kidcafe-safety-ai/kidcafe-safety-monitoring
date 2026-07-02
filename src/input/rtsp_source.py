@@ -1,7 +1,7 @@
 """RTSP 입력 소스.
 
-Phase 2에서는 연결 시도 및 기본 구현만 제공한다.
-reconnect 안정화는 Phase 2.5 이후 진행한다.
+Phase 2.5에서는 연결 시도 및 기본 구현만 제공한다.
+reconnect 안정화는 장비 확보 후 Phase 3에서 검증한다.
 """
 
 from __future__ import annotations
