@@ -15,7 +15,7 @@ function successResponse<T>(data: T): MockApiResponse<T> {
   };
 }
 
-// Phase 2 mock prototype only. This service is not connected to FastAPI.
+// Phase 2.5 mock prototype only. This service is not connected to FastAPI.
 export async function getMockZoneSettings(): Promise<
   MockApiResponse<AlertZoneSetting[]>
 > {
