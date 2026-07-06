@@ -45,7 +45,7 @@ Phase 1.5에서 계획한 mock → FastAPI 전환이 Phase 2에서 완료됐고,
 | ReportPage | Mock Prototype |
 | ZoneSettingsPage | Mock Prototype |
 | SystemSettingsModal | Mock Prototype |
-| 영상 영역 | Live View placeholder |
+| 영상 영역 | Live View latest-frame polling 구현 예정 |
 
 Mock Prototype 화면의 데이터는 서버에 저장되지 않는다.
 
@@ -61,17 +61,17 @@ MonitoringPage에서 각 API를 독립 polling한다.
 
 `recent_event_count`는 목록 길이가 아니라 `/summary`의 `recent_10min_event_count`를 사용한다.
 
-WebSocket은 실시간 push 필요성이 명확해진 이후 재검토한다.
+WebSocket은 Phase 4 이후 필요성 기반 재검토한다.
 
 ## Zone Settings — mock prototype
 
 ZoneSettingsPage는 mock prototype이다.
 
-> Zone Settings FastAPI 연동은 후속 Phase에서 안전정책 확정 후 검토한다.
+> Zone Settings 실제 API 연동은 Phase 4에서 검토한다.
 
 - `zoneSettingsMockApi.ts` — mock prototype only. FastAPI 미연동.
 - UI에 "Mock Prototype" badge 표시
-- zone_type 표현은 Phase 3 안전정책 확정 후 실제 API와 함께 정의한다.
+- zone_type: Phase 3 계약 확정, 구현 예정 (`docs/interfaces.md` 참조)
 
 ## Docker API mode 검증 완료
 
@@ -87,3 +87,47 @@ ZoneSettingsPage는 mock prototype이다.
 - [x] ZoneStatusPanel fallback NORMAL
 - [x] npm run build 통과
 - [x] Docker API mode 실행 및 React Dashboard 연동 확인
+
+---
+
+## Phase 3 계획 (구현 예정)
+
+> 상태: 계약 확정 — 구현 PR 적용 예정
+> 기준선: v0.2.5-dashboard
+
+### Live View
+
+- `PUT /live/frame` → FastAPI 메모리 보관 → `GET /live/frame` → React 500~1000ms polling
+- MonitoringPage 영상 영역 placeholder를 실제 JPEG 표시로 교체
+- 204 No Content 수신 시 placeholder 유지
+- 연결 오류·파이프라인 중단 시 fallback 표시
+- 담당: A(정종민, frame 제공) → B(원우민, API) → C(정현수, React 표시)
+
+### 신규 EventType·Severity 표시
+
+| EventType | Severity | 표시 |
+|---|---|---|
+| ENTER_RESTRICTED | HIGH | 제한구역 진입 |
+| DANGER_ZONE_DWELL | HIGH | 위험구역 체류 |
+| FALL_SUSPECT | HIGH | 낙상 의심 |
+
+- EventsPage·EventChart에 신규 타입 색상·뱃지 추가
+- `외부 접촉 의심 · Track #N` 표시 (cause 있는 경우)
+- `normalizeEventType()` 수정: 알 수 없는 타입을 `ENTER`로 변환하지 않음
+- ZoneType `"slide"` → `"danger"` 교체
+
+### AlertHistory 읽기 전용 연동
+
+- 데이터 소스: 실제 `/events` API
+- 발생 시각: `created_at` (UTC → Asia/Seoul 변환)
+- `MOCK_TODAY` 하드코딩 제거
+- 처리 상태: `미확인` 고정
+- `확인중`·`처리완료`·조치 메모 저장 기능: 비활성화 (Phase 4)
+
+### Mock 유지 화면
+
+| 화면 | Phase 3 상태 |
+|---|---|
+| ReportPage | Mock 유지 |
+| ZoneSettingsPage | Mock 유지 |
+| SystemSettingsModal | Mock 유지 |

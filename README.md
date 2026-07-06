@@ -4,7 +4,7 @@ Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
 한이음 드림업 프로젝트 (2026.04 ~ 2026.10)
 
-![status](https://img.shields.io/badge/status-Phase_2.5_done-brightgreen)
+![status](https://img.shields.io/badge/status-Phase_3_in_progress-blue)
 ![python](https://img.shields.io/badge/python-3.10-blue)
 ![tests](https://img.shields.io/badge/tests-pytest_passed-green)
 ![license](https://img.shields.io/badge/license-Internal-lightgrey)
@@ -15,7 +15,9 @@ Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
 KidCafe Safety AI는 YOLO + ByteTrack + Geofencing 기반으로 위험구역 진입 및 장시간 체류를 감지하는 Vision AI 안전 모니터링 시스템이다.
 
-**현재 상태: Phase 2.5 완료 — 실시간 운영 대시보드 v1 안정화 완료**
+**현재 상태: Phase 3 착수 — 기준선 v0.2.5-dashboard, 안전 감지 고도화 진행 중**
+
+현재 구현 기준(`v0.2.5-dashboard`):
 
 ```text
 Webcam / RTSP / File   ← 로컬 실행
@@ -360,9 +362,9 @@ pytest --cov=src --cov-report=term-missing
 | Docker Compose (FastAPI·React·SQLite) | Done — Phase 2.5 |
 | 내장 웹캠 E2E 안정화 (macOS) | Done — Phase 2.5 |
 | USB C920 E2E 테스트 (Windows) | Done — Phase 2.5 |
-| React Live View (영상 영역) | placeholder, Phase 3 검토 |
-| WebSocket 실시간 push | 필요성 기반 재검토 예정 |
-| 낙상 / 충돌 의심 PoC | Phase 3 |
+| React Live View (영상 영역) | placeholder, Phase 3: latest-frame polling 구현 예정 |
+| WebSocket 실시간 push | Phase 4 이후 필요성 기반 재검토 |
+| FALL_SUSPECT 낙상 PoC 및 외부 접촉 원인 후보 추정 | Phase 3 |
 | ReID / StrongSORT / BoT-SORT | Phase 4 |
 
 Phase 2.5에서 실시간 운영 대시보드 v1 안정화와 Docker 재현 환경 구축을 완료했다.
@@ -385,17 +387,21 @@ Phase 2.5에서 실시간 운영 대시보드 v1 안정화와 Docker 재현 환�
 | ADR-008 | Dashboard API 모듈 분리 및 요약 출력 추가 | C 대시보드 연동을 위한 API/출력 확장 |
 | ADR-009 | 파일 영상 기반 MVP 1차 종료 및 Phase 2 분리 | Streamlit 검증용 확정, React/FastAPI는 Phase 2 |
 | ADR-010 | Streamlit 종료 및 React Dashboard 전환 | Phase 1.5 운영 UI 확정 |
-| ADR-011 | Phase 2/2.5 실시간 갱신은 polling 유지 | WebSocket은 필요성 기반 재검토 예정 |
+| ADR-011 | Phase 2/2.5 실시간 갱신은 polling 유지 | WebSocket은 Phase 4 이후 필요성 기반 재검토 |
 | ADR-012 | Event 로그와 Current Status 분리 | 현재 인원은 Event 누적으로 계산 불가 |
 | ADR-013 | Phase 2는 웹캠 기반 end-to-end 우선 | RTSP는 fallback 가능 |
 | ADR-014 | Phase 2.5 제한적 Docker 도입 | 운영 배포 아닌 실행 환경 통일과 시연 재현성 확보 |
+| ADR-015 | Live View latest-frame polling | WebSocket·MJPEG 대비 구현 단순, FastAPI 단일 worker에 적합 |
+| ADR-016 | FALL_SUSPECT.cause 기반 외부 접촉 원인 후보 기록 | 독립 COLLISION_SUSPECT는 오탐 제어 어려움, 낙상 확정 후 소급 조회가 실용적 |
+| ADR-017 | AsyncEventDispatcher 기반 비차단 전송 | API 장애 시 추론 FPS 저하 방지, EventApiClient는 감싸는 구조로 유지 |
+| ADR-018 | Phase 3 인증/인가 경계만 정의, 구현은 Phase 4 이관 | 계약 확정이 우선, 인증은 배포 단계 관심사 |
 
 ---
 
 ## 협업 규칙
 
 ### Git
-- **Branch**: `feature/*` 사용
+- **Branch**: `feature/*`, `docs/*`, `test/*`, `chore/*`, `integration/*` 사용
 - **Commit**: Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`)
 - **PR**: 최소 1명 리뷰 후 머지
 - **main 직접 push 금지**
@@ -418,7 +424,7 @@ Phase 2.5에서 실시간 운영 대시보드 v1 안정화와 Docker 재현 환�
 | ENTER/EXIT 경계 흔들림 | zone 경계 foot_point 진동 | Phase 3: debounce / hysteresis 적용 |
 | API 장애 시 추론 FPS 저하 | 동기식 HTTP timeout 누적 | Phase 3: 비동기 전송 또는 전송 queue |
 | 추론 FPS 최적화 여지 | CPU 환경 동기 처리 | Phase 3: FPS 재측정 및 최적화 |
-| React Live View 미구현 | 영상 스트리밍 미포함 | Phase 3: Live View 설계 검토 |
+| React Live View 미구현 | 영상 스트리밍 미포함 | Phase 3: latest-frame polling 구현 예정 |
 | 알림·리포트·설정 Backend 미연동 | Mock Prototype 상태 | 후속 Phase에서 API 계약 후 연동 |
 > 상세 분석: [`docs/tracking_analysis.md`](docs/tracking_analysis.md)
 
