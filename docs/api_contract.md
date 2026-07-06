@@ -2,11 +2,11 @@
 
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
-> **최종 수정**: 2026-06-29 (Phase 2.5 KPI 집계 계약 반영)
-> **상태**: Phase 2.5 구현 완료 — Event API + Current Status API + KPI 집계 + React 연동
+> **최종 수정**: 2026-07-06 (Phase 3 계약 확정)
+> **상태**: Phase 2.5 구현 완료 / Phase 3 계약 확정 — 구현 예정
 > **관련 문서**: [`dashboard_api.md`](dashboard_api.md), [`dashboard_analysis.md`](dashboard_analysis.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md), [`roadmap.md`](roadmap.md)
 
-이 문서는 Phase 1.5 ~ Phase 2.5에서 구현된 Backend API 계약을 정리한다.
+이 문서는 Phase 1.5~2.5의 구현된 API와 Phase 3의 확정된 예정 계약을 구분해 정리한다.
 
 ---
 
@@ -34,6 +34,8 @@
 
 FastAPI/Pydantic validation error는 기본 `422` 응답 형식을 그대로 사용한다.
 이번 문서 기준으로 `RequestValidationError` 공통 handler는 아직 추가하지 않는다.
+
+`GET /live/frame`은 binary endpoint이므로 위 공통 JSON wrapper의 예외다. `200`은 `image/jpeg` body를 그대로 반환하고, `204`는 body 없이 반환한다.
 
 ---
 
@@ -113,8 +115,8 @@ Event는 `events` 테이블에 누적 저장하고, Current Status는 `source`�
 | `zone_occupancy[].risk_level` | `"NORMAL" | "HIGH"` | Phase 2 현재 위험도 |
 | `updated_at` | `string | null` | current status 갱신 시각 |
 
-`risk_level`은 Phase 2에서 `NORMAL | HIGH`만 허용한다.
-`LOW | MEDIUM | HIGH`처럼 세분화된 위험도는 Phase 2.5 또는 Phase 3에서 검토한다.
+Phase 3에서도 `CurrentStatus.risk_level`은 `NORMAL | HIGH`를 유지한다.
+`LOW | MEDIUM | HIGH`는 `risk_level`의 확장이 아니라 Frontend `SafetyEvent.severity` 파생 표시값이다 (`docs/interfaces.md` Severity 정책 참조).
 
 `PUT /status/current` 요청 body에 `updated_at`이 있으면 그대로 저장한다.
 `updated_at`이 없으면 Backend 수신 시각을 timezone-aware ISO 문자열로 생성해 저장한다.
@@ -556,7 +558,7 @@ C 역할은 WebSocket 대신 polling으로 실시간성을 확보한다.
 | `GET /summary` | 10초 |
 | `GET /events` | 페이지 진입 또는 필터 변경 시 |
 
-WebSocket은 Phase 2.5에서도 제외하며 Phase 3 이후 검토한다.
+WebSocket은 Phase 2.5와 Phase 3에서도 제외하며 Phase 4 이후 검토한다.
 
 ---
 
@@ -583,3 +585,273 @@ WebSocket은 Phase 2.5에서도 제외하며 Phase 3 이후 검토한다.
 - 알림 push
 - PostgreSQL 전환
 - 복잡한 관리자 기능
+
+---
+
+## Phase 3 계약 (구현 예정)
+
+> 상태: 계약 확정 — 구현 PR 적용 예정
+> 기준선: v0.2.5-dashboard
+> 적용 시점: 관련 구현 PR 머지 이후
+
+---
+
+## PUT /live/frame
+
+Vision AI 파이프라인이 최신 JPEG 프레임을 업로드한다.
+
+```http
+PUT /live/frame?source=webcam%3A0&frame_number=100&captured_at=2026-07-07T12:00:00Z
+Content-Type: image/jpeg
+
+<JPEG binary>
+```
+
+**Query Parameters**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `source` | string | 영상 소스 식별자 |
+| `frame_number` | int | 원본 파이프라인 frame 번호 |
+| `captured_at` | string | ISO 8601 UTC |
+
+**제약**
+
+- Body: JPEG binary
+- Content-Type: `image/jpeg`
+- 최대 크기: 1 MiB
+- 업로드 주기: 1~2 FPS
+- 해상도: 640×480, JPEG quality 70~80
+
+**응답**
+
+```json
+{
+  "status": "success",
+  "data": { "source": "webcam:0", "frame_number": 100, "stored": true },
+  "message": null
+}
+```
+
+오류:
+- `415 Unsupported Media Type`: JPEG가 아닌 경우
+- `413 Payload Too Large`: 1 MiB 초과
+- `422 Unprocessable Entity`: metadata 오류
+
+**저장 원칙**
+
+- 최신 JPEG 1장만 Process Memory에 보관
+- DB·파일 영속 저장 없음
+- frame 교체·조회는 lock으로 보호
+- stale 판정은 서버 수신 monotonic time 기준
+
+---
+
+## GET /live/frame
+
+최신 JPEG 프레임을 조회한다.
+
+```http
+GET /live/frame
+```
+
+**응답**
+
+| 조건 | 응답 |
+|---|---|
+| 최신 frame 있음 | `200 image/jpeg` |
+| frame 없음 | `204 No Content` |
+| 서버 수신 기준 3초 이상 미갱신 | `204 No Content` |
+
+헤더:
+- `Cache-Control: no-store`
+- `X-Source`, `X-Frame-Number`, `X-Captured-At`
+
+React: 204 수신 시 placeholder 표시, 파이프라인 중단 시 fallback 유지
+
+---
+
+## Event Schema v2 (Phase 3 확장)
+
+기존 Event 필드를 유지하고 optional 필드를 추가한다.
+
+**Phase 3 활성 EventType**
+
+```text
+ENTER
+DWELL
+EXIT
+ENTER_RESTRICTED
+DANGER_ZONE_DWELL
+FALL_SUSPECT
+```
+
+```json
+{
+  "event_id": "...",
+  "timestamp": "HH:MM:SS.mmm",
+  "event_type": "FALL_SUSPECT",
+  "track_id": 3,
+  "zone_id": "__global__",
+  "bbox": [100.0, 50.0, 200.0, 300.0],
+  "foot_point": [150.0, 300.0],
+  "frame_number": 100,
+  "video_source": "webcam:0",
+  "confidence": 0.91,
+  "event_confidence": 0.82,
+  "cause": {
+    "type": "NEARBY_TRACK",
+    "track_id": 7,
+    "score": 0.68,
+    "evidence": {
+      "min_distance_norm": 0.31,
+      "closing_speed_norm": 0.74,
+      "time_to_fall_sec": 0.42
+    }
+  }
+}
+```
+
+- `confidence`: optional (기존 DB 행은 null 허용)
+- `event_confidence`: optional, 0.0~1.0 또는 null
+- `cause`: optional, 전체 객체 또는 null (부분 객체 불허)
+
+**EventCause 검증 범위** (상세 규칙은 `docs/interfaces.md`의 EventCause 검증 규칙 참조)
+
+```text
+cause.type: "NEARBY_TRACK"
+cause.track_id: 0 이상의 정수
+cause.score: 0.0~1.0
+cause.evidence.min_distance_norm / closing_speed_norm / time_to_fall_sec: 0 이상의 실수
+```
+
+- 위 범위를 벗어나거나 `cause`가 일부 필드만 포함한 부분 객체인 경우 `422 Unprocessable Entity`
+- `event_confidence`가 `0.0~1.0` 범위를 벗어나면 `422 Unprocessable Entity`
+
+---
+
+## SQLite Migration (Phase 3)
+
+기존 DB에 nullable 컬럼을 추가한다.
+
+```sql
+event_confidence REAL NULL
+cause_json TEXT NULL
+```
+
+idempotent migration 방식:
+
+```sql
+-- PRAGMA table_info(events)로 컬럼 존재 여부 확인 후
+ALTER TABLE events ADD COLUMN event_confidence REAL;
+ALTER TABLE events ADD COLUMN cause_json TEXT;
+```
+
+원칙:
+- 여러 번 실행해도 안전
+- 기존 행은 두 필드 모두 NULL
+- 기존 DB 파일 자동 삭제·초기화 없음
+- migration 실패 시 서버 시작 오류 명확하게 출력
+
+---
+
+## Summary 신규 이벤트 집계
+
+Phase 3 신규 EventType의 Summary 집계 기준:
+
+| 카운터 | 포함 EventType |
+|---|---|
+| `today_event_count` | 모든 이벤트 |
+| `recent_10min_event_count` | 모든 이벤트 |
+| `enter_count` | `ENTER`, `ENTER_RESTRICTED` |
+| `dwell_count` | `DWELL`, `DANGER_ZONE_DWELL` |
+| `exit_count` | `EXIT` |
+| `FALL_SUSPECT` | 전체 집계에 포함, 전용 KPI는 Phase 4 검토 |
+
+---
+
+## GET /zones Phase 3 계약
+
+기존 `GET /zones`는 Zone 목록을 반환한다. Phase 3에서 `zone_type` 필드가 추가된다.
+
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "zone_id": "playground_bottom_right",
+      "zone_name": "test video zone",
+      "zone_type": "danger",
+      "type": "polygon",
+      "points": [[0.65, 0.65], [1.0, 0.65], [1.0, 1.0], [0.65, 1.0]],
+      "rules": { "enter_alert": true, "dwell_threshold_sec": 5 }
+    }
+  ],
+  "message": null
+}
+```
+
+- 내부 JSON `name` → API 응답 `zone_name`으로 변환
+- `zone_type`: `play | exit | restricted | danger` (Phase 3 필수)
+- `PUT /zones`: Phase 4
+
+**`name` / `zone_name` 호환성 원칙**
+
+- `zone_name`을 표준 필드로 사용한다.
+- 기존 `name`은 Phase 3에서 deprecated alias로 계속 유지한다 (API 응답에서 제거하지 않음).
+- `name` 제거 여부는 Phase 4에서 재검토한다.
+
+---
+
+## Zone Settings 저장 계약 (Phase 3: 필드·저장 구조만 확정)
+
+Phase 3에서는 Zone Settings의 필드와 저장 구조만 확정한다. `PUT /zones`를 통한 실제 저장 구현은 Phase 4다.
+
+**API 필드**
+
+```text
+zone_id
+zone_name
+zone_type
+points
+dwell_threshold_sec
+enter_alert
+version
+updated_at
+```
+
+**내부 JSON 필드**
+
+```text
+zone_id
+name
+zone_type
+type
+points
+rules.enter_alert
+rules.dwell_threshold_sec
+version
+updated_at
+```
+
+**변환 원칙**
+
+- API `zone_name` ↔ 내부 JSON `name`
+- API `dwell_threshold_sec` / `enter_alert` ↔ 내부 JSON `rules.dwell_threshold_sec` / `rules.enter_alert`
+- `version`, `updated_at`은 저장 시마다 갱신 (동시 수정 감지용)
+- `GET /zones` endpoint 자체는 구현 완료, `zone_type` 응답 확장은 Phase 3 구현 예정
+- `PUT /zones`: Phase 4 구현
+
+---
+
+## AlertHistory 읽기 전용 연동 (Phase 3)
+
+- 발생 시각: 영상 상대 시각 `timestamp` 대신 API `created_at` 사용
+- `created_at`: UTC 해석 → 화면에서 Asia/Seoul 변환
+- `MOCK_TODAY` 하드코딩 제거, 실제 현재 날짜 사용
+- `alert_id`: `event_id` 사용
+- `target`: `Track #N` 형식
+- `title`·`message`·`severity`: `event_type` 기반 Frontend 매핑
+- 처리 상태: Phase 3에서 `미확인` 고정
+- `확인중`·`처리완료`·조치 메모 저장: Phase 4
+- 실제 이벤트와 Mock 처리 상태 혼용 금지

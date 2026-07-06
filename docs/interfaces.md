@@ -47,11 +47,26 @@ class TrackingResult:
 
 ### EventType 상세
 
+**Phase 2.5 기준 (현재 구현)**
+
 | 타입 | 의미 | 발생 조건 |
 |------|------|---------|
 | ENTER | 진입 | 사람이 zone에 새로 들어옴 |
 | DWELL | 체류 | zone에 `dwell_threshold_sec` 이상 머무름 (zone당 1회) |
 | EXIT | 이탈 | 사람이 zone에서 나감 |
+
+**Phase 3 활성 추가 예정 (계약 확정 — 구현 예정)**
+
+| 타입 | 의미 | 발생 조건 |
+|------|------|---------|
+| ENTER_RESTRICTED | 제한구역 진입 | `zone_type=restricted` 구역에 진입 (`ENTER` 대체) |
+| DANGER_ZONE_DWELL | 위험구역 체류 | `zone_type=danger` 구역에 기준 시간 이상 체류 (`DWELL` 대체) |
+| FALL_SUSPECT | 낙상 의심 | bbox 비율·속도·자세 기반 낙상 판정, optional `cause` 포함 |
+
+- 동일 상태 변화에서 일반·안전 이벤트 중복 생성 금지
+- `restricted`·`danger` 구역 이탈은 기존 `EXIT` 사용
+- 구역 밖 낙상: `zone_id="__global__"`
+- 독립 `COLLISION_SUSPECT`는 Phase 4 이후 재검토
 
 ### 이벤트 발생 기준
 
@@ -82,6 +97,21 @@ class Event:
     foot_point: List[float]      # [cx, y2] pixel 좌표
     frame_number: int
     video_source: str
+```
+
+### Phase 3 적용 예정 EventType
+
+> 상태: 계약 확정 — 구현 PR 적용 예정
+
+```python
+EventType = Literal[
+    "ENTER",
+    "DWELL",
+    "EXIT",
+    "ENTER_RESTRICTED",
+    "DANGER_ZONE_DWELL",
+    "FALL_SUSPECT",
+]
 ```
 
 ---
@@ -264,7 +294,7 @@ GET /events          # 이벤트 목록 (필터/페이지 진입 시)
 - Event → `POST /events` 전송
 - Current Status → `PUT /status/current` 전송
 - React polling 기반 실시간 갱신
-- WebSocket은 Phase 3 이후 검토
+- WebSocket은 Phase 4 이후 검토
 
 ---
 
@@ -351,8 +381,8 @@ MonitoringPage의 KPI와 목록은 다음 기준으로 매핑한다.
 - 집계 기준 컬럼: `event.timestamp`(영상 상대 시각)가 아닌 `events.created_at`(저장 시각)
 - `today_event_count`, `recent_10min_event_count` 집계 실패 시 `0`이나 목록 길이로 대체하지 않는다.
 
-> `risk_level`: `"NORMAL" | "HIGH"` — Phase 2 required 필드. Vision AI가 `PUT /status/current` 전송 시 반드시 포함한다.
-> 세분화된 위험도(`LOW | MEDIUM | HIGH` 등)는 Phase 3 안전정책 고도화에서 확정한다.
+> `risk_level`: `"NORMAL" | "HIGH"` — Phase 2 required 필드. Vision AI가 `PUT /status/current` 전송 시 반드시 포함하며, Phase 3에서도 이 값 그대로 유지한다.
+> `LOW | MEDIUM | HIGH`는 `risk_level`의 확장이 아니라 Frontend `SafetyEvent.severity` 파생 표시값이다 (본 문서 9절 Severity 정책 참조).
 
 ---
 
@@ -365,7 +395,7 @@ MonitoringPage의 KPI와 목록은 다음 기준으로 매핑한다.
 | `GET /summary` | 10초 |
 | `GET /events` | 페이지 진입 또는 필터 변경 시 |
 
-WebSocket은 Phase 2.5에서도 제외하며 Phase 3 이후 검토한다.
+WebSocket은 Phase 2.5와 Phase 3에서도 제외하며 Phase 4 이후 검토한다.
 
 ---
 
@@ -451,7 +481,176 @@ RTSPSource
 
 ---
 
-## 9. 변경 절차
+## 9. Phase 3 계약 (구현 예정)
+
+> 상태: 계약 확정 — 구현 PR 적용 예정
+> 기준선: v0.2.5-dashboard
+> 적용 시점: 관련 구현 PR 머지 이후
+
+### ZoneType 계약
+
+도형 타입(`type`)과 안전정책 타입(`zone_type`)을 분리한다.
+
+```text
+type: polygon          ← 도형 종류 (기존 유지)
+zone_type: play | exit | restricted | danger  ← 안전정책 분류 (Phase 3 신규)
+```
+
+- `zone_type`은 Phase 3부터 필수 필드
+- 허용되지 않은 값이면 `ZoneLoader`에서 `ValueError` 발생
+- `slide_zone` 같은 `zone_id`는 그대로 유지 가능
+- Backend Zone JSON(`data/zones/*.json`)에는 현재 `zone_type` 필드 자체가 없음 → Phase 3에서 신규 추가
+- Frontend mock/type(`ZoneType`, `mockEvents.ts` 등)에는 이미 `"slide"` 값이 존재 → `"danger"`로 교체
+
+```python
+ZoneType = Literal["play", "exit", "restricted", "danger"]
+```
+
+**기존 Zone 매핑**
+
+| zone_id | zone_type |
+|---|---|
+| `playground_bottom_right` (sample.json) | `danger` |
+| `door_area` (benchmark_test5.json) | `exit` |
+
+**이름 필드 기준**
+
+- 내부 Zone dataclass / JSON: `name` 유지
+- API 응답: `zone_name`으로 정규화 (`/zones`에서 변환)
+
+---
+
+### FALL_SUSPECT·EventCause 계약
+
+```json
+{
+  "event_type": "FALL_SUSPECT",
+  "track_id": 3,
+  "zone_id": "__global__",
+  "confidence": 0.91,
+  "event_confidence": 0.82,
+  "cause": {
+    "type": "NEARBY_TRACK",
+    "track_id": 7,
+    "score": 0.68,
+    "evidence": {
+      "min_distance_norm": 0.31,
+      "closing_speed_norm": 0.74,
+      "time_to_fall_sec": 0.42
+    }
+  }
+}
+```
+
+**필드 의미**
+
+| 필드 | 의미 |
+|---|---|
+| `confidence` | detector/tracker confidence (기존) |
+| `event_confidence` | 낙상 판정 점수 (0.0~1.0 또는 null) |
+| `cause.score` | 외부 접촉 원인 후보 휴리스틱 점수 |
+
+- 원인 근거 부족 시 `cause: null`
+- `FALL_SUSPECT`가 아닌 이벤트: `event_confidence=null`, `cause=null`
+- 부분적으로 누락된 `cause` 객체는 허용하지 않음
+- Dashboard 표기: `외부 접촉 의심 · Track #7`
+- 실제 충돌 확인으로 표현하지 않음
+
+**EventCause 검증 규칙**
+
+```text
+type: "NEARBY_TRACK"
+track_id: 0 이상의 정수
+score: 0.0~1.0
+evidence.min_distance_norm: 0 이상의 실수
+evidence.closing_speed_norm: 0 이상의 실수
+evidence.time_to_fall_sec: 0 이상의 실수
+```
+
+- `event_confidence`: `0.0~1.0` 또는 `null`
+- `cause`: 위 필드를 모두 포함한 전체 객체 또는 `null`
+
+**낙상 PoC 상태 흐름**
+
+```text
+NORMAL → FALLING_CANDIDATE → FALL_CONFIRMED → COOLDOWN
+```
+
+- Track당 낙상 이벤트는 `FALL_CONFIRMED` 전이 시 1회만 생성
+- `FALL_CONFIRMED` 판정 시 낙상 시작 직전 0.5~1초 Track 기록을 소급 조회해 `cause` 후보를 결정
+- `COOLDOWN` 중 재진입은 새 낙상으로 집계하지 않음
+- Track 소실 시 grace period 이후 상태를 초기화
+
+**Severity 정책**
+
+```text
+CurrentStatus.risk_level:         NORMAL | HIGH            (Phase 2 계약 유지, Backend 필드)
+Frontend SafetyEvent.severity:    LOW | MEDIUM | HIGH       (Phase 3 신규, 파생 표시값)
+```
+
+`severity`는 Backend API·DB 필드가 아니라 `event_type`으로부터 Frontend에서 계산하는 파생 표시값이다.
+
+| EventType | Severity |
+|---|---|
+| ENTER_RESTRICTED | HIGH |
+| DANGER_ZONE_DWELL | HIGH |
+| FALL_SUSPECT | HIGH |
+| APPROACH_EXIT (Stretch, 구현 시) | MEDIUM |
+
+- Severity는 `event_type` 기준으로 결정하며 `cause` 유무로 바뀌지 않음
+- Phase 3에서는 Frontend 매핑으로 처리하고, API·DB 저장은 Phase 4에서 재검토
+
+**직렬화 형식**
+
+| 저장소 | 형식 |
+|---|---|
+| JSONL | `cause` 객체 그대로 |
+| API 요청·응답 | `cause` 객체 그대로 |
+| SQLite | `cause_json` TEXT (JSON 직렬화) |
+| CSV | `cause_json` 문자열 컬럼 |
+
+**Phase 3 Event 확장 구조**
+
+```python
+EventType = Literal[
+    "ENTER", "DWELL", "EXIT",
+    "ENTER_RESTRICTED", "DANGER_ZONE_DWELL", "FALL_SUSPECT",
+]
+
+@dataclass
+class EventCauseEvidence:
+    min_distance_norm: float
+    closing_speed_norm: float
+    time_to_fall_sec: float
+
+@dataclass
+class EventCause:
+    type: Literal["NEARBY_TRACK"]
+    track_id: int
+    score: float
+    evidence: EventCauseEvidence
+
+@dataclass
+class Event:
+    # 기존 필드 유지
+    event_id: str
+    timestamp: str
+    event_type: EventType
+    track_id: int
+    zone_id: str
+    bbox: List[float]
+    foot_point: List[float]
+    frame_number: int
+    video_source: str
+    # Phase 3 추가 (optional, 하위 호환)
+    confidence: Optional[float] = None
+    event_confidence: Optional[float] = None
+    cause: Optional[EventCause] = None
+```
+
+---
+
+## 10. 변경 절차
 
 1. Discord/카톡에서 변경 아이디어 공유
 2. `types.py`와 `interfaces.md` 동시 수정
