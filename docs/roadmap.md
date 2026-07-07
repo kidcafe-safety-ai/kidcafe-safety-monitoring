@@ -1,9 +1,9 @@
 # KidCafe Safety AI — 개발 로드맵
 
-> 최종 수정: 2026-06-29
+> 최종 수정: 2026-07-06
 > MVP baseline: `v0.1.0-mvp`
 > 본 문서는 MVP 1차 종료 이후 최종 제출까지의 상위 개발 로드맵이다.
-> 한이음 일정은 2025년 창의도전형 공고 기준으로 작성했으며, 2026년 공고 확인 후 갱신한다.
+> 한이음 일정은 [2026년 창의도전형 공고](https://www.hanium.or.kr/comm/noticeView.do?ntcAtclSn=63940) 기준으로 갱신했다. 세부 일정(주차별 작업·보고서 내부 마감 등)은 팀 오피스 기준이며 공식 공고와 별개로 운영한다.
 
 ---
 
@@ -15,7 +15,7 @@
 | 6/1~6/8 | Phase 1.5 | 서비스 구조 전환 준비 — 완료 |
 | 6/8~6/21 | Phase 2 | 실시간 입력 연결 — 완료 |
 | 6/22~6/30 | Phase 2.5 | 실시간 운영 대시보드 v1 안정화 — 완료 |
-| 7월 | Phase 3 | 안전 감지 고도화 |
+| 7월 | Phase 3 ← **진행 중** | 안전 감지 고도화 |
 | 8월 | Phase 4 | 모델·추적 고도화 및 1차 공모전 준비 |
 | 9월 | Phase 5 | 성과 정리 및 2차 평가 준비 |
 | 10월~ | Final | 최종 제출·시연·발표 |
@@ -99,7 +99,7 @@
 ```text
 1. 웹캠 기반 end-to-end 먼저 완성
 2. 실시간 영상 스트리밍보다 실시간 이벤트 저장/조회 우선
-3. WebSocket은 Phase 2 / Phase 2.5 제외 → Phase 3 이후 검토
+3. WebSocket은 Phase 2 / Phase 2.5 / Phase 3 제외 → Phase 4 이후 검토
 4. Current Status는 Event 누적이 아니라 /status/current 별도 처리
 ```
 
@@ -202,7 +202,7 @@ Phase 3   = 안전 감지 기능을 고도화한다
 
 ```text
 - WebSocket 실시간 push
-- ReID / 낙상 / 충돌 감지
+- ReID / 낙상 감지 / 독립 충돌 감지 (`COLLISION_SUSPECT`는 Phase 4 이후 재검토)
 - Zone Settings FastAPI 연동
 - 다중 카메라 고도화
 ```
@@ -266,7 +266,7 @@ Docker는 배포 목적이 아니라, 개발 / 시연 실행 환경을 통일하
 ```text
 - API 비동기 전송 또는 전송 queue: API 장애 시 동기 timeout으로 FPS 0.99 저하
 - debounce / hysteresis: zone 경계에서 ENTER/EXIT 빠른 반복 발생
-- React Live View: 영상 영역 placeholder 상태, 설계 검토 필요
+- React Live View: latest-frame polling 계약 확정, 구현 예정
 - FPS 재측정 및 최적화: Windows CPU 환경 avg 6.23 FPS, 개선 여지 있음
 ```
 
@@ -276,28 +276,143 @@ Docker는 배포 목적이 아니라, 개발 / 시연 실행 환경을 통일하
 
 **목표**: 단순 구역 이벤트를 실제 키즈카페 안전 시나리오에 맞는 감지 정책으로 고도화한다.
 
+> Phase 3 계약 상세(EventType·ZoneType·API·DB migration)는 `docs/interfaces.md`, `docs/api_contract.md`, `docs/decisions.md`가 최종 기준이다.
+
+### 일정
+
+```text
+7/7~7/10   Live View — Live Frame latest-only worker 최소 구현 (E2E 우선)
+7/11~7/14  중간평가 보고서
+7/15~7/21  핵심 기능 — AsyncEventDispatcher를 Event FIFO queue·Status latest-only까지 확장, 공간정책·FALL_SUSPECT·이벤트 확장
+7/22~7/28  통합
+7/29~7/31  Phase 3 종료
+```
+
+### 역할
+
+```text
+A(정종민): 낙상·원인 후보·비차단 전송·annotated frame·FPS/latency
+B(원우민): 공간정책·이벤트 흔들림·Live API·EventCause/DB migration·Zone Settings 계약
+C(정현수): Live UI·신규 이벤트/cause·AlertHistory·화면 성능
+```
+
+### 우선순위
+
+```text
+P0: Live View, 공간 안전정책, debounce/hysteresis, FALL_SUSPECT PoC,
+    비차단 API 전송, 신규 이벤트 E2E
+
+P1: 외부 접촉 원인 후보 추정, 신규 이벤트 Dashboard·AlertHistory 반영,
+    성능·회귀 측정, flake8·CI
+
+P2: Zone Settings 계약, 인증/인가 미니 ADR,
+    SystemSettings·Report 연동 범위, Phase 4 이관 기준
+```
+
+### 성공 기준 / 종료 게이트
+
+```text
+- Live View E2E (frame 제공 → API → React 표시) 확인
+- FALL_SUSPECT 낙상 PoC 1차 구현 및 cause 기록 동작 확인
+- zone_type 기반 ENTER_RESTRICTED / DANGER_ZONE_DWELL 이벤트 정상 발생
+- API 장애 중 추론 루프 유지
+- false positive·감지 지연·FPS 결과 기록
+- flake8·pytest·React build·GitHub Actions 통과
+- Zone Settings 계약·인증/인가 미니 ADR 확정
+- 중간평가 보고서 기한 내 제출
+- A/B/C 전원 계약 일치 승인
+```
+
+### CI 품질 게이트
+
+현재 기준선:
+
+```text
+flake8 src tests                       → 148건
+flake8 src tests --max-line-length=99  → 39건
+```
+
+적용 순서:
+
+```text
+flake8 99자 기준선 설정
+→ 기존 39건 수정
+→ pytest 전체 통과
+→ Backend·Frontend GitHub Actions 추가
+→ main 최초 성공
+→ required check 활성화
+```
+
+```text
+flake8 src tests
+pytest -q
+npm ci
+npm run build
+```
+
+권장 `.flake8` 설정:
+
+```ini
+[flake8]
+max-line-length = 99
+exclude =
+    .git,
+    .venv,
+    frontend,
+    node_modules,
+    outputs
+per-file-ignores =
+    tests/test_charts.py:E402
+```
+
+`F401`, `F541`, `F841`은 무시하지 않고 수정한다. `tests/test_charts.py`의 E402만 예외로 허용한다.
+
+### 개발 진행 순서
+
+```text
+Phase 3 Open·계약 문서 PR
+→ CI 기준선 PR
+→ Live View A→B→C 순차 통합
+→ 7/11~7/14 보고서 제출
+→ EventType·ZoneType·EventCause 공용 코드 PR
+→ A/B/C 역할별 병렬 개발
+→ integration E2E
+→ main
+```
+
+### 운영 확정
+
+```text
+- Stretch: `APPROACH_EXIT`
+  - Phase 3 활성 계약에는 아직 포함하지 않는다.
+  - 구현 착수 시 계약을 먼저 갱신한다.
+- 중간평가 보고서:
+  - 총괄: 정종민(A)
+  - 역할별 섹션: A(정종민) / B(원우민) / C(정현수)
+  - 담당자는 회의록 링크로 대체 가능
+```
+
 ### 핵심 작업
 
 - 공간 안전정책 고도화
-- `zone_type` 분리
+- `zone_type` 분리 (`play | exit | restricted | danger`)
 - 안전구역 이탈 / 출입구 접근 / 제한구역 진입 규칙 정의
 - debounce / hysteresis 적용
-- 충돌 의심 PoC
-- 낙상 의심 PoC
+- FALL_SUSPECT 낙상 PoC 및 외부 접촉 원인 후보 추정
 - 실제 / 유사 키즈카페 영상 확보
 - 라벨링 기준 정리
-- 낙상 / 충돌 / 위험구역 이벤트 정의 확정
+- 낙상 · 위험구역 이벤트 정의 확정
 
 ### 비고
 
 - 7월 일정은 계획보다 빠르게 진행되어야 한다.
-- 8월에는 ReID, cross-camera(후순위), 모델 비교, 공모전 1차 제출 준비가 겹치므로 7월 중순까지 공간 안전정책과 충돌/낙상 PoC 1차 구현을 목표로 한다.
+- 8월에는 ReID, cross-camera(후순위), 모델 비교, 공모전 1차 제출 준비가 겹치므로 7월 중순까지 공간 안전정책과 FALL_SUSPECT 낙상 PoC 및 외부 접촉 원인 후보 추정 1차 구현을 목표로 한다.
 
 ### 산출물
 
 - 공간 안전정책 v1
-- 충돌 의심 PoC
-- 낙상 의심 PoC
+- FALL_SUSPECT 낙상 PoC 및 외부 접촉 원인 후보 추정
+- Live View latest-frame polling E2E
 - 실험 데이터 기준
 
 ---

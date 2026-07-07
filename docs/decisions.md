@@ -415,3 +415,166 @@ FastAPI, React Dashboard, SQLite volume을 Docker Compose로 묶어 실행 환�
 - Vision AI는 로컬에서 실행하고 `--api-url http://localhost:8000`으로 Docker FastAPI에 연동한다.
 - Docker frontend는 Vite dev server 기반이며 운영 배포 구성(정적 파일 서버, reverse proxy, TLS)은 별도 검토가 필요하다.
 - macOS(내장 웹캠)와 Windows(USB C920) 환경에서 Docker Compose E2E 검증 완료.
+
+---
+
+## ADR-015: Live View latest-frame polling
+
+**Date**: 2026-07-06
+**Status**: Accepted
+
+### Context
+
+Phase 3에서 Dashboard에 실시간 영상 영역을 추가해야 한다. WebSocket·MJPEG 방식과 latest-frame polling 방식 중 선택이 필요했다.
+
+### Decision
+
+`PUT /live/frame` + `GET /live/frame` 기반 latest-frame polling 방식으로 구현한다. React는 500~1000ms 간격으로 polling한다.
+
+### Alternatives
+
+- **WebSocket**: 연결 유지·재연결 처리 복잡도가 높고 FastAPI 단일 worker 환경에서 추가 설정 필요
+- **MJPEG**: 브라우저 호환성 및 FastAPI에서의 스트리밍 처리 복잡도 높음
+
+### Reason
+
+- REST polling 구조를 Phase 3 내에서 유지한다는 핵심 원칙에 부합
+- FastAPI 단일 worker 기준에서 구현이 단순
+- 1~2 FPS 업로드로 키즈카페 안전 모니터링 용도에 충분
+- 3초 미갱신 시 `204 No Content`로 stale 상태를 명확히 처리
+
+### Consequences
+
+- 최신 JPEG 1장만 Process Memory에 보관, DB 영속 저장 없음
+- 파이프라인 중단 시 React placeholder 표시
+- WebSocket·MJPEG는 Phase 4 이후 필요성 기반 재검토
+
+---
+
+## ADR-016: FALL_SUSPECT.cause 기반 외부 접촉 원인 후보 기록
+
+**Date**: 2026-07-06
+**Status**: Accepted
+
+### Context
+
+Phase 3에서 낙상 감지 PoC와 함께 낙상 직전 외부 접촉 원인 후보 추정 기능을 구현한다. 독립 `COLLISION_SUSPECT` 이벤트와 `FALL_SUSPECT.cause` 방식 중 선택이 필요했다.
+
+### Decision
+
+독립 `COLLISION_SUSPECT` 이벤트를 생성하지 않는다. 낙상 확정(`FALL_CONFIRMED`) 시 낙상 시작 직전 0.5~1초의 Track 기록을 소급 조회하여, 근접 근거가 충분한 경우 `FALL_SUSPECT.cause`에 원인 후보 Track 정보를 기록한다. 근거 부족 시 `cause=null`을 유지한다.
+
+### Alternatives
+
+- **독립 COLLISION_SUSPECT**: 충돌 자체를 실시간 감지하는 별도 알고리즘 필요. 현재 데이터셋(CAUCAFall)이 낙상 데이터이므로 충돌 감지 검증 불가. 오탐률 제어 어려움.
+
+### Reason
+
+- 키즈카페에서는 놀이 과정의 근접과 가벼운 접촉이 빈번할 수 있어, 접촉 후보만으로 알림을 생성하면 운영자에게 과도한 알림이 발생할 수 있음
+- 운영상 즉각 대응 가치가 높은 상황은 외부 접촉 직후 낙상이 동반된 경우이므로, 낙상 확정 후 직전 Track을 원인 후보로 기록하는 구조가 실용적
+- 낙상 확인 후 직전 Track을 소급 조회하여 시간적 선후 관계를 확인하는 구조가 적절함
+- 추가 모델 없이 휴리스틱으로 구현 가능
+- 영상만으로 실제 충돌 인과관계를 확정하지 않고 `외부 접촉 의심`으로 제한해 표시
+
+### Consequences
+
+- `FALL_SUSPECT` 없이 충돌만 발생한 경우는 Phase 3에서 감지 불가
+- 독립 `COLLISION_SUSPECT`는 Phase 4 이후 데이터 확보 후 재검토
+- Dashboard 표기: `외부 접촉 의심 · Track #N`
+
+---
+
+## ADR-017: AsyncEventDispatcher 기반 비차단 전송
+
+**Date**: 2026-07-06
+**Status**: Accepted
+
+### Context
+
+Phase 2.5에서 `EventApiClient`의 동기 HTTP 전송이 API 장애 시 Vision AI 추론 루프 FPS를 저하시키는 문제가 확인됐다. API 장애 중에도 파이프라인이 정상 동작해야 한다.
+
+### Decision
+
+기존 `EventApiClient`는 동기 HTTP 전송 계층으로 유지하고, 신규 `AsyncEventDispatcher`가 이를 감싸는 wrapper 구조로 구현한다. `src/main.py`는 `EventApiClient`를 직접 호출하지 않고 Dispatcher에 등록한다.
+
+```text
+src/main.py
+→ AsyncEventDispatcher.enqueue_event()
+→ AsyncEventDispatcher.update_current_status()
+→ AsyncEventDispatcher.update_live_frame()
+→ Event / Status / Live Frame worker
+→ EventApiClient
+→ FastAPI
+```
+
+### Alternatives
+
+- **EventApiClient 직접 비동기화**: 기존 클라이언트를 asyncio 기반으로 교체. 파이프라인 전체가 async 구조로 변경되어야 하는 복잡도 높음.
+
+### Reason
+
+- 교체보다 감싸는 구조가 기존 코드 변경을 최소화
+- EventApiClient는 HTTP 전송 책임, AsyncEventDispatcher는 queue·worker·retry·drop·flush 책임으로 명확히 분리
+- worker별 독립 HTTP session으로 Event·Status·Live Frame 전송 격리
+
+### Consequences
+
+- Event: FIFO bounded queue 100, oldest-drop, 실패 JSONL 기록 (`outputs/api_failed_events.jsonl`)
+- CurrentStatus / Live Frame: latest-only
+- connect timeout 0.5초, read timeout 1.0초 (설정 변경 가능)
+- retry 1회, 종료 시 최대 3초 flush
+
+**실패 JSONL 기록 형식**
+
+```json
+{
+  "failed_at": "2026-07-07T12:00:00Z",
+  "reason": "queue_overflow",
+  "attempts": 0,
+  "event": {}
+}
+```
+
+- `reason`: queue overflow로 drop된 경우 `queue_overflow`, retry 후 최종 전송 실패는 `request_failed`
+- 파일 기록 자체가 실패해도 추론 루프는 종료하지 않음
+- 기존 로컬 EventWriter 저장은 API queue 등록보다 먼저 수행
+
+---
+
+## ADR-018: Phase 3 인증/인가 경계만 정의하고 구현은 Phase 4로 이관
+
+**Date**: 2026-07-06
+**Status**: Accepted
+
+### Context
+
+Phase 3에서 Live View·신규 Event API가 추가되며 보호 대상 endpoint가 늘어난다. 인증/인가를 Phase 3에서 구현할지, 경계만 정의하고 미룰지 결정이 필요했다.
+
+### Decision
+
+Phase 3에서는 역할과 보호 대상 endpoint만 정의하고, 실제 인증 구현은 Phase 4로 이관한다.
+
+```text
+Operator: Dashboard·이벤트·통계·Live View 조회
+Admin: Zone·System Settings 변경
+Pipeline Client: Event·CurrentStatus·Live Frame 전송
+
+GET /health: 공개
+보호 대상: /events, /summary, /status/current, /zones, Live View 및 설정 화면
+```
+
+JWT / Session / API Key 방식과 실제 로그인·권한 구현은 Phase 4에서 확정한다. Phase 3 로컬 시연 환경에는 인증을 적용하지 않는다.
+
+### Alternatives
+
+- **Phase 3에서 최소 인증(API Key) 도입**: 로컬 시연·팀 내부 검증 단계에서 실익이 적고, 계약이 아직 확정 중인 API에 인증까지 얹으면 개발 속도가 떨어짐.
+
+### Reason
+
+- Phase 3은 계약 확정과 기능 구현이 우선이며, 인증은 배포 단계 관심사에 가까움
+- 역할·보호 대상 경계를 먼저 정의해두면 Phase 4에서 인증을 추가할 때 API 재설계가 필요 없음
+
+### Consequences
+
+- Phase 3에서는 인증 코드와 사용자 테이블을 추가하지 않음
+- Pipeline 인증과 운영자 인증은 Phase 4에서 분리 검토
