@@ -21,6 +21,8 @@ from src.input.file_source import FileVideoSource
 from src.input.rtsp_source import RTSPSource
 from src.input.webcam_source import WebcamSource
 from src.integrations.event_api_client import EventApiClient
+from src.integrations.live_frame_client import LiveFrameClient
+from src.integrations.live_frame_dispatcher import LiveFrameDispatcher
 from src.tracking.bytetrack_wrapper import ByteTracker
 from src.visualization.video_overlay import VideoOverlayWriter
 
@@ -74,15 +76,21 @@ def run_pipeline_from_source(
     api_url: Optional[str] = None,
     model_path: str = "yolo26n.pt",
     device: str = "auto",
+    live_frame_enabled: bool = False,
+    live_frame_fps: float = 1.5,
+    live_frame_quality: int = 75,
 ) -> None:
     """모든 입력 소스 타입을 처리하는 파이프라인 코어.
 
     Args:
         source: FileVideoSource / WebcamSource / RTSPSource 중 하나.
         api_url: 지정 시 FastAPI로 이벤트/상태를 전송한다. None이면 전송 안 함.
+        live_frame_enabled: 지정 시 FastAPI PUT /live/frame으로 최신 frame을 전송한다.
+            Event/CurrentStatus 전송(api_client)과는 별도로 켜고 끌 수 있다.
     """
     source.open()
     api_client: Optional[EventApiClient] = None
+    live_frame_dispatcher: Optional[LiveFrameDispatcher] = None
     overlay_writer = None
     writer = None
     fps = source.fps
@@ -90,6 +98,23 @@ def run_pipeline_from_source(
         if api_url:
             api_client = EventApiClient(base_url=api_url)
             LOGGER.info("API 전송 활성화: %s", api_url)
+
+        if live_frame_enabled:
+            if not api_url:
+                raise ValueError("--live-frame-enabled 사용 시 --api-url을 지정해야 합니다.")
+            min_interval_sec = 1.0 / live_frame_fps if live_frame_fps > 0 else 0.5
+            live_frame_client = LiveFrameClient(
+                base_url=api_url,
+                quality=live_frame_quality,
+                min_interval_sec=min_interval_sec,
+            )
+            live_frame_dispatcher = LiveFrameDispatcher(client=live_frame_client)
+            LOGGER.info(
+                "Live Frame 전송 활성화 (latest-only worker): %s (fps=%.1f, quality=%d)",
+                api_url,
+                live_frame_fps,
+                live_frame_quality,
+            )
 
         frame_width = source.width
         frame_height = source.height
@@ -192,6 +217,15 @@ def run_pipeline_from_source(
                     api_client.send_current_status(status)
                     _last_status_time = _now
 
+            # 4-1. Live Frame 등록 (latest-only, worker가 비차단 전송)
+            if live_frame_dispatcher is not None:
+                live_frame_dispatcher.update_frame(
+                    frame,
+                    source=source.source_id,
+                    frame_number=frame_number,
+                    captured_at=_utc_now_iso_z(),
+                )
+
             # 5. 결과 영상 저장
             overlay_writer.write_frame(
                 frame=frame,
@@ -244,10 +278,22 @@ def run_pipeline_from_source(
             cv2.destroyAllWindows()
         if api_client is not None:
             api_client.close()
+        if live_frame_dispatcher is not None:
+            live_frame_dispatcher.close()
         if writer is not None:
             writer.finalize(fps=fps)
 
     LOGGER.info("Processed %s frames, %s events", frame_number, total_events)
+
+
+def _utc_now_iso_z() -> str:
+    """UTC 현재 시각을 'Z' suffix ISO 8601 문자열로 반환한다.
+
+    datetime.isoformat()은 기본적으로 '+00:00'을 붙이는데,
+    docs/api_contract.md의 captured_at 예시는 'Z' 형식(2026-07-07T12:00:00Z)이므로
+    B가 별도 파싱 분기 없이 바로 사용할 수 있도록 여기서 정규화한다.
+    """
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _build_current_status(
@@ -350,6 +396,23 @@ def main() -> None:
         default=None,
         help="FastAPI 서버 URL. 지정 시 이벤트/상태를 전송한다. 예: http://localhost:8000",
     )
+    parser.add_argument(
+        "--live-frame-enabled",
+        action="store_true",
+        help="PUT /live/frame으로 최신 frame을 전송한다. --api-url 지정 필요.",
+    )
+    parser.add_argument(
+        "--live-frame-fps",
+        type=float,
+        default=1.5,
+        help="Live Frame 업로드 주기 (FPS). 기본값 1.5 (1~2 FPS 범위).",
+    )
+    parser.add_argument(
+        "--live-frame-quality",
+        type=int,
+        default=75,
+        help="Live Frame JPEG quality (0~100). 기본값 75 (권장 70~80).",
+    )
 
     # Zone
     parser.add_argument(
@@ -409,6 +472,9 @@ def main() -> None:
         api_url=args.api_url,
         model_path=args.model,
         device=args.infer_device,
+        live_frame_enabled=args.live_frame_enabled,
+        live_frame_fps=args.live_frame_fps,
+        live_frame_quality=args.live_frame_quality,
     )
 
 
