@@ -223,7 +223,7 @@ def run_pipeline_from_source(
                     frame,
                     source=source.source_id,
                     frame_number=frame_number,
-                    captured_at=datetime.now(timezone.utc).isoformat(),
+                    captured_at=_utc_now_iso_z(),
                 )
 
             # 5. 결과 영상 저장
@@ -284,6 +284,16 @@ def run_pipeline_from_source(
             writer.finalize(fps=fps)
 
     LOGGER.info("Processed %s frames, %s events", frame_number, total_events)
+
+
+def _utc_now_iso_z() -> str:
+    """UTC 현재 시각을 'Z' suffix ISO 8601 문자열로 반환한다.
+
+    datetime.isoformat()은 기본적으로 '+00:00'을 붙이는데,
+    docs/api_contract.md의 captured_at 예시는 'Z' 형식(2026-07-07T12:00:00Z)이므로
+    B가 별도 파싱 분기 없이 바로 사용할 수 있도록 여기서 정규화한다.
+    """
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _build_current_status(

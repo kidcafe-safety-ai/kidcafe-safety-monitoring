@@ -8,6 +8,10 @@ Vision AI 파이프라인의 최신 프레임을 JPEG로 인코딩해 PUT /live/
 
 HTTP 전송 책임만 가지며, latest-only 비차단 처리(ADR-017)는
 `LiveFrameDispatcher`(live_frame_dispatcher.py)가 담당한다.
+
+retry는 구현하지 않는다 (ADR-017: CurrentStatus/Live Frame은 retry 없음).
+실패한 frame을 retry로 붙잡는 대신 다음 최신 frame을 보내는 것이
+latest-only 목적과 FPS 보호에 맞다.
 """
 
 from __future__ import annotations

@@ -519,10 +519,10 @@ src/main.py
 
 ### Consequences
 
-- Event: FIFO bounded queue 100, oldest-drop, 실패 JSONL 기록 (`outputs/api_failed_events.jsonl`)
-- CurrentStatus / Live Frame: latest-only
+- Event: FIFO bounded queue 100, oldest-drop, 실패 JSONL 기록 (`outputs/api_failed_events.jsonl`), 전송 실패 시 retry 1회
+- CurrentStatus / Live Frame: latest-only, **retry 없음** — 실패한 데이터를 retry로 붙잡고 있는 대신 다음 최신 값을 보내는 것이 latest-only 목적에 맞고, retry가 worker의 요청 처리 시간을 늘려 FPS 보호 효과를 깎기 때문
 - connect timeout 0.5초, read timeout 1.0초 (설정 변경 가능)
-- retry 1회, 종료 시 최대 3초 flush
+- 종료 시 최대 3초 flush
 
 **실패 JSONL 기록 형식**
 
