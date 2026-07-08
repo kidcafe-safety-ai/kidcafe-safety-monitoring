@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getEvents } from "../api/eventsApi";
 import EventChart from "../components/EventChart";
 import EventTable from "../components/EventTable";
@@ -8,10 +8,12 @@ import type { EventType, SafetyEvent } from "../types/event";
 type EventFilter = "ALL" | EventType;
 
 const FILTERS: EventFilter[] = ["ALL", "ENTER", "DWELL", "EXIT"];
+const PAGE_SIZE = 5;
 
 export default function EventsPage() {
   const [events, setEvents] = useState<SafetyEvent[]>([]);
   const [filter, setFilter] = useState<EventFilter>("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [hasApiError, setHasApiError] = useState(false);
 
@@ -32,6 +34,36 @@ export default function EventsPage() {
     return events.filter((event) => event.event_type === filter);
   }, [events, filter]);
 
+  const totalPages = Math.ceil(filteredEvents.length / PAGE_SIZE);
+  const safeCurrentPage =
+    totalPages === 0 ? 0 : Math.min(Math.max(currentPage, 1), totalPages);
+  const pageStart = safeCurrentPage > 0 ? (safeCurrentPage - 1) * PAGE_SIZE : 0;
+  const paginatedEvents = filteredEvents.slice(pageStart, pageStart + PAGE_SIZE);
+
+  useEffect(() => {
+    if (totalPages === 0) {
+      setCurrentPage(1);
+      return;
+    }
+
+    setCurrentPage((page) => Math.min(Math.max(page, 1), totalPages));
+  }, [totalPages]);
+
+  const handleFilterChange = (nextFilter: EventFilter) => {
+    setFilter(nextFilter);
+    setCurrentPage(1);
+  };
+
+  const goToPreviousPage = () => {
+    setCurrentPage((page) => Math.max(1, page - 1));
+  };
+
+  const goToNextPage = () => {
+    setCurrentPage((page) =>
+      totalPages === 0 ? 1 : Math.min(totalPages, page + 1),
+    );
+  };
+
   return (
     <main className="page">
       <div className="page-heading">
@@ -48,7 +80,7 @@ export default function EventsPage() {
             <button
               className={filter === item ? "active" : ""}
               key={item}
-              onClick={() => setFilter(item)}
+              onClick={() => handleFilterChange(item)}
               type="button"
             >
               {item === "ALL" ? "전체" : item}
@@ -63,13 +95,18 @@ export default function EventsPage() {
           API 연결에 실패했습니다. mock 또는 기본값으로 화면을 표시합니다.
         </div>
       ) : null}
-      {!isLoading && filteredEvents.length === 0 ? (
-        <div className="state-banner empty">표시할 이벤트가 없습니다.</div>
-      ) : null}
-
       <section className="events-grid">
         <EventChart events={filteredEvents} />
-        <EventTable events={filteredEvents} />
+        <EventTable
+          events={paginatedEvents}
+          totalCount={filteredEvents.length}
+          pagination={{
+            currentPage: safeCurrentPage,
+            totalPages,
+            onNext: goToNextPage,
+            onPrevious: goToPreviousPage,
+          }}
+        />
       </section>
     </main>
   );
