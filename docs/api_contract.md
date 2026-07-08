@@ -3,10 +3,10 @@
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
 > **최종 수정**: 2026-07-06 (Phase 3 계약 확정)
-> **상태**: Phase 2.5 구현 완료 / Phase 3 계약 확정 — 구현 예정
+> **상태**: Phase 2.5 구현 완료 / Phase 3 Live Frame API 구현 / 기타 Phase 3 계약 구현 예정
 > **관련 문서**: [`dashboard_api.md`](dashboard_api.md), [`dashboard_analysis.md`](dashboard_analysis.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md), [`roadmap.md`](roadmap.md)
 
-이 문서는 Phase 1.5~2.5의 구현된 API와 Phase 3의 확정된 예정 계약을 구분해 정리한다.
+이 문서는 Phase 1.5~2.5의 구현된 API, Phase 3 Live Frame API, 그리고 Phase 3의 확정된 후속 계약을 구분해 정리한다.
 
 ---
 
@@ -588,11 +588,11 @@ WebSocket은 Phase 2.5와 Phase 3에서도 제외하며 Phase 4 이후 검토한
 
 ---
 
-## Phase 3 계약 (구현 예정)
+## Phase 3 계약
 
-> 상태: 계약 확정 — 구현 PR 적용 예정
+> 상태: Live Frame API 구현 완료 / Event Schema v2 등 후속 항목 구현 예정
 > 기준선: v0.2.5-dashboard
-> 적용 시점: 관련 구현 PR 머지 이후
+> 적용 시점: Live Frame API는 해당 구현 PR 머지 이후, 후속 항목은 관련 구현 PR 머지 이후
 
 ---
 
