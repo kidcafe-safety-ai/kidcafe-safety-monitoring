@@ -7,6 +7,7 @@ import {
   RECENT_EVENT_LIMIT,
 } from "../api/eventsApi";
 import KpiCard from "../components/KpiCard";
+import LiveFrameView from "../components/LiveFrameView";
 import RecentEventList from "../components/RecentEventList";
 import ZoneStatusPanel from "../components/ZoneStatusPanel";
 import { usePolling } from "../hooks/usePolling";
@@ -152,9 +153,7 @@ export default function MonitoringPage() {
       </section>
 
       <section className="monitoring-grid">
-        <div className="video-placeholder">
-          <span>Live Video 예정</span>
-        </div>
+        <LiveFrameView />
         <aside className="side-stack">
           {!isLoading && recentEvents.length === 0 ? (
             <div className="state-banner empty">표시할 이벤트가 없습니다.</div>

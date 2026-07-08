@@ -218,9 +218,13 @@ def run_pipeline_from_source(
                     _last_status_time = _now
 
             # 4-1. Live Frame 등록 (latest-only, worker가 비차단 전송)
+            # Dashboard Live View는 관리자가 바로 추적 상태를 확인할 수 있도록
+            # 원본 frame이 아니라 ID/box/zone overlay가 포함된 frame을 전송한다.
             if live_frame_dispatcher is not None:
+                live_frame = frame.copy()
+                _draw_overlay(live_frame, result.tracks, zones, frame_width, frame_height)
                 live_frame_dispatcher.update_frame(
-                    frame,
+                    live_frame,
                     source=source.source_id,
                     frame_number=frame_number,
                     captured_at=_utc_now_iso_z(),
@@ -324,7 +328,7 @@ def _build_current_status(
 
 
 def _draw_overlay(frame, tracks, zones, frame_width, frame_height) -> None:
-    """show=True일 때만 사용하는 간단한 실시간 확인용 overlay."""
+    """Live View와 show=True 미리보기에서 사용하는 간단한 실시간 확인용 overlay."""
     for zone in zones:
         if zone.type != "polygon":
             continue

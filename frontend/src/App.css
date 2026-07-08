@@ -326,6 +326,88 @@ button {
   font-weight: 800;
 }
 
+.live-frame-view {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  min-height: 360px;
+}
+
+.live-frame-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #020617;
+}
+
+.live-frame-state {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+}
+
+.live-frame-view--error {
+  background:
+    linear-gradient(135deg, rgba(239, 68, 68, 0.2), transparent 32%),
+    #111827;
+  color: #fecaca;
+}
+
+.live-frame-meta {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid rgba(219, 234, 254, 0.18);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.72);
+  color: #dbeafe;
+  backdrop-filter: blur(8px);
+}
+
+.live-frame-meta div {
+  min-width: 0;
+}
+
+.live-frame-meta dt {
+  margin-bottom: 4px;
+  color: #93c5fd;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.live-frame-meta dd {
+  margin: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .live-frame-view {
+    min-height: 260px;
+  }
+
+  .live-frame-meta {
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    grid-template-columns: 1fr;
+  }
+}
+
 .side-stack {
   display: grid;
   gap: 16px;
@@ -554,6 +636,56 @@ button {
 
 .table-scroll {
   overflow-x: auto;
+}
+
+.table-empty-state {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  border: 1px dashed var(--border-color);
+  border-radius: 12px;
+  color: var(--text-muted);
+  background: var(--panel-bg);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.table-pagination span {
+  min-width: 56px;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.table-pagination button {
+  min-width: 72px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--nav-text);
+  background: var(--card-bg);
+  cursor: pointer;
+}
+
+.table-pagination button:hover:not(:disabled) {
+  color: var(--active-text);
+  border-color: var(--active-text);
+  background: var(--active-bg);
+}
+
+.table-pagination button:disabled {
+  color: var(--text-soft);
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 table {

@@ -45,7 +45,7 @@ Phase 1.5에서 계획한 mock → FastAPI 전환이 Phase 2에서 완료됐고,
 | ReportPage | Mock Prototype |
 | ZoneSettingsPage | Mock Prototype |
 | SystemSettingsModal | Mock Prototype |
-| 영상 영역 | Live View latest-frame polling 구현 예정 |
+| 영상 영역 | Live View latest-frame polling 연동 |
 
 Mock Prototype 화면의 데이터는 서버에 저장되지 않는다.
 
@@ -58,6 +58,7 @@ MonitoringPage에서 각 API를 독립 polling한다.
 | `GET /summary` | 오늘 이벤트 수 · 최근 10분 이벤트 수 KPI | 10초 |
 | `GET /status/current` | 현재 감지 인원 · zone 상태 | 2초 |
 | `GET /events/recent?minutes=10&limit=5` | 최근 10분 이벤트 목록 | 3초 |
+| `GET /live/frame` | 최신 JPEG live frame | 1초 |
 
 `recent_event_count`는 목록 길이가 아니라 `/summary`의 `recent_10min_event_count`를 사용한다.
 
@@ -98,9 +99,10 @@ ZoneSettingsPage는 mock prototype이다.
 ### Live View
 
 - `PUT /live/frame` → FastAPI 메모리 보관 → `GET /live/frame` → React 500~1000ms polling
-- MonitoringPage 영상 영역 placeholder를 실제 JPEG 표시로 교체
-- 204 No Content 수신 시 placeholder 유지
-- 연결 오류·파이프라인 중단 시 fallback 표시
+- MonitoringPage 영상 영역 placeholder를 실제 JPEG 표시로 교체 완료
+- 204 No Content 수신 시 empty 상태 표시
+- 연결 오류·파이프라인 중단 시 error fallback 표시
+- object URL 정리 및 polling cleanup 적용
 - 담당: A(정종민, frame 제공) → B(원우민, API) → C(정현수, React 표시)
 
 ### 신규 EventType·Severity 표시

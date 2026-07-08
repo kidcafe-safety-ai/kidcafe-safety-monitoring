@@ -223,7 +223,6 @@ export default function ReportPage() {
             </div>
             <div className="report-action-buttons">
               <button type="button">PDF 다운로드</button>
-              <button type="button">보호자 공유용</button>
             </div>
           </div>
         </section>
