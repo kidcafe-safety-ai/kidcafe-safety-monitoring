@@ -12,7 +12,7 @@ export const mockZoneStatus: ZoneStatus[] = [
     zone_id: "slide_zone",
     zone_name: "미끄럼틀 구역",
     current_count: 1,
-    zone_type: "slide",
+    zone_type: "danger",
     risk_level: "NORMAL",
   },
 ];

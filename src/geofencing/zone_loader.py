@@ -13,7 +13,8 @@ def load_zones(json_path: str) -> List[Zone]:
     Validations:
         - 파일 존재 여부
         - JSON 파싱 가능 여부
-        - 필수 필드 (zone_id, name, type, points)
+        - 필수 필드 (zone_id, name, type, zone_type, points)
+        - zone_type은 play | exit | restricted | danger 중 하나
         - 좌표 0~1 범위
         - polygon은 최소 3점
 
@@ -37,7 +38,7 @@ def load_zones(json_path: str) -> List[Zone]:
     zones = []
     for idx, item in enumerate(data):
         # 필수 필드 체크
-        for required in ("zone_id", "name", "type", "points"):
+        for required in ("zone_id", "name", "type", "zone_type", "points"):
             if required not in item:
                 raise ValueError(f"Zone #{idx} missing required field: '{required}'")
 
@@ -63,6 +64,7 @@ def load_zones(json_path: str) -> List[Zone]:
             zone_id=item["zone_id"],
             name=item["name"],
             type=item["type"],
+            zone_type=item["zone_type"],
             points=item["points"],
             rules=rules,
         )

@@ -74,6 +74,7 @@ class TestZone:
             zone_id="danger_door",
             name="출입문",
             type="polygon",
+            zone_type="danger",
             points=[[0.1, 0.2], [0.3, 0.2], [0.3, 0.5], [0.1, 0.5]],
         )
         assert zone.zone_id == "danger_door"
@@ -85,5 +86,16 @@ class TestZone:
                 zone_id="test",
                 name="test",
                 type="invalid_type",
+                zone_type="danger",
+                points=[[0, 0], [1, 0], [1, 1]],
+            )
+
+    def test_zone_validation_zone_type(self):
+        with pytest.raises(ValueError):
+            Zone(
+                zone_id="test",
+                name="test",
+                type="polygon",
+                zone_type="invalid_zone_type",
                 points=[[0, 0], [1, 0], [1, 1]],
             )

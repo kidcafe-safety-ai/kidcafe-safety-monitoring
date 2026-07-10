@@ -31,8 +31,14 @@ def calculate_summary_kpi(
     event_dicts = [event_to_dict(event) for event in events]
 
     total_events = len(event_dicts)
-    enter_count = sum(1 for event in event_dicts if event.get("event_type") == "ENTER")
-    dwell_count = sum(1 for event in event_dicts if event.get("event_type") == "DWELL")
+    enter_count = sum(
+        1 for event in event_dicts if event.get("event_type") in ("ENTER", "ENTER_RESTRICTED")
+    )
+    dwell_count = sum(
+        1
+        for event in event_dicts
+        if event.get("event_type") in ("DWELL", "DANGER_ZONE_DWELL")
+    )
     exit_count = sum(1 for event in event_dicts if event.get("event_type") == "EXIT")
 
     total_tracks = len(

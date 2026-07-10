@@ -296,6 +296,8 @@ B(원우민): 공간정책·이벤트 흔들림·Live API·EventCause/DB migrati
 C(정현수): Live UI·신규 이벤트/cause·AlertHistory·화면 성능
 ```
 
+> 예외: 공간정책·debounce 작업은 README 파일 소유권상 A 소유인 `src/events/`, `src/geofencing/`에 B가 조율해 수정한다. 충돌 방지를 위해 B 공간정책 PR → A 낙상 연결부 PR 순서로 진행한다.
+
 ### 우선순위
 
 ```text

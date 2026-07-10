@@ -8,11 +8,11 @@ import pytest
 import requests
 
 from src.integrations.event_api_client import EventApiClient
-from src.common.types import Event
+from src.common.types import Event, EventCause, EventCauseEvidence
 
 
-def _make_event() -> Event:
-    return Event.create(
+def _make_event(**overrides) -> Event:
+    defaults = dict(
         event_type="ENTER",
         track_id=1,
         zone_id="zone_a",
@@ -22,6 +22,8 @@ def _make_event() -> Event:
         video_source="webcam:0",
         timestamp="00:00:03.333",
     )
+    defaults.update(overrides)
+    return Event.create(**defaults)
 
 
 class TestEventApiClient:
@@ -34,6 +36,57 @@ class TestEventApiClient:
             result = client.send_event(_make_event())
 
         assert result is True
+
+    def test_send_event_payload_includes_confidence_event_confidence_and_cause(self):
+        """Phase 3 필드가 조용히 유실되지 않고 payload에 포함돼야 한다."""
+        client = EventApiClient(base_url="http://localhost:8000")
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        event = _make_event(
+            event_type="FALL_SUSPECT",
+            zone_id="__global__",
+            confidence=0.91,
+            event_confidence=0.82,
+            cause=EventCause(
+                type="NEARBY_TRACK",
+                track_id=7,
+                score=0.68,
+                evidence=EventCauseEvidence(
+                    min_distance_norm=0.31,
+                    closing_speed_norm=0.74,
+                    time_to_fall_sec=0.42,
+                ),
+            ),
+        )
+
+        with patch.object(client._session, "post", return_value=mock_resp) as mock_post:
+            client.send_event(event)
+
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload["confidence"] == 0.91
+        assert payload["event_confidence"] == 0.82
+        assert payload["cause"] == {
+            "type": "NEARBY_TRACK",
+            "track_id": 7,
+            "score": 0.68,
+            "evidence": {
+                "min_distance_norm": 0.31,
+                "closing_speed_norm": 0.74,
+                "time_to_fall_sec": 0.42,
+            },
+        }
+
+    def test_send_event_payload_cause_is_none_when_event_has_no_cause(self):
+        client = EventApiClient(base_url="http://localhost:8000")
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+
+        with patch.object(client._session, "post", return_value=mock_resp) as mock_post:
+            client.send_event(_make_event())
+
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload["cause"] is None
+        assert payload["event_confidence"] is None
 
     def test_send_event_returns_true_on_409_duplicate(self):
         client = EventApiClient(base_url="http://localhost:8000")

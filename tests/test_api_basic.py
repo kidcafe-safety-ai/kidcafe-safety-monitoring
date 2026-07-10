@@ -94,6 +94,81 @@ def test_post_events_stores_event_and_returns_created_event(client):
     assert event["created_at"]
 
 
+@pytest.mark.parametrize("event_type", ["ENTER_RESTRICTED", "DANGER_ZONE_DWELL"])
+def test_post_events_accepts_phase_3_event_types(client, event_type):
+    payload = make_event_payload(event_type=event_type, zone_id="playground_bottom_right")
+
+    response = client.post("/events", json=payload)
+
+    assert response.status_code == 201
+    assert response.json()["data"]["event_type"] == event_type
+
+
+def test_post_fall_suspect_event_with_cause_stores_and_returns_cause(client):
+    payload = make_event_payload(
+        event_type="FALL_SUSPECT",
+        zone_id="__global__",
+        event_confidence=0.82,
+        cause={
+            "type": "NEARBY_TRACK",
+            "track_id": 7,
+            "score": 0.68,
+            "evidence": {
+                "min_distance_norm": 0.31,
+                "closing_speed_norm": 0.74,
+                "time_to_fall_sec": 0.42,
+            },
+        },
+    )
+
+    response = client.post("/events", json=payload)
+
+    assert response.status_code == 201
+    event = response.json()["data"]
+    assert event["event_type"] == "FALL_SUSPECT"
+    assert event["event_confidence"] == 0.82
+    assert event["cause"] == payload["cause"]
+
+    # GET /events/recent에서도 cause가 그대로 조회돼야 한다.
+    recent = client.get("/events/recent").json()["data"]
+    assert recent[0]["cause"] == payload["cause"]
+
+
+def test_post_fall_suspect_event_without_cause_returns_null(client):
+    payload = make_event_payload(
+        event_type="FALL_SUSPECT", zone_id="__global__", event_confidence=0.5
+    )
+
+    response = client.post("/events", json=payload)
+
+    assert response.status_code == 201
+    event = response.json()["data"]
+    assert event["cause"] is None
+
+
+def test_post_event_with_partial_cause_returns_422(client):
+    payload = make_event_payload(
+        event_type="FALL_SUSPECT",
+        zone_id="__global__",
+        cause={"type": "NEARBY_TRACK", "track_id": 7},  # score, evidence 누락
+    )
+
+    response = client.post("/events", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_post_event_without_event_confidence_or_cause_defaults_to_none(client):
+    payload = make_event_payload()
+
+    response = client.post("/events", json=payload)
+
+    assert response.status_code == 201
+    event = response.json()["data"]
+    assert event["event_confidence"] is None
+    assert event["cause"] is None
+
+
 def test_get_events_returns_paginated_latest_first_items(client):
     older = make_event_payload(event_type="ENTER", timestamp="00:00:01.000")
     newer = make_event_payload(event_type="DWELL", timestamp="00:00:02.000")
@@ -514,6 +589,14 @@ def test_invalid_foot_point_length_returns_422(client):
 
 def test_invalid_confidence_returns_422(client):
     payload = make_event_payload(confidence=1.1)
+
+    response = client.post("/events", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_invalid_event_confidence_returns_422(client):
+    payload = make_event_payload(event_type="FALL_SUSPECT", event_confidence=1.5)
 
     response = client.post("/events", json=payload)
 

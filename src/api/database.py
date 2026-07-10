@@ -26,6 +26,30 @@ def get_connection() -> sqlite3.Connection:
     return connection
 
 
+# Phase 3에서 events 테이블에 추가되는 nullable 컬럼.
+# 기존 DB에도 idempotent하게 적용된다 (_migrate_events_table 참고).
+_EVENTS_PHASE_3_COLUMNS = {
+    "event_confidence": "REAL",
+    "cause_json": "TEXT",
+}
+
+
+def _migrate_events_table(connection: sqlite3.Connection) -> None:
+    """기존 events 테이블에 Phase 3 nullable 컬럼을 추가한다.
+
+    CREATE TABLE IF NOT EXISTS는 이미 테이블이 있으면 컬럼을 추가하지 않으므로,
+    PRAGMA table_info로 컬럼 존재 여부를 확인한 뒤 없는 컬럼만 ALTER TABLE로 추가한다.
+    여러 번 실행해도 안전하며, 기존 행은 두 컬럼 모두 NULL로 유지된다.
+    참고: docs/api_contract.md SQLite Migration (Phase 3)
+    """
+    existing_columns = {
+        row["name"] for row in connection.execute("PRAGMA table_info(events)")
+    }
+    for column, sql_type in _EVENTS_PHASE_3_COLUMNS.items():
+        if column not in existing_columns:
+            connection.execute(f"ALTER TABLE events ADD COLUMN {column} {sql_type}")
+
+
 def init_db() -> None:
     with get_connection() as connection:
         connection.execute(
@@ -48,6 +72,7 @@ def init_db() -> None:
             )
             """
         )
+        _migrate_events_table(connection)
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type)"
         )

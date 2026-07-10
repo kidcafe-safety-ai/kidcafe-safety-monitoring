@@ -18,7 +18,7 @@ from typing import Any, Dict, Iterable, List
 
 import pandas as pd
 
-from src.common.types import Event
+from src.common.types import Event, EventCause, EventCauseEvidence
 
 
 DEFAULT_SUMMARY: Dict[str, Any] = {
@@ -48,6 +48,9 @@ def event_to_dict(event: Event | Dict[str, Any]) -> Dict[str, Any]:
 def events_to_dataframe(events: Iterable[Event | Dict[str, Any]]) -> pd.DataFrame:
     """
     Event 리스트를 pandas DataFrame으로 변환한다.
+
+    cause는 dict가 아니라 cause_json(JSON 문자열) 컬럼으로 저장한다.
+    참고: docs/api_contract.md "출력 형식" (CSV: cause_json 문자열 컬럼).
     """
     columns = [
         "event_id",
@@ -59,9 +62,17 @@ def events_to_dataframe(events: Iterable[Event | Dict[str, Any]]) -> pd.DataFram
         "foot_point",
         "frame_number",
         "video_source",
+        "confidence",
+        "event_confidence",
+        "cause_json",
     ]
 
-    rows = [event_to_dict(event) for event in events]
+    rows = []
+    for event in events:
+        row = dict(event_to_dict(event))
+        cause = row.pop("cause", None)
+        row["cause_json"] = json.dumps(cause, ensure_ascii=False) if cause else None
+        rows.append(row)
 
     if not rows:
         return pd.DataFrame(columns=columns)
@@ -73,6 +84,28 @@ def events_to_dataframe(events: Iterable[Event | Dict[str, Any]]) -> pd.DataFram
             df[column] = None
 
     return df[columns]
+
+
+def _decode_cause(cause: Any) -> EventCause | None:
+    """asdict()로 저장된 cause dict를 다시 EventCause로 복원한다.
+
+    Event.__post_init__이 cause를 EventCause 인스턴스 또는 None만 허용하므로,
+    JSONL에서 읽은 plain dict를 그대로 넘기면 저장된 cause가 있는 이벤트를
+    다시 로드할 때마다 ValueError가 난다.
+    """
+    if cause is None:
+        return None
+    evidence = cause["evidence"]
+    return EventCause(
+        type=cause["type"],
+        track_id=cause["track_id"],
+        score=cause["score"],
+        evidence=EventCauseEvidence(
+            min_distance_norm=evidence["min_distance_norm"],
+            closing_speed_norm=evidence["closing_speed_norm"],
+            time_to_fall_sec=evidence["time_to_fall_sec"],
+        ),
+    )
 
 
 def load_events_from_jsonl(path: str) -> List[Event]:
@@ -95,8 +128,9 @@ def load_events_from_jsonl(path: str) -> List[Event]:
 
             try:
                 data = json.loads(line)
+                data["cause"] = _decode_cause(data.get("cause"))
                 events.append(Event(**data))
-            except (json.JSONDecodeError, TypeError, ValueError) as error:
+            except (json.JSONDecodeError, TypeError, ValueError, KeyError) as error:
                 raise ValueError(
                     f"잘못된 JSONL 형식입니다. file={path}, line={line_number}"
                 ) from error

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import asdict
 from typing import Any, Dict
 
 import requests
@@ -49,6 +50,9 @@ class EventApiClient:
             "foot_point": event.foot_point,
             "frame_number": event.frame_number,
             "video_source": event.video_source,
+            "confidence": event.confidence,
+            "event_confidence": event.event_confidence,
+            "cause": asdict(event.cause) if event.cause is not None else None,
         }
         try:
             resp = self._session.post(

@@ -3,6 +3,7 @@
     "zone_id": "door_area",
     "name": "문앞 구역",
     "type": "polygon",
+    "zone_type": "exit",
     "points": [
       [
         0.4141,
