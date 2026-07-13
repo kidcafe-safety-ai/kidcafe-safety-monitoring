@@ -44,7 +44,8 @@ def get_css() -> str:
     c = _colors()
     return f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900\
+&display=swap');
 
 html, body,
 [data-testid="stAppViewContainer"],
@@ -519,7 +520,6 @@ def sidebar_status():
 
 
 def page_header(title: str, subtitle: str):
-    c = _colors()
     st.markdown(f"# {title}")
     st.markdown(
         f'<div class="kc-page-subtitle">{subtitle}</div>',
@@ -528,9 +528,8 @@ def page_header(title: str, subtitle: str):
 
 
 def brand_header():
-    c = _colors()
     st.markdown(
-        f"""
+        """
         <div class="kc-brand">
             <div class="kc-logo">⌁</div>
             <div>

@@ -1,0 +1,9 @@
+[flake8]
+max-line-length = 99
+extend-exclude =
+    .venv,
+    frontend,
+    node_modules,
+    outputs
+per-file-ignores =
+    tests/test_charts.py:E402

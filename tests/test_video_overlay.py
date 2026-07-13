@@ -1,11 +1,8 @@
 """video_overlay 모듈 테스트."""
 
-import os
-
 import numpy as np
-import pytest
 
-from src.common.types import Event, Track, Zone, ZoneRules
+from src.common.types import Track, Zone
 from src.visualization.video_overlay import VideoOverlayWriter, get_event_color
 
 

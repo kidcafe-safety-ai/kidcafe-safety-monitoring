@@ -327,18 +327,29 @@ P2: Zone Settings 계약, 인증/인가 미니 ADR,
 
 ### CI 품질 게이트
 
-현재 기준선:
+> 상태: 구현 완료 (`chore/ci-baseline`) — Phase 3부터 PR 단위로 flake8·pytest·React build를 GitHub Actions에서 자동 검증한다.
+> main에서 CI가 최초 green 된 뒤 required check 활성화를 검토한다.
+
+도입 전 측정:
 
 ```text
 flake8 src tests                       → 148건
-flake8 src tests --max-line-length=99  → 39건
+flake8 src tests --max-line-length=99  → 38건
+```
+
+적용 후:
+
+```text
+flake8 src tests → 0건
+pytest -q        → 220 passed, 1 skipped
+React build      → 통과
 ```
 
 적용 순서:
 
 ```text
 flake8 99자 기준선 설정
-→ 기존 39건 수정
+→ 기존 38건 수정
 → pytest 전체 통과
 → Backend·Frontend GitHub Actions 추가
 → main 최초 성공
@@ -357,8 +368,7 @@ npm run build
 ```ini
 [flake8]
 max-line-length = 99
-exclude =
-    .git,
+extend-exclude =
     .venv,
     frontend,
     node_modules,
