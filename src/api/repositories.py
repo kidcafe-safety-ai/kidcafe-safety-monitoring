@@ -55,6 +55,8 @@ def _recent_utc_bounds(now_utc: datetime, minutes: int) -> tuple[str, str]:
 
 
 def _row_to_event(row: sqlite3.Row) -> Dict[str, Any]:
+    row_keys = row.keys()
+    cause_json = row["cause_json"] if "cause_json" in row_keys else None
     return {
         "id": row["id"],
         "event_id": row["event_id"],
@@ -68,6 +70,8 @@ def _row_to_event(row: sqlite3.Row) -> Dict[str, Any]:
         "frame_number": row["frame_number"],
         "video_time_sec": row["video_time_sec"],
         "confidence": row["confidence"],
+        "event_confidence": row["event_confidence"] if "event_confidence" in row_keys else None,
+        "cause": json.loads(cause_json) if cause_json else None,
         "video_source": row["video_source"],
         "created_at": row["created_at"],
     }
@@ -85,6 +89,11 @@ def _row_to_current_status(row: sqlite3.Row) -> Dict[str, Any]:
 
 def create_event(event: EventCreate) -> Dict[str, Any]:
     video_time_sec = timestamp_to_seconds(event.timestamp)
+    cause_json = (
+        json.dumps(event.cause.model_dump(), ensure_ascii=False)
+        if event.cause is not None
+        else None
+    )
     try:
         with get_connection() as connection:
             cursor = connection.execute(
@@ -101,9 +110,11 @@ def create_event(event: EventCreate) -> Dict[str, Any]:
                     bbox_json,
                     foot_point_json,
                     confidence,
+                    event_confidence,
+                    cause_json,
                     video_source
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     event.event_id,
@@ -117,6 +128,8 @@ def create_event(event: EventCreate) -> Dict[str, Any]:
                     json.dumps(event.bbox),
                     json.dumps(event.foot_point),
                     event.confidence,
+                    event.event_confidence,
+                    cause_json,
                     event.video_source,
                 ),
             )
@@ -276,8 +289,12 @@ def get_summary() -> Dict[str, Any]:
                         ELSE 0
                     END
                 ) AS recent_10min_event_count,
-                SUM(CASE WHEN event_type = 'ENTER' THEN 1 ELSE 0 END) AS enter_count,
-                SUM(CASE WHEN event_type = 'DWELL' THEN 1 ELSE 0 END) AS dwell_count,
+                SUM(
+                    CASE WHEN event_type IN ('ENTER', 'ENTER_RESTRICTED') THEN 1 ELSE 0 END
+                ) AS enter_count,
+                SUM(
+                    CASE WHEN event_type IN ('DWELL', 'DANGER_ZONE_DWELL') THEN 1 ELSE 0 END
+                ) AS dwell_count,
                 SUM(CASE WHEN event_type = 'EXIT' THEN 1 ELSE 0 END) AS exit_count,
                 COUNT(DISTINCT track_id) AS total_tracks,
                 COUNT(DISTINCT video_source) AS video_count

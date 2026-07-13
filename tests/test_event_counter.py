@@ -74,6 +74,23 @@ def test_calculate_summary_kpi():
     assert summary["avg_dwell_seconds"] == 5.0
 
 
+def test_calculate_summary_kpi_includes_phase_3_event_types():
+    events = [
+        make_event("e1", "00:00:01.000", "ENTER", 1, "zone_a", 30),
+        make_event("e2", "00:00:02.000", "ENTER_RESTRICTED", 2, "zone_b", 60),
+        make_event("e3", "00:00:03.000", "DWELL", 1, "zone_a", 90),
+        make_event("e4", "00:00:04.000", "DANGER_ZONE_DWELL", 2, "zone_b", 120),
+        make_event("e5", "00:00:05.000", "FALL_SUSPECT", 1, "__global__", 150),
+    ]
+
+    summary = calculate_summary_kpi(events)
+
+    assert summary["total_events"] == 5
+    assert summary["enter_count"] == 2
+    assert summary["dwell_count"] == 2
+    assert summary["exit_count"] == 0
+
+
 def test_get_recent_events():
     events = [
         make_event("e1", "00:00:01.000", "ENTER", 1, "zone_a", 30),

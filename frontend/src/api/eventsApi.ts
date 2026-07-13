@@ -4,6 +4,7 @@ import { mockZoneStatus } from "../mocks/mockZoneStatus";
 import type {
   CurrentRiskLevel,
   DashboardSummary,
+  EventCause,
   EventType,
   SafetyEvent,
   Severity,
@@ -36,10 +37,18 @@ interface LoadedApiData<T> {
   errorMessage: string | null;
 }
 
-const EVENT_TYPES: readonly EventType[] = ["ENTER", "DWELL", "EXIT"];
+const EVENT_TYPES: readonly EventType[] = [
+  "ENTER",
+  "DWELL",
+  "EXIT",
+  "ENTER_RESTRICTED",
+  "DANGER_ZONE_DWELL",
+  "FALL_SUSPECT",
+];
 const SEVERITIES: readonly Severity[] = ["LOW", "MEDIUM", "HIGH"];
 const STATUS_RISK_LEVELS: readonly CurrentRiskLevel[] = ["NORMAL", "HIGH"];
-const ZONE_TYPES: readonly ZoneType[] = ["exit", "play", "restricted", "slide"];
+const ZONE_TYPES: readonly ZoneType[] = ["exit", "play", "restricted", "danger"];
+const EVENT_CAUSE_TYPES = ["NEARBY_TRACK"] as const;
 export const RECENT_EVENT_LIMIT = 5;
 
 const API_BASE_URL = getEnvValue(
@@ -215,7 +224,16 @@ function readNullableString(value: unknown) {
 }
 
 function normalizeEventType(value: unknown): EventType {
-  return isOneOf(EVENT_TYPES, value) ? value : "ENTER";
+  if (isOneOf(EVENT_TYPES, value)) {
+    return value;
+  }
+
+  // 알 수 없는(=아직 Frontend가 모르는) EventType을 ENTER로 조용히 바꾸지 않는다.
+  // 값이 있는 문자열이면 그대로 통과시켜 화면에서 실제 값을 확인할 수 있게 하고,
+  // 값 자체가 없을 때만 안전한 기본값으로 ENTER를 사용한다.
+  return typeof value === "string" && value.trim().length > 0
+    ? (value as EventType)
+    : "ENTER";
 }
 
 function normalizeStatusRiskLevel(value: unknown): CurrentRiskLevel {
@@ -228,6 +246,57 @@ function readOptionalSeverity(value: unknown) {
 
 function readOptionalZoneType(value: unknown) {
   return isOneOf(ZONE_TYPES, value) ? value : undefined;
+}
+
+function readOptionalEventConfidence(value: unknown): number | null {
+  const parsed = readOptionalNumber(value);
+  return parsed !== undefined && parsed >= 0 && parsed <= 1 ? parsed : null;
+}
+
+/** 필드가 하나라도 유효하지 않으면 cause 전체를 안전하게 null로 취급한다 (부분 cause 금지). */
+function normalizeEventCause(value: unknown): EventCause | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (!isOneOf(EVENT_CAUSE_TYPES, value.type)) {
+    return null;
+  }
+
+  const trackId = readOptionalNumber(value.track_id);
+  const score = readOptionalNumber(value.score);
+  if (trackId === undefined || trackId < 0) {
+    return null;
+  }
+  if (score === undefined || score < 0 || score > 1) {
+    return null;
+  }
+
+  const evidenceValue = isRecord(value.evidence) ? value.evidence : {};
+  const minDistanceNorm = readOptionalNumber(evidenceValue.min_distance_norm);
+  const closingSpeedNorm = readOptionalNumber(evidenceValue.closing_speed_norm);
+  const timeToFallSec = readOptionalNumber(evidenceValue.time_to_fall_sec);
+  if (
+    minDistanceNorm === undefined ||
+    closingSpeedNorm === undefined ||
+    timeToFallSec === undefined ||
+    minDistanceNorm < 0 ||
+    closingSpeedNorm < 0 ||
+    timeToFallSec < 0
+  ) {
+    return null;
+  }
+
+  return {
+    type: value.type,
+    track_id: trackId,
+    score,
+    evidence: {
+      min_distance_norm: minDistanceNorm,
+      closing_speed_norm: closingSpeedNorm,
+      time_to_fall_sec: timeToFallSec,
+    },
+  };
 }
 
 function readTuple2(value: unknown): [number, number] {
@@ -275,6 +344,8 @@ function normalizeSafetyEvent(value: unknown, index = 0): SafetyEvent {
     event_label: readOptionalString(event.event_label),
     severity: readOptionalSeverity(event.severity),
     zone_type: readOptionalZoneType(event.zone_type),
+    event_confidence: readOptionalEventConfidence(event.event_confidence),
+    cause: normalizeEventCause(event.cause),
     bbox: readTuple4(event.bbox),
     foot_point: readTuple2(event.foot_point),
     frame_number: readNumber(event.frame_number),

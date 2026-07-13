@@ -29,6 +29,12 @@ def parse_args():
     p.add_argument("--output", required=True)
     p.add_argument("--zone-id", default="zone_01")
     p.add_argument("--zone-name", default="구역")
+    p.add_argument(
+        "--zone-type",
+        default="danger",
+        choices=["play", "exit", "restricted", "danger"],
+        help="안전정책 분류 (Phase 3 필수 필드)",
+    )
     p.add_argument("--dwell-sec", type=int, default=3)
     p.add_argument("--frame", type=int, default=0, help="기준으로 쓸 프레임 번호")
     return p.parse_args()
@@ -95,6 +101,7 @@ def main():
         "zone_id": args.zone_id,
         "name": args.zone_name,
         "type": "polygon",
+        "zone_type": args.zone_type,
         "points": normalized,
         "rules": {
             "enter_alert": True,

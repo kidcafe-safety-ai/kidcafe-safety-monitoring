@@ -2,11 +2,11 @@
 
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
-> **최종 수정**: 2026-07-06 (Phase 3 계약 확정)
-> **상태**: Phase 2.5 구현 완료 / Phase 3 Live Frame API 구현 / 기타 Phase 3 계약 구현 예정
+> **최종 수정**: 2026-07-10 (Phase 3 공용 Event/Zone 계약 구현 반영)
+> **상태**: Phase 2.5 구현 완료 / Phase 3 Live Frame API 구현 / Phase 3 Event·Zone·EventCause 계약 구현 완료 / 안전 감지 로직·안전정책 룰 구현 예정
 > **관련 문서**: [`dashboard_api.md`](dashboard_api.md), [`dashboard_analysis.md`](dashboard_analysis.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md), [`roadmap.md`](roadmap.md)
 
-이 문서는 Phase 1.5~2.5의 구현된 API, Phase 3 Live Frame API, 그리고 Phase 3의 확정된 후속 계약을 구분해 정리한다.
+이 문서는 Phase 1.5~2.5의 구현된 API, Phase 3 Live Frame API·Event/Zone 공용 계약, 그리고 Phase 3의 확정된 후속 계약(안전 감지 로직 등)을 구분해 정리한다.
 
 ---
 
@@ -590,9 +590,9 @@ WebSocket은 Phase 2.5와 Phase 3에서도 제외하며 Phase 4 이후 검토한
 
 ## Phase 3 계약
 
-> 상태: Live Frame API 구현 완료 / Event Schema v2 등 후속 항목 구현 예정
+> 상태: Live Frame API 구현 완료 / Event Schema v2·ZoneType·SQLite migration 구현 완료 / 안전 감지 로직·안전정책 룰 구현 예정
 > 기준선: v0.2.5-dashboard
-> 적용 시점: Live Frame API는 해당 구현 PR 머지 이후, 후속 항목은 관련 구현 PR 머지 이후
+> 적용 시점: 아래 각 계약은 해당 구현 PR 머지 이후 적용됨
 
 ---
 
@@ -673,6 +673,8 @@ React: 204 수신 시 placeholder 표시, 파이프라인 중단 시 fallback �
 
 ## Event Schema v2 (Phase 3 확장)
 
+> 상태: 구현 완료 (`src/common/types.py`, `src/api/schemas.py`, `src/api/repositories.py`)
+
 기존 Event 필드를 유지하고 optional 필드를 추가한다.
 
 **Phase 3 활성 EventType**
@@ -732,6 +734,8 @@ cause.evidence.min_distance_norm / closing_speed_norm / time_to_fall_sec: 0 이�
 
 ## SQLite Migration (Phase 3)
 
+> 상태: 구현 완료 (`src/api/database.py`의 `_migrate_events_table`)
+
 기존 DB에 nullable 컬럼을 추가한다.
 
 ```sql
@@ -757,6 +761,8 @@ ALTER TABLE events ADD COLUMN cause_json TEXT;
 
 ## Summary 신규 이벤트 집계
 
+> 상태: 구현 완료 (`src/api/repositories.py`의 `get_summary`)
+
 Phase 3 신규 EventType의 Summary 집계 기준:
 
 | 카운터 | 포함 EventType |
@@ -772,7 +778,9 @@ Phase 3 신규 EventType의 Summary 집계 기준:
 
 ## GET /zones Phase 3 계약
 
-기존 `GET /zones`는 Zone 목록을 반환한다. Phase 3에서 `zone_type` 필드가 추가된다.
+> 상태: 구현 완료 — `data/zones/*.json`에 `zone_type` 반영, `GET /zones`가 그대로 직렬화해 반환
+
+기존 `GET /zones`는 Zone 목록을 반환한다. Phase 3에서 `zone_type` 필드가 추가됐다.
 
 ```json
 {
@@ -839,8 +847,8 @@ updated_at
 - API `zone_name` ↔ 내부 JSON `name`
 - API `dwell_threshold_sec` / `enter_alert` ↔ 내부 JSON `rules.dwell_threshold_sec` / `rules.enter_alert`
 - `version`, `updated_at`은 저장 시마다 갱신 (동시 수정 감지용)
-- `GET /zones` endpoint 자체는 구현 완료, `zone_type` 응답 확장은 Phase 3 구현 예정
-- `PUT /zones`: Phase 4 구현
+- `GET /zones` endpoint와 `zone_type` 응답 확장 모두 구현 완료
+- `PUT /zones`(Zone Settings 저장)는 Phase 4 구현
 
 ---
 

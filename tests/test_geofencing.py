@@ -19,6 +19,7 @@ class TestZoneChecker:
             zone_id="test_zone",
             name="test",
             type="polygon",
+            zone_type="danger",
             points=[[0.3, 0.4], [0.7, 0.4], [0.7, 0.9], [0.3, 0.9]],
         )
 
@@ -66,8 +67,28 @@ class TestZoneLoaderValidation:
             load_zones(str(path))
 
     def test_out_of_range_coords(self, tmp_path):
-        bad_json = '[{"zone_id":"x","name":"x","type":"polygon","points":[[1.5,0.5],[0.7,0.4],[0.7,0.9]]}]'
+        bad_json = (
+            '[{"zone_id":"x","name":"x","type":"polygon","zone_type":"danger",'
+            '"points":[[1.5,0.5],[0.7,0.4],[0.7,0.9]]}]'
+        )
         path = tmp_path / "bad.json"
         path.write_text(bad_json)
         with pytest.raises(ValueError, match="out of normalized range"):
+            load_zones(str(path))
+
+    def test_missing_zone_type(self, tmp_path):
+        bad_json = '[{"zone_id":"x","name":"x","type":"polygon","points":[[0,0],[1,0],[1,1]]}]'
+        path = tmp_path / "bad.json"
+        path.write_text(bad_json)
+        with pytest.raises(ValueError, match="zone_type"):
+            load_zones(str(path))
+
+    def test_invalid_zone_type(self, tmp_path):
+        bad_json = (
+            '[{"zone_id":"x","name":"x","type":"polygon","zone_type":"slide",'
+            '"points":[[0,0],[1,0],[1,1]]}]'
+        )
+        path = tmp_path / "bad.json"
+        path.write_text(bad_json)
+        with pytest.raises(ValueError, match="zone_type"):
             load_zones(str(path))

@@ -3,6 +3,7 @@
     "zone_id": "playground_bottom_right",
     "name": "test video zone",
     "type": "polygon",
+    "zone_type": "danger",
     "points": [
       [0.65, 0.65],
       [1, 0.65],

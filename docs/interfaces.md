@@ -55,7 +55,10 @@ class TrackingResult:
 | DWELL | 체류 | zone에 `dwell_threshold_sec` 이상 머무름 (zone당 1회) |
 | EXIT | 이탈 | 사람이 zone에서 나감 |
 
-**Phase 3 활성 추가 예정 (계약 확정 — 구현 예정)**
+**Phase 3 신규 (타입·계약 반영 완료 — 실제 발생 로직은 후속 PR)**
+
+`src/common/types.py`의 `EventType`/`VALID_EVENT_TYPES`에 반영 완료. 아래 3종을
+실제로 생성하는 안전정책 로직(제한구역 판정, 낙상 감지 등)은 아직 없다.
 
 | 타입 | 의미 | 발생 조건 |
 |------|------|---------|
@@ -83,8 +86,13 @@ class TrackingResult:
 
 ### 구조
 
+`src/common/types.py` 현재 구현 기준 (Phase 3 타입 반영 완료).
+
 ```python
-EventType = Literal["ENTER", "DWELL", "EXIT"]
+EventType = Literal[
+    "ENTER", "DWELL", "EXIT",
+    "ENTER_RESTRICTED", "DANGER_ZONE_DWELL", "FALL_SUSPECT",
+]
 
 @dataclass
 class Event:
@@ -97,21 +105,10 @@ class Event:
     foot_point: List[float]      # [cx, y2] pixel 좌표
     frame_number: int
     video_source: str
-```
-
-### Phase 3 적용 예정 EventType
-
-> 상태: 계약 확정 — 구현 PR 적용 예정
-
-```python
-EventType = Literal[
-    "ENTER",
-    "DWELL",
-    "EXIT",
-    "ENTER_RESTRICTED",
-    "DANGER_ZONE_DWELL",
-    "FALL_SUSPECT",
-]
+    # Phase 3 추가 (optional, 하위 호환)
+    confidence: Optional[float] = None
+    event_confidence: Optional[float] = None
+    cause: Optional[EventCause] = None
 ```
 
 ---
@@ -481,11 +478,11 @@ RTSPSource
 
 ---
 
-## 9. Phase 3 계약 (구현 예정)
+## 9. Phase 3 공용 계약
 
-> 상태: 계약 확정 — 구현 PR 적용 예정
+> 상태: EventType·ZoneType·EventCause·DB migration·Frontend 타입 반영 완료 (`feature/phase-3-event-contract`)
+> 실제 감지 로직(FALL_SUSPECT 판정, zone_type 안전정책 룰)은 후속 A/B/C PR에서 구현
 > 기준선: v0.2.5-dashboard
-> 적용 시점: 관련 구현 PR 머지 이후
 
 ### ZoneType 계약
 
@@ -499,8 +496,8 @@ zone_type: play | exit | restricted | danger  ← 안전정책 분류 (Phase 3 �
 - `zone_type`은 Phase 3부터 필수 필드
 - 허용되지 않은 값이면 `ZoneLoader`에서 `ValueError` 발생
 - `slide_zone` 같은 `zone_id`는 그대로 유지 가능
-- Backend Zone JSON(`data/zones/*.json`)에는 현재 `zone_type` 필드 자체가 없음 → Phase 3에서 신규 추가
-- Frontend mock/type(`ZoneType`, `mockEvents.ts` 등)에는 이미 `"slide"` 값이 존재 → `"danger"`로 교체
+- Backend Zone JSON(`data/zones/*.json`)에 `zone_type` 반영 완료 (`sample.json`→`danger`, `benchmark_test5.json`→`exit`)
+- Frontend `ZoneType`/mock에서 `"slide"` → `"danger"` 교체 완료
 
 ```python
 ZoneType = Literal["play", "exit", "restricted", "danger"]

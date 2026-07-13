@@ -8,10 +8,33 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
-EventType = Literal["ENTER", "DWELL", "EXIT"]
+EventType = Literal[
+    "ENTER",
+    "DWELL",
+    "EXIT",
+    "ENTER_RESTRICTED",
+    "DANGER_ZONE_DWELL",
+    "FALL_SUSPECT",
+]
 RiskLevel = Literal["NORMAL", "HIGH"]
+EventCauseType = Literal["NEARBY_TRACK"]
 TIMESTAMP_REGEX = r"^\d{2}:[0-5]\d:[0-5]\d\.\d{3}$"
 TIMESTAMP_PATTERN = re.compile(TIMESTAMP_REGEX)
+
+
+class EventCauseEvidence(BaseModel):
+    min_distance_norm: float = Field(ge=0.0)
+    closing_speed_norm: float = Field(ge=0.0)
+    time_to_fall_sec: float = Field(ge=0.0)
+
+
+class EventCause(BaseModel):
+    """부분 필드만 채운 cause는 허용하지 않는다 (모든 필드 필수)."""
+
+    type: EventCauseType
+    track_id: int = Field(ge=0)
+    score: float = Field(ge=0.0, le=1.0)
+    evidence: EventCauseEvidence
 
 
 class EventCreate(BaseModel):
@@ -26,6 +49,8 @@ class EventCreate(BaseModel):
     video_source: str
     zone_name: Optional[str] = None
     confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    event_confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    cause: Optional[EventCause] = None
 
     @field_validator("timestamp")
     @classmethod
@@ -48,6 +73,8 @@ class EventOut(BaseModel):
     frame_number: int
     video_time_sec: Optional[float]
     confidence: Optional[float]
+    event_confidence: Optional[float] = None
+    cause: Optional[EventCause] = None
     video_source: str
     created_at: str
 

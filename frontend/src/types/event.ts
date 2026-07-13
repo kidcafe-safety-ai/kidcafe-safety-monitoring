@@ -1,10 +1,31 @@
-export type EventType = "ENTER" | "DWELL" | "EXIT";
+export type EventType =
+  | "ENTER"
+  | "DWELL"
+  | "EXIT"
+  | "ENTER_RESTRICTED"
+  | "DANGER_ZONE_DWELL"
+  | "FALL_SUSPECT";
 
 export type Severity = "LOW" | "MEDIUM" | "HIGH";
 
 export type CurrentRiskLevel = "NORMAL" | "HIGH";
 
-export type ZoneType = "exit" | "play" | "restricted" | "slide";
+export type ZoneType = "exit" | "play" | "restricted" | "danger";
+
+export type EventCauseType = "NEARBY_TRACK";
+
+export interface EventCauseEvidence {
+  min_distance_norm: number;
+  closing_speed_norm: number;
+  time_to_fall_sec: number;
+}
+
+export interface EventCause {
+  type: EventCauseType;
+  track_id: number;
+  score: number;
+  evidence: EventCauseEvidence;
+}
 
 export interface SafetyEvent {
   event_id: string;
@@ -16,6 +37,9 @@ export interface SafetyEvent {
   event_label?: string;
   severity?: Severity;
   zone_type?: ZoneType;
+
+  event_confidence?: number | null;
+  cause?: EventCause | null;
 
   bbox: [number, number, number, number];
   foot_point: [number, number];

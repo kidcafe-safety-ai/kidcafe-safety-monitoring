@@ -13,6 +13,7 @@ class TestEventManager:
                 zone_id="zone_a",
                 name="Test A",
                 type="polygon",
+                zone_type="play",
                 points=[[0.3, 0.4], [0.7, 0.4], [0.7, 0.9], [0.3, 0.9]],
                 rules=ZoneRules(enter_alert=True, dwell_threshold_sec=3),
             ),
@@ -88,6 +89,7 @@ class TestEventManager:
                 zone_id="zone_a",
                 name="Test A",
                 type="polygon",
+                zone_type="play",
                 points=[[0.3, 0.4], [0.7, 0.4], [0.7, 0.9], [0.3, 0.9]],
                 rules=ZoneRules(enter_alert=False, dwell_threshold_sec=3),
             )
@@ -103,6 +105,7 @@ class TestEventManager:
                 zone_id="zone_a",
                 name="Test A",
                 type="polygon",
+                zone_type="play",
                 points=[[0.3, 0.4], [0.7, 0.4], [0.7, 0.9], [0.3, 0.9]],
                 rules=ZoneRules(enter_alert=False, dwell_threshold_sec=3),
             )
@@ -156,6 +159,7 @@ class TestGetZoneOccupancy:
             zone_id=zone_id,
             name=zone_id,
             type="polygon",
+            zone_type="play",
             points=[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
             rules=ZoneRules(enter_alert=True, dwell_threshold_sec=3),
         )
