@@ -283,7 +283,7 @@ Docker는 배포 목적이 아니라, 개발 / 시연 실행 환경을 통일하
 ```text
 7/7~7/10   Live View — Live Frame latest-only worker 최소 구현 (E2E 우선)
 7/11~7/14  중간평가 보고서
-7/15~7/21  핵심 기능 — AsyncEventDispatcher를 Event FIFO queue·Status latest-only까지 확장, 공간정책·FALL_SUSPECT·이벤트 확장
+7/15~7/21  핵심 기능 — 공간정책·FALL_SUSPECT·이벤트 확장 (AsyncEventDispatcher의 Event FIFO queue·Status latest-only 확장은 완료)
 7/22~7/28  통합
 7/29~7/31  Phase 3 종료
 ```

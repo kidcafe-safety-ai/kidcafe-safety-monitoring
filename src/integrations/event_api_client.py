@@ -18,14 +18,26 @@ from src.common.types import Event
 LOGGER = logging.getLogger(__name__)
 
 _LOG_COOLDOWN_SEC = 5.0
+_DEFAULT_CONNECT_TIMEOUT_SEC = 0.5
+_DEFAULT_READ_TIMEOUT_SEC = 1.0
 
 
 class EventApiClient:
-    """Vision AI → FastAPI 이벤트/상태 전송 클라이언트."""
+    """Vision AI → FastAPI 이벤트/상태 전송 클라이언트.
 
-    def __init__(self, base_url: str = "http://localhost:8000") -> None:
+    재시도는 이 클래스가 아니라 AsyncEventDispatcher가 담당한다.
+    이 클래스는 순수 HTTP 전송 계층으로 유지한다 (ADR-017).
+    """
+
+    def __init__(
+        self,
+        base_url: str = "http://localhost:8000",
+        connect_timeout_sec: float = _DEFAULT_CONNECT_TIMEOUT_SEC,
+        read_timeout_sec: float = _DEFAULT_READ_TIMEOUT_SEC,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._session = requests.Session()
+        self._timeout = (connect_timeout_sec, read_timeout_sec)
         self._last_warn_time: float = 0.0
 
     def _warn(self, msg: str, *args: Any) -> None:
@@ -58,7 +70,7 @@ class EventApiClient:
             resp = self._session.post(
                 f"{self._base_url}/events",
                 json=payload,
-                timeout=2.0,
+                timeout=self._timeout,
             )
             if resp.status_code == 201:
                 return True
@@ -85,7 +97,7 @@ class EventApiClient:
             resp = self._session.put(
                 f"{self._base_url}/status/current",
                 json=status,
-                timeout=2.0,
+                timeout=self._timeout,
             )
             if resp.ok:
                 return True

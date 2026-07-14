@@ -36,6 +36,41 @@ class TestEventApiClient:
 
         assert result is True
 
+    def test_send_event_uses_default_adr_017_timeout(self):
+        """ADR-017 계약: connect timeout 0.5초, read timeout 1.0초 (기본값)."""
+        client = EventApiClient(base_url="http://localhost:8000")
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+
+        with patch.object(client._session, "post", return_value=mock_resp) as mock_post:
+            client.send_event(_make_event())
+
+        assert mock_post.call_args.kwargs["timeout"] == (0.5, 1.0)
+
+    def test_send_current_status_uses_default_adr_017_timeout(self):
+        client = EventApiClient(base_url="http://localhost:8000")
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+
+        with patch.object(client._session, "put", return_value=mock_resp) as mock_put:
+            client.send_current_status({"source": "webcam:0"})
+
+        assert mock_put.call_args.kwargs["timeout"] == (0.5, 1.0)
+
+    def test_timeout_is_configurable(self):
+        client = EventApiClient(
+            base_url="http://localhost:8000",
+            connect_timeout_sec=1.0,
+            read_timeout_sec=2.0,
+        )
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+
+        with patch.object(client._session, "post", return_value=mock_resp) as mock_post:
+            client.send_event(_make_event())
+
+        assert mock_post.call_args.kwargs["timeout"] == (1.0, 2.0)
+
     def test_send_event_payload_includes_confidence_event_confidence_and_cause(self):
         """Phase 3 필드가 조용히 유실되지 않고 payload에 포함돼야 한다."""
         client = EventApiClient(base_url="http://localhost:8000")

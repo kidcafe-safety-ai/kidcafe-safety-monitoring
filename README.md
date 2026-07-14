@@ -362,7 +362,7 @@ pytest --cov=src --cov-report=term-missing
 | Docker Compose (FastAPI·React·SQLite) | Done — Phase 2.5 |
 | 내장 웹캠 E2E 안정화 (macOS) | Done — Phase 2.5 |
 | USB C920 E2E 테스트 (Windows) | Done — Phase 2.5 |
-| React Live View (영상 영역) | placeholder, Phase 3: latest-frame polling 구현 예정 |
+| React Live View (영상 영역) | Done — Phase 3 (latest-frame polling) |
 | WebSocket 실시간 push | Phase 4 이후 필요성 기반 재검토 |
 | FALL_SUSPECT 낙상 PoC 및 외부 접촉 원인 후보 추정 | Phase 3 |
 | ReID / StrongSORT / BoT-SORT | Phase 4 |
@@ -422,9 +422,7 @@ Phase 2.5에서 실시간 운영 대시보드 v1 안정화와 Docker 재현 환�
 | track_id 자주 변경 | ReID 없음 | Phase 4: OSNet 기반 ReID 도입 |
 | 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | Phase 4: StrongSORT 또는 ReID 보강 |
 | ENTER/EXIT 경계 흔들림 | zone 경계 foot_point 진동 | Phase 3: debounce / hysteresis 적용 |
-| API 장애 시 추론 FPS 저하 | 동기식 HTTP timeout 누적 | Phase 3: 비동기 전송 또는 전송 queue |
 | 추론 FPS 최적화 여지 | CPU 환경 동기 처리 | Phase 3: FPS 재측정 및 최적화 |
-| React Live View 미구현 | 영상 스트리밍 미포함 | Phase 3: latest-frame polling 구현 예정 |
 | 알림·리포트·설정 Backend 미연동 | Mock Prototype 상태 | 후속 Phase에서 API 계약 후 연동 |
 > 상세 분석: [`docs/tracking_analysis.md`](docs/tracking_analysis.md)
 

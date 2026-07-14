@@ -161,6 +161,41 @@ class TestLiveFrameDispatcher:
         assert not dispatcher._thread.is_alive()
         mock_client.close.assert_called_once()
 
+    def test_close_does_not_close_client_while_worker_still_sending(self, mock_client):
+        """join()이 timeout으로 끝나도 close()가 직접 client를 닫으면 안 된다.
+
+        worker가 아직 send_frame() 안에 있는 상태에서 다른 thread가 그
+        session을 닫는 race를 방지하기 위함이다. client는 worker 자신이
+        작업을 마친 뒤 스스로 닫아야 한다.
+        """
+        send_started = threading.Event()
+        release_send = threading.Event()
+
+        def hang_send(*args, **kwargs):
+            send_started.set()
+            release_send.wait(timeout=2.0)
+            return True
+
+        mock_client.send_frame.side_effect = hang_send
+        dispatcher = LiveFrameDispatcher(client=mock_client)
+
+        dispatcher.update_frame(
+            _make_frame(), source="webcam:0", frame_number=1, captured_at="t1"
+        )
+        assert send_started.wait(timeout=1.0)
+
+        dispatcher.close(timeout=0.2)  # worker가 아직 hang_send 안 → join timeout
+
+        mock_client.close.assert_not_called()
+        assert dispatcher._thread.is_alive()
+
+        release_send.set()
+        # worker가 자기 작업을 마치면 스스로 client를 닫는다.
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and not mock_client.close.called:
+            time.sleep(0.02)
+        mock_client.close.assert_called_once()
+
     def test_worker_survives_send_frame_exception(self, mock_client):
         mock_client.send_frame.side_effect = RuntimeError("boom")
         dispatcher = LiveFrameDispatcher(client=mock_client)
