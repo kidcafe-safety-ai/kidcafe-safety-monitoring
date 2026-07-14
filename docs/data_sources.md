@@ -5,18 +5,44 @@ Phase 3 낙상 감지 PoC 및 외부 접촉 원인 후보 추정에 사용하는
 > 원본 데이터 파일은 Git에 업로드하지 않는다.
 > URL·라이선스·체크섬은 이 문서에 기록하고, 실제 파일은 로컬 또는 팀 공유 스토리지에 보관한다.
 
+## 저장 위치
+
+`data/datasets/` 아래에 데이터셋별로 보관한다. 이 디렉터리는 `.gitignore`에서
+제외되며(`data/datasets/*`), `.gitkeep`만 git에 추적된다.
+
+```text
+data/datasets/
+├─ caucafall/v5/
+│  ├─ development/   # Subject 1~6
+│  ├─ validation/    # Subject 7~8
+│  └─ holdout/       # Subject 9~10 (PR4 최종 평가 전까지 미사용)
+├─ gmdcsa24/v2.1/
+├─ ur_fall/                  # 선택
+└─ fall_cause_mini_set/
+```
+
 ---
 
 ## CAUCAFall
 
 | 항목 | 내용 |
 |---|---|
-| 데이터셋명 | CAUCAFall V4 |
-| 공식 URL | https://data.mendeley.com/datasets/7w7fccy7ky/4 |
+| 데이터셋명 | CAUCAFall V5 |
+| 공식 URL | https://data.mendeley.com/datasets/7w7fccy7ky/5 |
+| DOI | 10.17632/7w7fccy7ky.5 |
+| 발행일 | 2025-03-18 |
 | 접근 방법 | Mendeley Data 직접 다운로드 |
 | 라이선스 | CC BY 4.0 |
 | 용도 | 낙상 감지 개발·튜닝·내부 평가 |
-| 검토 상태 | 공식 메타데이터·라이선스 확인 완료, 실제 다운로드·체크섬 확인 예정 |
+| 검토 상태 | 공식 메타데이터·라이선스·다운로드·압축 무결성·체크섬 확인 완료 |
+
+### 데이터 구성
+
+- Subject(참가자) 10명, 참가자당 폴더 10개(활동별)
+- 폴더마다 영상(`.avi`), 프레임 이미지(`.png`), 프레임별 분할 라벨(`.txt`) 포함
+- 해상도 1080×960, 23fps
+- 낙상 5종: 전방, 후방, 좌측, 우측, 앉은 상태에서의 낙상 → `fall` 라벨
+- ADL 5종: 걷기, 뛰기(hopping), 물건 집기, 앉기, 무릎 꿇기 → `no-fall` 라벨
 
 ### Subject 분할
 
@@ -26,13 +52,17 @@ Phase 3 낙상 감지 PoC 및 외부 접촉 원인 후보 추정에 사용하는
 | 검증 | Subject 7~8 |
 | 내부 평가 (holdout) | Subject 9~10 |
 
+Subject 9~10(holdout)은 PR4 최종 평가 전까지 사용하지 않는다.
+
 ### 체크섬
 
-다운로드 후 기록:
-
 ```text
-SHA-256: (다운로드 후 기입)
-다운로드 일자: (기입)
+파일명: Dataset CAUCAFall.zip
+버전: V5
+파일 크기: 8,326,349,365 bytes
+SHA-256: 44b67468167fad2565edd51056bb1a2b62110ea165221ffd3ea8dbe03a181ee0
+다운로드 일자: 2026-07-14
+보관 위치: data/datasets/caucafall/v5/
 ```
 
 ---
