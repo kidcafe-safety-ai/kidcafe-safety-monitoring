@@ -222,6 +222,10 @@ __marimo__/
 data/videos/*.mp4
 data/videos/*.avi
 
+# External datasets
+data/datasets/*
+!data/datasets/.gitkeep
+
 outputs/*.jsonl
 outputs/*.json
 outputs/*.csv
