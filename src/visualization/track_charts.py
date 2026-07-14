@@ -186,7 +186,9 @@ def make_activity_heatmap(
                 fps=fps,
             )
         except Exception:
-            df = _fallback_activity_buckets(events, track_id=track_id, bucket_sec=bucket_sec, fps=fps)
+            df = _fallback_activity_buckets(
+                events, track_id=track_id, bucket_sec=bucket_sec, fps=fps
+            )
     else:
         df = _fallback_activity_buckets(events, track_id=track_id, bucket_sec=bucket_sec, fps=fps)
 

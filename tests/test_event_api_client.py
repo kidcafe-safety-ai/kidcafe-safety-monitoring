@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 import requests
 
 from src.integrations.event_api_client import EventApiClient

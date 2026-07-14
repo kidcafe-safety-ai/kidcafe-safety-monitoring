@@ -107,7 +107,9 @@ def _fallback_count_by_type(events: List[Any]) -> Dict[str, int]:
     return dict(Counter(_event_get(event, "event_type", "UNKNOWN") for event in events))
 
 
-def _fallback_time_bucket(events: List[Any], bucket_sec: int = 10, fps: float = 30.0) -> pd.DataFrame:
+def _fallback_time_bucket(
+    events: List[Any], bucket_sec: int = 10, fps: float = 30.0
+) -> pd.DataFrame:
     rows = []
 
     for event in events:
@@ -322,7 +324,9 @@ def make_time_bucket_chart(events: List[Any], bucket_sec: int = 10, fps: float =
     fig, ax = plt.subplots(figsize=(10, 4))
     _base_style(fig, ax)
 
-    ax.bar(df["bucket_start_sec"], df["total"], width=bucket_sec * 0.8, color="#00d2c8", alpha=0.85)
+    ax.bar(
+        df["bucket_start_sec"], df["total"], width=bucket_sec * 0.8, color="#00d2c8", alpha=0.85
+    )
     ax.set_title("Events per Time Bucket")
     ax.set_xlabel("Video Time (sec)")
     ax.set_ylabel("Event Count")
