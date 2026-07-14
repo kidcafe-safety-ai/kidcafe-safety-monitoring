@@ -48,6 +48,9 @@ class AsyncEventDispatcher:
         event_queue_maxsize: int = _DEFAULT_EVENT_QUEUE_MAXSIZE,
         failed_events_path: str = _DEFAULT_FAILED_EVENTS_PATH,
     ) -> None:
+        if event_queue_maxsize < 1:
+            raise ValueError("event_queue_maxsize는 1 이상이어야 합니다.")
+
         # Event worker와 CurrentStatus worker는 서로 독립된 HTTP session을 쓴다.
         self._event_client = EventApiClient(base_url=base_url)
         self._status_client = EventApiClient(base_url=base_url)

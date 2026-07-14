@@ -48,6 +48,16 @@ def dispatcher(tmp_path):
     d.close(timeout=2.0)
 
 
+class TestEventQueueMaxsizeValidation:
+    @pytest.mark.parametrize("invalid_maxsize", [0, -1])
+    def test_rejects_non_positive_maxsize(self, invalid_maxsize):
+        with pytest.raises(ValueError):
+            AsyncEventDispatcher(
+                base_url="http://localhost:8000",
+                event_queue_maxsize=invalid_maxsize,
+            )
+
+
 class TestEnqueueEventReturnsImmediately:
     def test_enqueue_event_does_not_block_on_slow_send(self, dispatcher):
         d, _ = dispatcher
