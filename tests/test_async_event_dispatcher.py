@@ -203,6 +203,34 @@ class TestEventRetry:
         assert lines[0]["reason"] == "request_failed"
         assert lines[0]["attempts"] == 2
 
+    def test_first_attempt_failure_past_deadline_skips_retry_and_records_one_attempt(
+        self, dispatcher
+    ):
+        """1차 시도가 실패한 시점에 이미 종료 deadline이 지났다면 retry를
+        생략하고 attempts=1로 기록해야 한다 (ADR-017).
+
+        deadline은 1차 전송 시도 도중(응답이 오기 전)에 지나도록 만들어,
+        이미 queue에서 꺼내져 시도된 Event와 애초에 꺼내지 못한 Event를
+        구분하는 실제 경로를 검증한다.
+        """
+        d, failed_path = dispatcher
+
+        def failing_send(event):
+            d._shutdown_deadline = time.monotonic() - 1.0
+            return False
+
+        with patch.object(d._event_client, "send_event", side_effect=failing_send) as mock_send:
+            d.enqueue_event(_make_event())
+            assert _wait_until(
+                lambda: failed_path.exists() and failed_path.stat().st_size > 0
+            )
+            assert mock_send.call_count == 1
+
+        lines = [json.loads(line) for line in failed_path.read_text().splitlines()]
+        assert len(lines) == 1
+        assert lines[0]["reason"] == "request_failed"
+        assert lines[0]["attempts"] == 1
+
 
 class TestCurrentStatusLatestOnly:
     def test_only_latest_status_is_sent(self, dispatcher):

@@ -163,6 +163,11 @@ class AsyncEventDispatcher:
         그 외 예상치 못한 예외(버그 등)가 나더라도 실패한 시도로 취급해 동일한
         retry·기록 경로를 타도록 한다. 그래야 예외 종류에 따라 Event가 기록도
         retry도 없이 조용히 유실되는 상황을 방지할 수 있다.
+
+        1차 시도가 실패한 시점에 이미 종료 deadline이 지났다면 retry 없이
+        attempts=1로 기록한다. 이 Event는 close() 시점에 queue에서 이미 꺼내져
+        전송이 실제로 시도됐으므로, deadline 이전에 아예 꺼내지 못한 Event와
+        달리 실패 JSONL에 남긴다 (ADR-017).
         """
         if self._try_send_event(event):
             return

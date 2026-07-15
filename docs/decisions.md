@@ -523,7 +523,8 @@ src/main.py
 - CurrentStatus / Live Frame: latest-only, **retry 없음** — 실패한 데이터를 retry로 붙잡고 있는 대신 다음 최신 값을 보내는 것이 latest-only 목적에 맞고, retry가 worker의 요청 처리 시간을 늘려 FPS 보호 효과를 깎기 때문
 - connect timeout 0.5초, read timeout 1.0초 (설정 변경 가능)
 - 종료 flush는 최대 3초 내 best-effort로 수행한다.
-- deadline 이후 API로 전송되지 못한 Event는 실패 JSONL에 추가 기록하지 않으며, enqueue 전에 저장된 로컬 EventWriter 결과로 보존한다.
+- deadline 전에 queue에서 꺼내지 못해 전송을 시도하지 못한 Event는 실패 JSONL에 추가 기록하지 않으며, enqueue 전에 저장된 로컬 EventWriter 결과로 보존한다.
+- 1차 전송을 시도했으나 deadline 경과로 retry를 생략한 Event는 `request_failed`, `attempts=1`로 실패 JSONL에 기록한다.
 
 **실패 JSONL 기록 형식**
 
@@ -536,7 +537,8 @@ src/main.py
 }
 ```
 
-- `reason`: queue overflow로 drop된 경우 `queue_overflow`, retry 후 최종 전송 실패는 `request_failed`
+- `reason`: queue overflow로 drop된 경우 `queue_overflow`, 그 외에는 `request_failed`
+- `attempts`: `queue_overflow`는 `0`, `request_failed`는 1차 실패 후 deadline 경과로 retry를 생략한 경우 `1`, retry까지 실패한 경우 `2`
 - 파일 기록 자체가 실패해도 추론 루프는 종료하지 않음
 - 기존 로컬 EventWriter 저장은 API queue 등록보다 먼저 수행
 
