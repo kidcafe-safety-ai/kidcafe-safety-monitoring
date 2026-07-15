@@ -9,8 +9,9 @@ latest-only 정책: worker가 아직 이전 frame을 처리 중일 때 새 frame
 들어오면 이전 frame은 버리고 최신 frame으로 덮어쓴다 (큐잉하지 않음).
 
 계약: docs/decisions.md ADR-017 (Event / CurrentStatus / Live Frame worker 분리).
-Event FIFO queue, CurrentStatus worker 등 AsyncEventDispatcher의 나머지 부분은
-후속 PR에서 구현한다. 이 모듈은 그중 Live Frame worker만 담당한다.
+Event FIFO queue와 CurrentStatus latest-only 전송은 AsyncEventDispatcher가
+담당하며, 이 모듈은 그중 Live Frame worker만 담당한다
+(AsyncEventDispatcher는 이 클래스를 생성자로 주입받아 위임하는 구조).
 """
 
 from __future__ import annotations
@@ -58,16 +59,21 @@ class LiveFrameDispatcher:
         self._new_frame_event.set()
 
     def _run(self) -> None:
-        while not self._stop_event.is_set():
-            triggered = self._new_frame_event.wait(timeout=0.5)
-            if not triggered:
-                continue
-            self._send_pending()
+        try:
+            while not self._stop_event.is_set():
+                triggered = self._new_frame_event.wait(timeout=0.5)
+                if not triggered:
+                    continue
+                self._send_pending()
 
-        # close()가 stop_event를 설정하는 시점과 update_frame()이 마지막 frame을
-        # 등록하는 시점이 겹치면 while 조건 체크에서 바로 빠져나와 마지막 frame이
-        # 유실될 수 있다. 종료 직전 한 번 더 flush해 이를 방지한다.
-        self._send_pending()
+            # close()가 stop_event를 설정하는 시점과 update_frame()이 마지막
+            # frame을 등록하는 시점이 겹치면 while 조건 체크에서 바로 빠져나와
+            # 마지막 frame이 유실될 수 있다. 종료 직전 한 번 더 flush해 방지한다.
+            self._send_pending()
+        finally:
+            # 이 client는 이 thread에서만 사용하므로, close()가 join() timeout
+            # 후에도 아직 전송 중인 session을 닫는 race 없이 여기서 닫는다.
+            self._client.close()
 
     def _send_pending(self) -> None:
         with self._lock:
@@ -92,8 +98,13 @@ class LiveFrameDispatcher:
             LOGGER.exception("Live Frame worker에서 예상치 못한 오류 발생")
 
     def close(self, timeout: float = 3.0) -> None:
-        """worker thread를 종료하고 HTTP session을 닫는다."""
+        """worker thread 종료를 기다린다. HTTP session은 worker thread 자신이 닫는다.
+
+        deadline을 넘겨 worker가 아직 살아 있으면 경고만 남기고 반환한다
+        (다른 thread에서 강제로 session을 닫는 race를 피하기 위함).
+        """
         self._stop_event.set()
         self._new_frame_event.set()
         self._thread.join(timeout=timeout)
-        self._client.close()
+        if self._thread.is_alive():
+            LOGGER.warning("Live Frame worker가 종료 deadline(%.1f초) 내에 끝나지 않았습니다.", timeout)

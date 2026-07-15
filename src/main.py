@@ -20,7 +20,7 @@ from src.input.base import InputSource
 from src.input.file_source import FileVideoSource
 from src.input.rtsp_source import RTSPSource
 from src.input.webcam_source import WebcamSource
-from src.integrations.event_api_client import EventApiClient
+from src.integrations.async_event_dispatcher import AsyncEventDispatcher
 from src.integrations.live_frame_client import LiveFrameClient
 from src.integrations.live_frame_dispatcher import LiveFrameDispatcher
 from src.tracking.bytetrack_wrapper import ByteTracker
@@ -84,37 +84,42 @@ def run_pipeline_from_source(
 
     Args:
         source: FileVideoSource / WebcamSource / RTSPSource 중 하나.
-        api_url: 지정 시 FastAPI로 이벤트/상태를 전송한다. None이면 전송 안 함.
+        api_url: 지정 시 AsyncEventDispatcher를 통해 FastAPI로 이벤트/상태를
+            비차단 전송한다. None이면 전송 안 함.
         live_frame_enabled: 지정 시 FastAPI PUT /live/frame으로 최신 frame을 전송한다.
-            Event/CurrentStatus 전송(api_client)과는 별도로 켜고 끌 수 있다.
+            api_url이 필요하며, Event/CurrentStatus 전송과는 별도로 켜고 끌 수 있다.
     """
     source.open()
-    api_client: Optional[EventApiClient] = None
-    live_frame_dispatcher: Optional[LiveFrameDispatcher] = None
+    dispatcher: Optional[AsyncEventDispatcher] = None
     overlay_writer = None
     writer = None
     fps = source.fps
     try:
-        if api_url:
-            api_client = EventApiClient(base_url=api_url)
-            LOGGER.info("API 전송 활성화: %s", api_url)
+        if live_frame_enabled and not api_url:
+            raise ValueError("--live-frame-enabled 사용 시 --api-url을 지정해야 합니다.")
 
-        if live_frame_enabled:
-            if not api_url:
-                raise ValueError("--live-frame-enabled 사용 시 --api-url을 지정해야 합니다.")
-            min_interval_sec = 1.0 / live_frame_fps if live_frame_fps > 0 else 0.5
-            live_frame_client = LiveFrameClient(
+        if api_url:
+            live_frame_dispatcher: Optional[LiveFrameDispatcher] = None
+            if live_frame_enabled:
+                min_interval_sec = 1.0 / live_frame_fps if live_frame_fps > 0 else 0.5
+                live_frame_client = LiveFrameClient(
+                    base_url=api_url,
+                    quality=live_frame_quality,
+                    min_interval_sec=min_interval_sec,
+                )
+                live_frame_dispatcher = LiveFrameDispatcher(client=live_frame_client)
+                LOGGER.info(
+                    "Live Frame 전송 활성화 (latest-only worker): %s (fps=%.1f, quality=%d)",
+                    api_url,
+                    live_frame_fps,
+                    live_frame_quality,
+                )
+
+            dispatcher = AsyncEventDispatcher(
                 base_url=api_url,
-                quality=live_frame_quality,
-                min_interval_sec=min_interval_sec,
+                live_frame_dispatcher=live_frame_dispatcher,
             )
-            live_frame_dispatcher = LiveFrameDispatcher(client=live_frame_client)
-            LOGGER.info(
-                "Live Frame 전송 활성화 (latest-only worker): %s (fps=%.1f, quality=%d)",
-                api_url,
-                live_frame_fps,
-                live_frame_quality,
-            )
+            LOGGER.info("API 비차단 전송 활성화: %s", api_url)
 
         frame_width = source.width
         frame_height = source.height
@@ -200,10 +205,10 @@ def run_pipeline_from_source(
                         event.zone_id,
                     )
 
-            # 4. API 전송
-            if api_client is not None:
+            # 4. API 비차단 전송 (AsyncEventDispatcher가 큐 등록 후 즉시 반환)
+            if dispatcher is not None:
                 for event in frame_events:
-                    api_client.send_event(event)
+                    dispatcher.enqueue_event(event)
 
                 _now = time.time()
                 if _now - _last_status_time >= _STATUS_UPDATE_INTERVAL_SEC:
@@ -214,21 +219,21 @@ def run_pipeline_from_source(
                         zone_occupancy=event_manager.get_zone_occupancy(),
                         zones=zones,
                     )
-                    api_client.send_current_status(status)
+                    dispatcher.update_current_status(status)
                     _last_status_time = _now
 
-            # 4-1. Live Frame 등록 (latest-only, worker가 비차단 전송)
-            # Dashboard Live View는 관리자가 바로 추적 상태를 확인할 수 있도록
-            # 원본 frame이 아니라 ID/box/zone overlay가 포함된 frame을 전송한다.
-            if live_frame_dispatcher is not None:
-                live_frame = frame.copy()
-                _draw_overlay(live_frame, result.tracks, zones, frame_width, frame_height)
-                live_frame_dispatcher.update_frame(
-                    live_frame,
-                    source=source.source_id,
-                    frame_number=frame_number,
-                    captured_at=_utc_now_iso_z(),
-                )
+                # 4-1. Live Frame 등록 (latest-only, worker가 비차단 전송)
+                # Dashboard Live View는 관리자가 바로 추적 상태를 확인할 수 있도록
+                # 원본 frame이 아니라 ID/box/zone overlay가 포함된 frame을 전송한다.
+                if live_frame_enabled:
+                    live_frame = frame.copy()
+                    _draw_overlay(live_frame, result.tracks, zones, frame_width, frame_height)
+                    dispatcher.update_live_frame(
+                        live_frame,
+                        source=source.source_id,
+                        frame_number=frame_number,
+                        captured_at=_utc_now_iso_z(),
+                    )
 
             # 5. 결과 영상 저장
             overlay_writer.write_frame(
@@ -280,10 +285,8 @@ def run_pipeline_from_source(
             overlay_writer.close()
         if show:
             cv2.destroyAllWindows()
-        if api_client is not None:
-            api_client.close()
-        if live_frame_dispatcher is not None:
-            live_frame_dispatcher.close()
+        if dispatcher is not None:
+            dispatcher.close(timeout=3.0)
         if writer is not None:
             writer.finalize(fps=fps)
 
