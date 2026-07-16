@@ -1,0 +1,22 @@
+{
+  "history_window_sec": 2.0,
+  "track_grace_sec": 0.5,
+  "min_track_age_sec": 0.3,
+  "fall_candidate_timeout_sec": 2.0,
+  "fall_confirm_sec": 0.5,
+  "cooldown_sec": 5.0,
+
+  "horizontal_aspect_ratio_threshold": 1.3,
+  "normal_aspect_ratio_threshold": 0.9,
+  "fall_center_velocity_threshold": 1.5,
+  "fall_foot_velocity_threshold": 1.2,
+  "fall_height_shrink_rate_threshold": -1.0,
+  "recovery_velocity_threshold": 0.3,
+
+  "event_confidence_weights": {
+    "posture": 0.35,
+    "descent": 0.35,
+    "duration": 0.2,
+    "track_confidence": 0.1
+  }
+}
