@@ -44,6 +44,42 @@ def _result(frame_number, bbox, video_source="cam1", track_id=1, confidence=0.9)
     )
 
 
+# PoseFeatureExtractor는 코(0)와 엉덩이(11, 12) keypoint로 head_hip_diff_norm을 계산한다.
+_STANDING_KEYPOINTS = {0: (50.0, 10.0), 11: (50.0, 40.0), 12: (50.0, 40.0)}
+_LYING_KEYPOINTS = {0: (50.0, 75.0), 11: (50.0, 45.0), 12: (50.0, 45.0)}
+
+
+def _result_with_keypoints(
+    frame_number,
+    bbox,
+    keypoints_by_index,
+    video_source="cam1",
+    track_id=1,
+    confidence=0.9,
+    keypoint_conf=1.0,
+):
+    keypoints = [[0.0, 0.0]] * 17
+    keypoints_conf = [0.0] * 17
+    for idx, xy in keypoints_by_index.items():
+        keypoints[idx] = list(xy)
+        keypoints_conf[idx] = keypoint_conf
+    return TrackingResult(
+        frame_number=frame_number,
+        timestamp="00:00:00.000",
+        video_source=video_source,
+        tracks=[
+            Track(
+                track_id=track_id,
+                bbox=list(bbox),
+                foot_point=list(_foot_point(bbox)),
+                confidence=confidence,
+                keypoints=keypoints,
+                keypoints_conf=keypoints_conf,
+            )
+        ],
+    )
+
+
 def _interpolated_bboxes(start_bbox, end_bbox, steps) -> List[Tuple[float, float, float, float]]:
     """steps+1개의 bbox를 반환한다 (start_bbox 포함, end_bbox로 선형 보간)."""
     bboxes = []
@@ -485,3 +521,78 @@ class TestEventContract:
         assert event.cause is None
         assert event.event_confidence is not None
         assert 0.0 <= event.event_confidence <= 1.0
+
+
+class TestPoseConfirmation:
+    """pose keypoint가 있는 Track에서 confirm 경로(수평 자세 OR pose 기울기)가
+
+    올바르게 동작하는지 검증한다. bbox aspect_ratio 경로가 끝까지 임계값을
+    넘지 못하는 CAUCAFall Fall forward 패턴(docs/fall_evaluation.md §5.1)을
+    합성 데이터로 재현한다.
+    """
+
+    _NON_HORIZONTAL_BBOX = (40.0, 20.0, 60.0, 80.0)  # aspect 0.33, bbox 경로로는 확정 불가
+
+    def test_pose_confirms_fall_that_bbox_alone_misses(self):
+        fps = 10.0
+        detector = FallDetector(fps=fps, config=_fast_config())
+
+        events = []
+        for frame_number in range(5):
+            events += detector.process(
+                _result_with_keypoints(frame_number, _STANDING_BBOX, _STANDING_KEYPOINTS)
+            )
+        # bbox 동적 근거(하강)로 candidate 진입. keypoints는 아직 서 있는 자세.
+        events += detector.process(
+            _result_with_keypoints(5, self._NON_HORIZONTAL_BBOX, _STANDING_KEYPOINTS)
+        )
+        assert events == []
+
+        # bbox는 계속 비수평이지만 pose는 누운 자세로 전환되어 지속됨.
+        for frame_number in range(6, 11):
+            events += detector.process(
+                _result_with_keypoints(frame_number, self._NON_HORIZONTAL_BBOX, _LYING_KEYPOINTS)
+            )
+
+        assert len(events) == 1
+        assert events[0].event_type == "FALL_SUSPECT"
+
+    def test_without_pose_same_bbox_sequence_never_confirms(self):
+        """keypoints가 없는(pose 신호 없음) 동일 bbox 시퀀스는 기존 aspect 기반
+
+        회복 조건이 그대로 적용되어 확정되지 않아야 한다 (위 테스트와의 대조).
+        """
+        fps = 10.0
+        detector = FallDetector(fps=fps, config=_fast_config())
+
+        events = []
+        events += _run(detector, [_STANDING_BBOX] * 5)
+        events += detector.process(_result(5, self._NON_HORIZONTAL_BBOX))
+        for frame_number in range(6, 11):
+            events += detector.process(_result(frame_number, self._NON_HORIZONTAL_BBOX))
+
+        assert events == []
+
+    def test_brief_pose_tilt_without_sustained_duration_does_not_confirm(self):
+        fps = 10.0
+        detector = FallDetector(fps=fps, config=_fast_config())
+
+        events = []
+        events += _run(detector, [_STANDING_BBOX] * 5)
+        events += detector.process(
+            _result_with_keypoints(5, self._NON_HORIZONTAL_BBOX, _STANDING_KEYPOINTS)
+        )
+        assert events == []
+
+        # 1프레임만 누운 pose, 곧바로 다시 서 있는 pose로 복귀 (지속시간 미달)
+        events += detector.process(
+            _result_with_keypoints(6, self._NON_HORIZONTAL_BBOX, _LYING_KEYPOINTS)
+        )
+        for frame_number in range(7, 20):
+            events += detector.process(
+                _result_with_keypoints(
+                    frame_number, self._NON_HORIZONTAL_BBOX, _STANDING_KEYPOINTS
+                )
+            )
+
+        assert events == []

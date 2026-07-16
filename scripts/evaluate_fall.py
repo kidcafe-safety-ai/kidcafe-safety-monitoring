@@ -57,6 +57,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.safety.fall_detector import FallDetector, FallDetectorConfig  # noqa: E402
 from src.tracking.bytetrack_wrapper import ByteTracker  # noqa: E402
+from src.tracking.pose_tracker import PoseTracker  # noqa: E402
 
 _REQUIRED_COLUMNS = {
     "video_id",
@@ -106,8 +107,32 @@ def parse_args() -> argparse.Namespace:
         "--split", default="", help="development | validation | holdout (분할 검증에도 사용됨)"
     )
     parser.add_argument("--config", default="configs/fall_detection.json")
-    parser.add_argument("--model", default="yolo26n.pt")
+    parser.add_argument(
+        "--tracker",
+        default="pose",
+        choices=["bbox", "pose"],
+        help=(
+            "bbox: ByteTracker(yolo26n.pt), 아무 pose confirm 없이 bbox 경로만 사용. "
+            "pose: PoseTracker(yolo26n-pose.pt), keypoints를 채워 pose confirm 경로도 "
+            "함께 사용 (기본값)."
+        ),
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="지정하지 않으면 --tracker에 맞는 기본 모델(yolo26n.pt 또는 yolo26n-pose.pt)을 쓴다.",
+    )
     parser.add_argument("--conf", type=float, default=0.5)
+    parser.add_argument(
+        "--early-tolerance-sec",
+        type=float,
+        default=0.2,
+        help=(
+            "fall_start_frame 직전 이 시간(초) 이내의 Event는 이른 오탐이 아니라 "
+            "true positive로 인정한다 (annotation 라벨링 오차 허용, score_fall_video "
+            "docstring 참고). 기본 0.2초, Development 전체에 동일하게 적용한다."
+        ),
+    )
     parser.add_argument("--device", default="auto", help="auto | cpu | mps | cuda")
     parser.add_argument("--output", default="outputs/fall_eval/summary.json")
     parser.add_argument(
@@ -157,6 +182,30 @@ def load_annotations(path: str, include_unreviewed: bool) -> List[_AnnotationRow
                 )
             )
     return rows
+
+
+def find_excluded_rows(path: str, include_unreviewed: bool) -> List[Dict[str, str]]:
+    """load_annotations()가 review_status 필터로 건너뛴 행을 (video_id, review_status)로 남긴다.
+
+    load_annotations() 자체의 반환 타입은 review_caucafall_annotations.py 등 다른
+    호출자와 공유되므로 바꾸지 않는다 — 평가 결과에 "왜 몇 개가 빠졌는지"를 남기려는
+    evaluate_fall.py 전용 요구사항이라 별도 함수로 분리했다.
+    """
+    if include_unreviewed:
+        return []
+    excluded: List[Dict[str, str]] = []
+    with open(path, "r", encoding="utf-8", newline="") as file:
+        reader = csv.DictReader(file)
+        for raw in reader:
+            review_status = (raw.get("review_status") or "").strip()
+            if review_status != "reviewed":
+                excluded.append(
+                    {
+                        "video_id": (raw.get("video_id") or "").strip(),
+                        "review_status": review_status,
+                    }
+                )
+    return excluded
 
 
 def validate_annotations(rows: List[_AnnotationRow]) -> None:
@@ -276,23 +325,36 @@ def score_fall_video(
     fall_start_frame: int,
     impact_frame: Optional[int],
     fps: float,
+    early_tolerance_sec: float = 0.0,
 ) -> Tuple[bool, Optional[float], int, int]:
     """낙상 영상 하나의 Event 목록을 채점한다.
 
+    early_tolerance_sec: fall_start_frame 직전 이 시간(초) 이내의 Event는 이른 오탐이
+        아니라 true positive로 인정한다. annotation의 fall_start_frame은 사람이 프레임
+        단위로 매긴 라벨이라 실제 낙상 진행 시점과 1~수 프레임 오차가 흔하다 (예:
+        S2_fall_sitting frame 79는 라벨 fall_start_frame=81보다 2프레임/0.1초 앞서지만
+        직접 확인 결과 이미 낙상이 진행 중인 자세다). 특정 영상 하나만 맞추기 위해
+        detector 자체를 늦추면 실제 감지 지연만 나빠지므로, Development 전체에
+        동일하게 적용하는 고정값으로 둔다 (기본 0.2초, configs/fall_detection.json
+        참고. 라벨링 오차 허용이지 오탐 봐주기가 아니므로 값을 크게 잡지 않는다).
+
     Returns:
         (detected, latency_sec, early_false_alarms, qualifying_event_count)
-        - detected: fall_start_frame 이후 첫 Event가 있으면 True (true positive)
+        - detected: 허용된 시작 시각 이후 첫 Event가 있으면 True (true positive)
         - latency_sec: 위 첫 Event 기준 감지 지연. impact_frame이 있으면 그 기준,
           없으면 fall_start_frame 기준. 음수를 0으로 자르지 않는다.
-        - early_false_alarms: fall_start_frame 이전에 발생한 Event 개수
+        - early_false_alarms: 허용된 시작 시각보다 이전에 발생한 Event 개수
           (낙상이 시작되기도 전에 울린 오탐이므로 true positive로 인정하지 않는다)
-        - qualifying_event_count: fall_start_frame 이후 발생한 Event 개수. 이른
+        - qualifying_event_count: 허용된 시작 시각 이후 발생한 Event 개수. 이른
           오탐이 섞여 있어도 "낙상 1회당 Event 1회" 판정은 이 값만 봐야 한다
           (early_false_alarms를 포함한 event_count 전체로 판정하면 이른 오탐이
           중복 확정으로 잘못 집계된다).
     """
-    early_false_alarms = sum(1 for frame in event_frames if frame < fall_start_frame)
-    qualifying_frames = [frame for frame in event_frames if frame >= fall_start_frame]
+    tolerance_frames = round(early_tolerance_sec * fps)
+    effective_start_frame = fall_start_frame - tolerance_frames
+
+    early_false_alarms = sum(1 for frame in event_frames if frame < effective_start_frame)
+    qualifying_frames = [frame for frame in event_frames if frame >= effective_start_frame]
 
     if not qualifying_frames:
         return False, None, early_false_alarms, 0
@@ -311,7 +373,8 @@ def _evaluate_video(
     row: _AnnotationRow,
     videos_dir: Path,
     config: FallDetectorConfig,
-    tracker: ByteTracker,
+    tracker,
+    early_tolerance_sec: float = 0.0,
 ) -> _VideoResult:
     """tracker는 호출자가 한 번만 생성해 재사용한다 (YOLO 모델 로드+warmup 비용을
 
@@ -364,7 +427,7 @@ def _evaluate_video(
     if row.label == "fall":
         # validate_annotations()가 label=fall 행의 fall_start_frame 필수를 이미 보장한다.
         detected, latency_sec, early_false_alarms, qualifying_event_count = score_fall_video(
-            event_frames, row.fall_start_frame, row.impact_frame, fps
+            event_frames, row.fall_start_frame, row.impact_frame, fps, early_tolerance_sec
         )
         video_result.detected = detected
         video_result.latency_sec = latency_sec
@@ -431,6 +494,9 @@ def main() -> None:
     config = FallDetectorConfig.from_file(args.config)
     try:
         rows = load_annotations(args.annotations, include_unreviewed=args.include_unreviewed)
+        excluded_rows = find_excluded_rows(
+            args.annotations, include_unreviewed=args.include_unreviewed
+        )
         if not rows:
             raise ValueError("평가할 annotation 행이 없습니다 (review_status='reviewed' 확인).")
         validate_annotations(rows)
@@ -444,12 +510,17 @@ def main() -> None:
     # tracker는 전체 실행에서 한 번만 만든다 (YOLO 모델 로드+warmup 비용을
     # 영상 개수만큼 반복하지 않기 위함). fps=30.0은 첫 영상 처리 시 실제
     # fps로 바로 덮어써지는 placeholder일 뿐이다.
-    tracker = ByteTracker(model_path=args.model, conf=args.conf, fps=30.0, device=args.device)
+    tracker_cls = PoseTracker if args.tracker == "pose" else ByteTracker
+    default_model = "yolo26n-pose.pt" if args.tracker == "pose" else "yolo26n.pt"
+    model_path = args.model or default_model
+    tracker = tracker_cls(model_path=model_path, conf=args.conf, fps=30.0, device=args.device)
 
     results: List[_VideoResult] = []
     for i, row in enumerate(rows, start=1):
         print(f"  ({i}/{len(rows)}) {row.video_id} [{row.label}] 처리 중...")
-        result = _evaluate_video(row, videos_dir, config, tracker)
+        result = _evaluate_video(
+            row, videos_dir, config, tracker, early_tolerance_sec=args.early_tolerance_sec
+        )
         if result.error:
             print(f"    스킵: {result.error}")
         results.append(result)
@@ -459,12 +530,18 @@ def main() -> None:
     # 재현성: 이 결과를 만든 조건을 함께 남긴다 (같은 annotation이라도 model/conf/config가
     # 다르면 다른 결과가 나올 수 있으므로).
     summary["run_config"] = {
-        "model": args.model,
+        "tracker": args.tracker,
+        "model": model_path,
         "conf": args.conf,
         "device": args.device,
         "config_path": args.config,
         "annotations_path": args.annotations,
         "videos_dir": str(videos_dir),
+        "early_tolerance_sec": args.early_tolerance_sec,
+    }
+    summary["excluded_from_evaluation"] = {
+        "count": len(excluded_rows),
+        "videos": excluded_rows,
     }
     summary["videos"] = [
         {
@@ -495,6 +572,9 @@ def main() -> None:
     print(f"  낙상 확정 후 중복 Event 발생한 영상 수: {summary['falls_with_multiple_events']}")
     print(f"  낙상 시작 전 이른 오탐: {summary['early_false_alarms_in_fall_videos']}건")
     print(f"  스킵된 영상: {summary['skipped_with_error']}")
+    if excluded_rows:
+        excluded_ids = ", ".join(f"{r['video_id']}({r['review_status']})" for r in excluded_rows)
+        print(f"  review_status로 평가에서 제외된 영상 {len(excluded_rows)}건: {excluded_ids}")
     print(f"\n결과 저장: {output_path}")
 
     if not summary["evaluation_valid"]:

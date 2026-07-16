@@ -187,7 +187,7 @@ def generate_split(dataset_dir: Path, split_name: str) -> List[_AnnotationDraft]
 def write_csv(drafts: List[_AnnotationDraft], output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=_REQUIRED_COLUMNS)
+        writer = csv.DictWriter(file, fieldnames=_REQUIRED_COLUMNS, lineterminator="\n")
         writer.writeheader()
         for draft in drafts:
             fall_start_frame = "" if draft.fall_start_frame is None else draft.fall_start_frame
@@ -209,7 +209,7 @@ def write_generation_report(drafts: List[_AnnotationDraft], output_path: Path) -
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = ["video_id", "txt_count", "avi_frame_count", "diff", "warning"]
     with open(output_path, "w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer = csv.DictWriter(file, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         for draft in drafts:
             if draft.warning is None:

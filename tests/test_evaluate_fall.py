@@ -94,6 +94,34 @@ class TestScoreFallVideo:
         assert early == 1
         assert qualifying == 1
 
+    def test_event_within_tolerance_before_fall_start_is_a_true_positive(self):
+        """S2_fall_sitting처럼 fall_start_frame보다 살짝 이른 Event는 tolerance 내면 true positive."""
+        detected, latency, early, qualifying = ef.score_fall_video(
+            [8], fall_start_frame=10, impact_frame=12, fps=20.0, early_tolerance_sec=0.2
+        )
+        # tolerance_frames = round(0.2 * 20) = 4 -> effective_start_frame = 6
+        assert detected is True
+        assert early == 0
+        assert qualifying == 1
+        assert latency == pytest.approx((8 - 12) / 20.0)
+
+    def test_event_before_tolerance_window_is_still_an_early_false_alarm(self):
+        detected, latency, early, qualifying = ef.score_fall_video(
+            [4], fall_start_frame=10, impact_frame=12, fps=20.0, early_tolerance_sec=0.2
+        )
+        # effective_start_frame = 6, frame 4 < 6 -> 여전히 이른 오탐
+        assert detected is False
+        assert early == 1
+        assert qualifying == 0
+
+    def test_zero_tolerance_matches_default_behavior(self):
+        detected, latency, early, qualifying = ef.score_fall_video(
+            [8], fall_start_frame=10, impact_frame=12, fps=20.0, early_tolerance_sec=0.0
+        )
+        assert detected is False
+        assert early == 1
+        assert qualifying == 0
+
 
 class TestValidateAnnotations:
     def test_valid_rows_pass(self):
@@ -171,6 +199,64 @@ class TestLoadAnnotationsRequiredColumns:
         rows = ef.load_annotations(str(path), include_unreviewed=False)
         assert len(rows) == 1
         assert rows[0].fall_start_frame == 10
+
+
+class TestFindExcludedRows:
+    def _write_csv(self, path, rows):
+        with open(path, "w", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=sorted(ef._REQUIRED_COLUMNS))
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+
+    def test_reports_non_reviewed_rows(self, tmp_path):
+        path = tmp_path / "ann.csv"
+        self._write_csv(
+            path,
+            [
+                {
+                    "video_id": "v1",
+                    "label": "fall",
+                    "video_path": "v1.avi",
+                    "fall_start_frame": "10",
+                    "impact_frame": "",
+                    "lying_start_frame": "",
+                    "review_status": "reviewed",
+                },
+                {
+                    "video_id": "v2",
+                    "label": "fall",
+                    "video_path": "v2.avi",
+                    "fall_start_frame": "10",
+                    "impact_frame": "",
+                    "lying_start_frame": "",
+                    "review_status": "needs_review",
+                },
+            ],
+        )
+
+        excluded = ef.find_excluded_rows(str(path), include_unreviewed=False)
+
+        assert excluded == [{"video_id": "v2", "review_status": "needs_review"}]
+
+    def test_include_unreviewed_reports_nothing_excluded(self, tmp_path):
+        path = tmp_path / "ann.csv"
+        self._write_csv(
+            path,
+            [
+                {
+                    "video_id": "v2",
+                    "label": "fall",
+                    "video_path": "v2.avi",
+                    "fall_start_frame": "10",
+                    "impact_frame": "",
+                    "lying_start_frame": "",
+                    "review_status": "needs_review",
+                },
+            ],
+        )
+
+        assert ef.find_excluded_rows(str(path), include_unreviewed=True) == []
 
 
 class TestHoldoutGuard:

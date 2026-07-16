@@ -12,6 +12,10 @@
   "fall_foot_velocity_threshold": 1.2,
   "fall_height_shrink_rate_threshold": -1.0,
   "recovery_velocity_threshold": 0.3,
+  "recovery_confirm_sec": 0.3,
+
+  "pose_fallen_threshold": 0.2,
+  "pose_min_keypoint_conf": 0.3,
 
   "event_confidence_weights": {
     "posture": 0.35,

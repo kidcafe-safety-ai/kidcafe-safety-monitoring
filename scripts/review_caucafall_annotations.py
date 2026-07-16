@@ -178,7 +178,7 @@ def save_rows(rows: List[_AnnotationRow], csv_path: Path) -> None:
 
     tmp_path = csv_path.with_suffix(csv_path.suffix + ".tmp")
     with open(tmp_path, "w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=_CSV_COLUMNS)
+        writer = csv.DictWriter(file, fieldnames=_CSV_COLUMNS, lineterminator="\n")
         writer.writeheader()
         for row in rows:
             writer.writerow(
