@@ -55,10 +55,11 @@ class TrackingResult:
 | DWELL | 체류 | zone에 `dwell_threshold_sec` 이상 머무름 (zone당 1회) |
 | EXIT | 이탈 | 사람이 zone에서 나감 |
 
-**Phase 3 신규 (타입·계약 반영 완료 — 실제 발생 로직은 후속 PR)**
+**Phase 3 신규 (공간 안전정책 구현 완료 / 낙상 감지는 후속 PR)**
 
-`src/common/types.py`의 `EventType`/`VALID_EVENT_TYPES`에 반영 완료. 아래 3종을
-실제로 생성하는 안전정책 로직(제한구역 판정, 낙상 감지 등)은 아직 없다.
+`src/common/types.py`의 `EventType`/`VALID_EVENT_TYPES`와 `EventManager`의
+`ENTER_RESTRICTED`, `DANGER_ZONE_DWELL` 발생 로직까지 반영했다.
+`FALL_SUSPECT` 감지 로직은 A 역할 후속 PR 범위다.
 
 | 타입 | 의미 | 발생 조건 |
 |------|------|---------|
@@ -77,6 +78,24 @@ class TrackingResult:
 - `foot_point = [bbox 중심 x, bbox 하단 y]`
 - 사람이 구역에 들어갔는지는 foot_point가 zone polygon 내부에 있는지로 판단한다.
 - polygon 경계 위의 점도 zone 내부로 인정한다. (`shapely.covers()` 사용)
+
+### Zone 전이 안정화 기준
+
+`EventManager`는 raw polygon 판정을 바로 이벤트로 확정하지 않고, FPS와
+`frame_number`를 이용한 연속 관측 시간으로 안정 상태를 결정한다.
+
+| 전이 | 기본 확인 시간 | 동작 |
+|---|---:|---|
+| zone 밖 → 안 | 0.3초 | 연속 진입이 유지된 경우에만 ENTER 계열 이벤트 발생 |
+| zone 안 → 밖 | 0.5초 | 연속 이탈이 유지된 경우에만 EXIT 발생 |
+| Track 소실 | 0.5초 | 유예시간 후 confirmed zone에 대해 EXIT 발생 |
+
+- 진입·이탈 확인 시간을 다르게 둔 비대칭 temporal hysteresis를 사용한다.
+- 진입 후보 상태에서 Track 관측이 끊기면 연속성이 깨진 것으로 보고 후보를 초기화한다.
+- `CurrentStatus.zone_occupancy`와 DWELL 시간은 raw 판정이 아닌 confirmed zone 상태를 기준으로 한다.
+- `restricted` 진입은 `ENTER_RESTRICTED`만, `danger` 체류는 `DANGER_ZONE_DWELL`만 생성한다.
+- polygon buffer를 이용한 공간 hysteresis와 ReID 기반 track 재연결은 이번 구현 범위가 아니다.
+- 기본값은 `EventManager` 생성자에서 조정할 수 있으며, 실영상 전후 비교 후 재튜닝한다.
 
 ### timestamp 형식
 

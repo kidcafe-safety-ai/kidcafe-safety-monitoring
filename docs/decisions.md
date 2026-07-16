@@ -581,3 +581,48 @@ JWT / Session / API Key 방식과 실제 로그인·권한 구현은 Phase 4에�
 
 - Phase 3에서는 인증 코드와 사용자 테이블을 추가하지 않음
 - Pipeline 인증과 운영자 인증은 Phase 4에서 분리 검토
+
+---
+
+## ADR-019: Zone 경계 이벤트는 비대칭 시간 확인으로 안정화
+
+**Date**: 2026-07-16
+**Status**: Accepted
+
+### Context
+
+Phase 2.5 실시간 테스트에서 zone 경계 근처의 foot point와 bbox가 흔들리며,
+동일 Track에 ENTER와 EXIT가 짧은 시간에 반복되는 현상이 확인됐다. 대표 사례는
+`track_id=28`에서 7프레임 동안 ENTER/EXIT가 3회 발생한 경우다.
+
+### Decision
+
+`EventManager`가 raw polygon 판정과 confirmed zone 상태를 분리한다. 전이는
+`frame_number / fps` 기준의 연속 관측 시간으로 확인한다.
+
+```text
+진입 확인: 0.3초
+이탈 확인: 0.5초
+Track 소실 유예: 0.5초
+```
+
+- 진입 후보 중 Track이 사라지면 연속 관측이 끊긴 것으로 보고 후보를 초기화한다.
+- confirmed zone 점유는 짧은 이탈이나 Track 누락 동안 유지한다.
+- `restricted` 진입은 `ENTER_RESTRICTED`가 `ENTER`를 대체한다.
+- `danger` 체류는 `DANGER_ZONE_DWELL`이 `DWELL`을 대체한다.
+- 이탈은 모든 zone type에서 기존 `EXIT`를 사용한다.
+- polygon buffer 기반 공간 hysteresis는 이번 단계에 추가하지 않는다.
+
+### Alternatives
+
+- **즉시 상태 전이 유지**: 구현은 단순하지만 관찰된 ENTER/EXIT 반복을 줄일 수 없다.
+- **polygon 안팎 buffer 적용**: 공간적으로 명확하지만 정규화 좌표, zone 크기,
+  카메라 원근에 따른 buffer 튜닝 기준이 아직 없다.
+
+### Consequences
+
+- 짧은 경계 진동과 탐지 누락이 즉시 이벤트로 변환되지 않는다.
+- 진입은 최대 0.3초, 이탈과 Track 소실은 최대 0.5초 늦게 확정될 수 있다.
+- DWELL 시간과 CurrentStatus 점유는 confirmed zone 상태를 기준으로 한다.
+- 기본 임계값은 생성자 인자로 조정 가능하며 실영상 전후 비교 후 재튜닝한다.
+- ReID 기반 Track 재연결과 공간 buffer 튜닝은 별도 후속 작업이다.
