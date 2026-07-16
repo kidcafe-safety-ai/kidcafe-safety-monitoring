@@ -233,6 +233,7 @@ outputs/*.mp4
 outputs/*.db
 outputs/benchmark/
 outputs/fall_eval/
+outputs/fall_training/
 
 # Frontend
 frontend/node_modules/

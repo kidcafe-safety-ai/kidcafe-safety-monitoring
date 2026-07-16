@@ -1,0 +1,20 @@
+# Ultralytics 학습용 데이터셋 정의. scripts/prepare_fall_training_data.py가 만드는
+# images/{train,val}, labels/{train,val} 구조를 그대로 가리킨다.
+#
+# path는 scripts/prepare_fall_training_data.py --dest와 반드시 일치해야 한다.
+#
+# 학습 단계는 하나뿐이다: Subject 1~5 train / Subject 6 val (모델 선택·early
+# stopping). Subject 6에서 고른 best.pt를 그대로 최종 모델로 확정하며,
+# Subject 1~6을 다시 합쳐 재학습하는 단계는 두지 않는다 — train/internal
+# val/최종 Validation을 명확히 분리하기 위함이다.
+#
+# Subject 7~8(Validation)은 학습 중 val로 절대 쓰지 않는다 — early
+# stopping/모델 선택에 노출되면 최종 Event-level Validation이 오염된다
+# (docs/fall_evaluation.md §8).
+path: outputs/fall_training/dataset_internal
+train: images/train
+val: images/val
+
+names:
+  0: nofall
+  1: fall

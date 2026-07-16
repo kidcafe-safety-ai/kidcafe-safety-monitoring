@@ -59,12 +59,13 @@ Tune 3부터는 `S6_fall_backwards`가 `needs_review`로 제외돼 fall 모수�
 (§5.5). 모든 실행에서 `evaluation_valid=true`(오류 영상 0개), Tune 3의
 `early_false_alarms=0`(early tolerance 0.2s 적용 후).
 
-**PR2 결론**: False alarm(0.0/min ≤ 0.2)·평균 지연(1.02s ≤ 2.0s)은 목표를
-만족하지만, **Recall 34.5%는 목표(≥75%)에 크게 못 미친다**. §5.1·§5.3에서
-확인한 카메라 깊이 방향 낙상의 구조적 한계 때문에 규칙 기반 bbox+pose
-방식만으로는 목표 달성이 어렵다고 판단해, Recall 목표 달성은 후속 PR(PR2.5,
-§8)의 YOLO fine-tuning으로 넘긴다. PR2는 **규칙 기반 PoC 기준선**으로
-머지한다.
+**규칙 기반 단계(bbox+pose, 이 시점까지의 결론)**: False alarm(0.0/min ≤ 0.2)·
+평균 지연(1.02s ≤ 2.0s)은 목표를 만족하지만, **Recall 34.5%는 목표(≥75%)에
+크게 못 미친다**. §5.1·§5.3에서 확인한 카메라 깊이 방향 낙상의 구조적 한계
+때문에 규칙 기반 bbox+pose 방식만으로는 목표 달성이 어렵다고 판단했다.
+Recall 목표는 별도 PR이 아니라 **같은 PR2 안에서** §8의 YOLO fine-tuning
+(세 번째 커밋 단위)으로 달성한다 — bbox+pose는 fine-tuned 모델을 쓸 수 없을
+때의 fallback 경로로 남는다.
 
 ## 5. 알려진 한계: 낙상 방향에 따른 미검출
 
@@ -211,16 +212,18 @@ Event(frame 41, 149)가 발생한다. track_id를 프레임 단위로 직접 추
 period 이상 소실되면 cooldown 자체가 리셋된다"는 별도 원인이다.
 
 가능한 수정(`_forget_lost_tracks()`에서 `COOLDOWN` 상태 track은 삭제
-예외 처리)을 확인했으나, Pose 경로는 PR2.5(§8) fine-tuning 확정 전까지의
-비교 기준·fallback 역할로 한정하기로 해 이번 PR2에서는 추가로 수정하지
-않고 **알려진 한계로 남긴다**. `falls_with_multiple_events=1`(Tune 3, §4)이
-이 사례다.
+예외 처리)을 확인했으나, Pose 경로는 §8 fine-tuning 확정 전까지의 비교
+기준·fallback 역할로 한정하기로 해 이번 PR2에서는 추가로 수정하지 않고
+**알려진 한계로 남긴다**. `falls_with_multiple_events=1`(Tune 3, §4)이 이
+사례다.
 
 ## 6. Validation (Subject 7~8)
 
-annotation은 검수 완료(20/20)됐으나, 평가는 **아직 실행하지 않았다** — 설정을
-최종 동결(pose 보완 포함)한 뒤 한 번만 실행하고, 그 결과를 보고 임계값을 다시
-조정하지 않는다 (개발/검증 분리 원칙).
+annotation은 검수 완료(20/20)됐으나, 평가는 **아직 실행하지 않았다** — 설정과
+모델(§8 fine-tuning 포함)을 모두 최종 동결한 뒤 한 번만 실행하고, 그 결과를
+보고 임계값이나 모델을 다시 조정하지 않는다 (개발/검증 분리 원칙). Subject
+7~8은 학습 과정의 early stopping·모델 선택에는 어떤 형태로도 관여하지 않는다
+— 그 역할은 Subject 6(내부 검증)이 맡는다 (§8).
 
 ## 7. Subject 9~10 사용 확인
 
@@ -228,7 +231,7 @@ annotation은 검수 완료(20/20)됐으나, 평가는 **아직 실행하지 않
 않았다 — `generate_caucafall_annotations.py`/`evaluate_fall.py` 모두 holdout
 경로를 코드 수준에서 차단한다 (`guard_holdout`/`_contains_holdout_segment`).
 
-## 8. PR2 범위 확정과 후속 로드맵
+## 8. PR2 범위 확정과 fine-tuning 통합 계획
 
 PR2(규칙 기반 bbox+pose)만으로는 Recall 목표(≥75%)를 달성하지 못했다.
 §5.1·§5.3에서 확인했듯 카메라를 향해/멀어지는 방향(깊이 방향) 낙상은
@@ -238,18 +241,52 @@ aspect_ratio·skeleton 각도 등 어떤 단순 2D 투영 신호로도 구조적
 있어(공식 참고 구현도 전신 keypoint 기반), YOLO 분류기를 직접 fine-tuning해
 confirm 신호로 쓰는 방식이 데이터셋 의도에 더 가깝다.
 
-이에 따라 작업을 다음과 같이 분리한다:
+**fine-tuning은 별도 PR로 분리하지 않고, 같은 `feature/fall-detector`
+브랜치(PR2) 안에서 이어서 진행한다** — bbox 코어(§3~4)·pose 보완(§5.3)에
+이어지는 세 번째 커밋 단위로, PR2 자체가 Recall 목표를 만족하는 최종
+FALL_SUSPECT 감지기를 목표로 한다. bbox/pose 규칙 기반 경로는 최종 confirm
+신호가 아니라 fine-tuned 모델을 쓸 수 없을 때의 fallback으로 남긴다.
 
-- **PR2 (본 PR, `feature/fall-detector`)**: bbox+pose 규칙 기반
-  FALL_SUSPECT 코어. **Recall 목표 달성본이 아니라 규칙 기반 PoC
-  기준선**으로 머지한다 — 위 구조적 한계와 미달 수치를 PR 본문에 명시한다.
-- **PR2.5 (`feature/fall-classifier`, 별도 PR)**: CAUCAFall 프레임 라벨로
-  YOLO26n fall/nofall을 fine-tuning하고, candidate 진입(동적 근거)은 현재
-  규칙을 그대로 두되 confirm을 fine-tuned 모델의 fall score로 대체한다.
-  bbox/pose 규칙은 보조 신호로 남긴다. 학습 데이터 분할은 기존 Subject
-  기준 정책을 그대로 따른다 (Development로 학습/내부 검증, Validation은
-  최종 평가 전 미접근, Holdout은 PR4까지 미접근).
-- **PR3**: `FALL_SUSPECT.cause` 외부 접촉 후보 추정 (ADR-016).
+학습 데이터 분할(Subject 기준, 인접 프레임 무작위 분할로 인한 누수 방지):
 
-Validation(Subject 7~8) 평가는 PR2.5까지 포함한 최종 구조가 동결된 뒤
-한 번만 실행한다 — PR2 단계에서는 실행하지 않는다.
+| Subject | 역할 |
+|---|---|
+| 1~5 | fine-tuning 학습 |
+| 6 | 내부 검증(val): 모델 선택·early stopping. 여기서 고른 `best.pt`를
+그대로 최종 모델로 확정한다 — Subject 1~6 전체를 다시 합쳐 재학습하는
+단계는 두지 않는다 (train/internal-val/final-validation을 명확히 분리하기
+위함이며, `prepare_fall_training_data.py`가 애초에 val-subjects 없는 학습을
+지원하지 않는 것과도 일치한다). |
+| 7~8 | 모델·설정 동결 후 Event-level Validation **1회만** 실행 |
+| 9~10 | PR4 Holdout, 접근 금지 |
+
+Subject 7~8은 학습 중 어떤 단계(모델 선택, early stopping, 임계값 튜닝)에도
+관여하지 않는다 — 학습 중 val로 쓰면 최종 Validation이 오염되기 때문이다.
+`S6_fall_backwards`는 AVI가 손상돼(§5.5) 학습 데이터 준비에서도 PNG/txt만
+사용하고 AVI는 쓰지 않는다.
+
+**학습 데이터의 원본 파일명 이상 (Development 60개 영상 전수 확인)**:
+`prepare_fall_training_data.py`가 PNG/txt 쌍을 모으는 과정에서 CAUCAFall
+원본 데이터 자체의 파일·라벨 이상 3건을 발견했다 — 원본 파일명은 바꾸지 않고
+스크립트가 이를 재현 가능하게 처리한다.
+
+- `Subject.2/Fall backwards/cas200091 - copia.png`: 대응 라벨이
+  `cas200091.txt`(" - copia" 접미사 없음)로 존재한다. 정확한 stem 매칭이
+  실패하면 이 접미사만 제거해 재시도하고, 복구 후보가 정확히 1개일 때만
+  연결한다(숫자 기반 추측 매칭은 하지 않음). 실제 실행에서 1건 복구됨.
+- `Subject.5/Kneel/ars500236.png`, `Subject.6/Walk/cams600260.png`: 라벨이
+  실제로 존재하지 않는다. `--missing-label-policy=skip`으로 실행하면 해당
+  프레임만 제외한다(기본값은 `error`로 조용히 넘기지 않음). 실제 실행에서
+  2건 제외됨.
+
+`--dest`에 남는 `dataset_manifest.json`에 입력 PNG 수, 매칭 수, copia 복구
+경로, 라벨 누락 제외 경로, train/val Subject, split별 클래스 프레임 수를
+모두 기록한다. 실제 생성 결과(Subject 1~5 train / Subject 6 val):
+
+| split | 프레임 수 | nofall | fall |
+|---|---:|---:|---:|
+| train | 9,115 | 6,431 | 2,684 |
+| val | 2,181 | 1,425 | 756 |
+
+PR3(`FALL_SUSPECT.cause` 외부 접촉 후보 추정, ADR-016)는 PR2가 머지된 뒤
+시작한다.
