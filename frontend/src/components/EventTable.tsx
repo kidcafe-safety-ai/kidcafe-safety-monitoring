@@ -1,4 +1,5 @@
 import type { SafetyEvent } from "../types/event";
+import { formatEventCause, getEventDisplayMeta } from "../utils/eventDisplay";
 
 interface EventTableProps {
   events: SafetyEvent[];
@@ -38,27 +39,41 @@ export default function EventTable({
                 <th>이벤트</th>
                 <th>추적 ID</th>
                 <th>구역</th>
+                <th>원인 후보</th>
                 <th>프레임</th>
                 <th>영상 소스</th>
                 <th>위험도</th>
               </tr>
             </thead>
             <tbody>
-              {events.map((event) => (
-                <tr key={event.event_id}>
-                  <td>{formatTime(event.timestamp)}</td>
-                  <td>
-                    <span className={`type-badge type-${event.event_type.toLowerCase()}`}>
-                      {event.event_type}
-                    </span>
-                  </td>
-                  <td>{event.track_id}</td>
-                  <td>{event.zone_id}</td>
-                  <td>{event.frame_number}</td>
-                  <td>{event.video_source}</td>
-                  <td>{event.severity ?? "-"}</td>
-                </tr>
-              ))}
+              {events.map((event) => {
+                const meta = getEventDisplayMeta(event.event_type);
+                const shouldShowRawType = meta.label !== event.event_type;
+                const causeText =
+                  event.event_type === "FALL_SUSPECT"
+                    ? formatEventCause(event.cause)
+                    : "-";
+
+                return (
+                  <tr key={event.event_id}>
+                    <td>{formatTime(event.timestamp)}</td>
+                    <td>
+                      <span className={`type-badge ${meta.badgeClass}`}>
+                        {meta.label}
+                      </span>
+                      {shouldShowRawType ? (
+                        <span className="event-raw-type">{event.event_type}</span>
+                      ) : null}
+                    </td>
+                    <td>{event.track_id}</td>
+                    <td>{event.zone_id}</td>
+                    <td>{causeText}</td>
+                    <td>{event.frame_number}</td>
+                    <td>{event.video_source}</td>
+                    <td>{event.severity ?? meta.severity ?? "-"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -1,16 +1,29 @@
 import type { EventType, SafetyEvent } from "../types/event";
+import { getEventDisplayMeta, KNOWN_EVENT_TYPES } from "../utils/eventDisplay";
 
 interface EventChartProps {
   events: SafetyEvent[];
 }
 
-const EVENT_TYPES: EventType[] = ["ENTER", "DWELL", "EXIT"];
-
 export default function EventChart({ events }: EventChartProps) {
-  const counts = EVENT_TYPES.map((type) => ({
-    type,
-    count: events.filter((event) => event.event_type === type).length,
-  }));
+  const knownEventTypeSet = new Set<string>(KNOWN_EVENT_TYPES);
+  const unknownEventTypes = events
+    .map((event) => event.event_type)
+    .filter((type) => !knownEventTypeSet.has(type));
+  const eventTypes = [
+    ...KNOWN_EVENT_TYPES,
+    ...Array.from(new Set(unknownEventTypes)),
+  ] as EventType[];
+  const counts = eventTypes.map((type) => {
+    const meta = getEventDisplayMeta(type);
+
+    return {
+      type,
+      label: meta.label,
+      barClass: meta.barClass,
+      count: events.filter((event) => event.event_type === type).length,
+    };
+  });
   const maxCount = Math.max(...counts.map((item) => item.count), 1);
 
   return (
@@ -22,10 +35,10 @@ export default function EventChart({ events }: EventChartProps) {
       <div className="bar-chart" aria-label="이벤트 타입별 발생 수 Bar Chart">
         {counts.map((item) => (
           <div className="bar-row" key={item.type}>
-            <span className="bar-label">{item.type}</span>
+            <span className="bar-label">{item.label}</span>
             <div className="bar-track">
               <div
-                className={`bar-fill bar-${item.type.toLowerCase()}`}
+                className={`bar-fill ${item.barClass}`}
                 style={{ width: `${(item.count / maxCount) * 100}%` }}
               />
             </div>
