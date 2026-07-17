@@ -55,10 +55,11 @@ class TrackingResult:
 | DWELL | 체류 | zone에 `dwell_threshold_sec` 이상 머무름 (zone당 1회) |
 | EXIT | 이탈 | 사람이 zone에서 나감 |
 
-**Phase 3 신규 (타입·계약 반영 완료 — 실제 발생 로직은 후속 PR)**
+**Phase 3 신규 (공간 안전정책 구현 완료 / 낙상 감지는 후속 PR)**
 
-`src/common/types.py`의 `EventType`/`VALID_EVENT_TYPES`에 반영 완료. 아래 3종을
-실제로 생성하는 안전정책 로직(제한구역 판정, 낙상 감지 등)은 아직 없다.
+`src/common/types.py`의 `EventType`/`VALID_EVENT_TYPES`와 `EventManager`의
+`ENTER_RESTRICTED`, `DANGER_ZONE_DWELL` 발생 로직까지 반영했다.
+`FALL_SUSPECT` 감지 로직은 A 역할 후속 PR 범위다.
 
 | 타입 | 의미 | 발생 조건 |
 |------|------|---------|
@@ -77,6 +78,24 @@ class TrackingResult:
 - `foot_point = [bbox 중심 x, bbox 하단 y]`
 - 사람이 구역에 들어갔는지는 foot_point가 zone polygon 내부에 있는지로 판단한다.
 - polygon 경계 위의 점도 zone 내부로 인정한다. (`shapely.covers()` 사용)
+
+### Zone 전이 안정화 기준
+
+`EventManager`는 raw polygon 판정을 바로 이벤트로 확정하지 않고, FPS와
+`frame_number`를 이용한 연속 관측 시간으로 안정 상태를 결정한다.
+
+| 전이 | 기본 확인 시간 | 동작 |
+|---|---:|---|
+| zone 밖 → 안 | 0.3초 | 연속 진입이 유지된 경우에만 ENTER 계열 이벤트 발생 |
+| zone 안 → 밖 | 0.5초 | 연속 이탈이 유지된 경우에만 EXIT 발생 |
+| Track 소실 | 0.5초 | 유예시간 후 confirmed zone에 대해 EXIT 발생 |
+
+- 진입·이탈 확인 시간을 다르게 둔 비대칭 temporal hysteresis를 사용한다.
+- 진입 후보 상태에서 Track 관측이 끊기면 연속성이 깨진 것으로 보고 후보를 초기화한다.
+- `CurrentStatus.zone_occupancy`와 DWELL 시간은 raw 판정이 아닌 confirmed zone 상태를 기준으로 한다.
+- `restricted` 진입은 `ENTER_RESTRICTED`만, `danger` 체류는 `DANGER_ZONE_DWELL`만 생성한다.
+- polygon buffer를 이용한 공간 hysteresis와 ReID 기반 track 재연결은 이번 구현 범위가 아니다.
+- 기본값은 `EventManager` 생성자에서 조정할 수 있으며, 실영상 전후 비교 후 재튜닝한다.
 
 ### timestamp 형식
 
@@ -162,12 +181,19 @@ class Event:
 
 ### 정의
 
-Track의 zone 상태 변화를 관리하여 ENTER / DWELL / EXIT 이벤트를 생성하는 상태머신.
+Track의 raw zone 판정과 confirmed zone 상태를 분리하고, 확인된 상태 변화에 따라
+일반 이벤트 또는 안전 이벤트를 생성하는 상태머신.
 
 ### 생성자
 
 ```python
-EventManager(zones: List[Zone], fps: float)
+EventManager(
+    zones: List[Zone],
+    fps: float,
+    enter_confirm_sec: float = 0.3,
+    exit_confirm_sec: float = 0.5,
+    track_lost_grace_sec: float = 0.5,
+)
 ```
 
 ### 파라미터
@@ -175,20 +201,28 @@ EventManager(zones: List[Zone], fps: float)
 | 이름 | 타입 | 설명 |
 |------|------|------|
 | `zones` | `List[Zone]` | zone별 `dwell_threshold_sec` 접근용 |
-| `fps` | `float` | DWELL 시간 계산 및 timestamp 계산용 |
+| `fps` | `float` | 전이 확인, DWELL 및 timestamp 시간 계산용 |
+| `enter_confirm_sec` | `float` | zone 진입 확정에 필요한 연속 관측 시간. 기본값 0.3초 |
+| `exit_confirm_sec` | `float` | zone 이탈 확정에 필요한 연속 관측 시간. 기본값 0.5초 |
+| `track_lost_grace_sec` | `float` | Track 소실 후 EXIT 확정까지의 유예시간. 기본값 0.5초 |
 
 ### 이벤트 상태 흐름
 
 ```
-zone 밖
-  ↓
-ENTER
-  ↓
-zone 안에 머무름
-  ↓
-DWELL (dwell_threshold_sec 이상 체류 시, zone당 1회)
-  ↓
+raw zone 밖
+  ↓ enter_confirm_sec 이상 연속 진입
+confirmed zone 안
+  ├─ restricted → ENTER_RESTRICTED
+  └─ 그 외     → ENTER
+  ↓ dwell_threshold_sec 이상 체류
+  ├─ danger → DANGER_ZONE_DWELL
+  └─ 그 외 → DWELL
+  ↓ exit_confirm_sec 이상 연속 이탈
 EXIT
+
+Track 소실
+  ↓ track_lost_grace_sec 이상 미관측
+confirmed zone별 EXIT
 ```
 
 ---
