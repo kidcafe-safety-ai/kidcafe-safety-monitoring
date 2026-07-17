@@ -181,12 +181,19 @@ class Event:
 
 ### 정의
 
-Track의 zone 상태 변화를 관리하여 ENTER / DWELL / EXIT 이벤트를 생성하는 상태머신.
+Track의 raw zone 판정과 confirmed zone 상태를 분리하고, 확인된 상태 변화에 따라
+일반 이벤트 또는 안전 이벤트를 생성하는 상태머신.
 
 ### 생성자
 
 ```python
-EventManager(zones: List[Zone], fps: float)
+EventManager(
+    zones: List[Zone],
+    fps: float,
+    enter_confirm_sec: float = 0.3,
+    exit_confirm_sec: float = 0.5,
+    track_lost_grace_sec: float = 0.5,
+)
 ```
 
 ### 파라미터
@@ -194,20 +201,28 @@ EventManager(zones: List[Zone], fps: float)
 | 이름 | 타입 | 설명 |
 |------|------|------|
 | `zones` | `List[Zone]` | zone별 `dwell_threshold_sec` 접근용 |
-| `fps` | `float` | DWELL 시간 계산 및 timestamp 계산용 |
+| `fps` | `float` | 전이 확인, DWELL 및 timestamp 시간 계산용 |
+| `enter_confirm_sec` | `float` | zone 진입 확정에 필요한 연속 관측 시간. 기본값 0.3초 |
+| `exit_confirm_sec` | `float` | zone 이탈 확정에 필요한 연속 관측 시간. 기본값 0.5초 |
+| `track_lost_grace_sec` | `float` | Track 소실 후 EXIT 확정까지의 유예시간. 기본값 0.5초 |
 
 ### 이벤트 상태 흐름
 
 ```
-zone 밖
-  ↓
-ENTER
-  ↓
-zone 안에 머무름
-  ↓
-DWELL (dwell_threshold_sec 이상 체류 시, zone당 1회)
-  ↓
+raw zone 밖
+  ↓ enter_confirm_sec 이상 연속 진입
+confirmed zone 안
+  ├─ restricted → ENTER_RESTRICTED
+  └─ 그 외     → ENTER
+  ↓ dwell_threshold_sec 이상 체류
+  ├─ danger → DANGER_ZONE_DWELL
+  └─ 그 외 → DWELL
+  ↓ exit_confirm_sec 이상 연속 이탈
 EXIT
+
+Track 소실
+  ↓ track_lost_grace_sec 이상 미관측
+confirmed zone별 EXIT
 ```
 
 ---
