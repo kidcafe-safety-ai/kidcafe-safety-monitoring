@@ -1,6 +1,6 @@
 # KidCafe Safety AI — 개발 로드맵
 
-> 최종 수정: 2026-07-06
+> 최종 수정: 2026-07-16
 > MVP baseline: `v0.1.0-mvp`
 > 본 문서는 MVP 1차 종료 이후 최종 제출까지의 상위 개발 로드맵이다.
 > 한이음 일정은 [2026년 창의도전형 공고](https://www.hanium.or.kr/comm/noticeView.do?ntcAtclSn=63940) 기준으로 갱신했다. 세부 일정(주차별 작업·보고서 내부 마감 등)은 팀 오피스 기준이며 공식 공고와 별개로 운영한다.
@@ -297,6 +297,8 @@ C(정현수): Live UI·신규 이벤트/cause·AlertHistory·화면 성능
 ```
 
 > 예외: 공간정책·debounce 작업은 README 파일 소유권상 A 소유인 `src/events/`, `src/geofencing/`에 B가 조율해 수정한다. 충돌 방지를 위해 B 공간정책 PR → A 낙상 연결부 PR 순서로 진행한다.
+
+> B 공간정책 상태 (2026-07-16): `EventManager`에 zone 전이 확인(진입 0.3초, 이탈 0.5초, Track 소실 유예 0.5초)과 `ENTER_RESTRICTED`·`DANGER_ZONE_DWELL` 치환 로직을 구현했다. 단위 테스트로 경계 진동 억제와 중복 이벤트 금지를 확인했으며, 실제 영상 전후 이벤트 수·감지 지연·FPS 비교 및 임계값 재튜닝은 통합 기간에 수행한다.
 
 ### 우선순위
 

@@ -1,37 +1,58 @@
-"""Zone-Track 상태머신 기반 이벤트 매니저.
-
-ENTER / DWELL / EXIT 세 가지 이벤트를 발생시킨다.
-"""
+"""Zone/track state machine for geofencing safety events."""
 
 from typing import Dict, List, Set, Tuple
 
-from src.common.types import Event, Track, Zone
+from src.common.types import Event, EventType, Track, Zone
+
+
+DEFAULT_ENTER_CONFIRM_SEC = 0.3
+DEFAULT_EXIT_CONFIRM_SEC = 0.5
+DEFAULT_TRACK_LOST_GRACE_SEC = 0.5
 
 
 class EventManager:
-    """Track의 zone 진입/체류/이탈 상태머신."""
+    """Create events from temporally confirmed zone membership changes.
 
-    def __init__(self, zones: List[Zone], fps: float):
-        """
-        Args:
-            zones: Zone 정의 리스트 (dwell_threshold_sec 정보 포함)
-            fps: 영상 FPS (DWELL 시간 계산용)
-        """
+    Raw foot-point membership can oscillate near a polygon boundary. The
+    manager therefore keeps candidate transitions separate from stable zone
+    state and confirms them only after a continuous time interval.
+    """
+
+    def __init__(
+        self,
+        zones: List[Zone],
+        fps: float,
+        enter_confirm_sec: float = DEFAULT_ENTER_CONFIRM_SEC,
+        exit_confirm_sec: float = DEFAULT_EXIT_CONFIRM_SEC,
+        track_lost_grace_sec: float = DEFAULT_TRACK_LOST_GRACE_SEC,
+    ):
+        if fps <= 0:
+            raise ValueError("fps must be greater than 0")
+        for name, value in (
+            ("enter_confirm_sec", enter_confirm_sec),
+            ("exit_confirm_sec", exit_confirm_sec),
+            ("track_lost_grace_sec", track_lost_grace_sec),
+        ):
+            if value < 0:
+                raise ValueError(f"{name} must be non-negative")
+
         self.fps = fps
-        # zone_id → Zone 객체 (rules 접근용)
-        self.zones_map: Dict[str, Zone] = {z.zone_id: z for z in zones}
+        self.enter_confirm_sec = enter_confirm_sec
+        self.exit_confirm_sec = exit_confirm_sec
+        self.track_lost_grace_sec = track_lost_grace_sec
+        self.zones_map: Dict[str, Zone] = {zone.zone_id: zone for zone in zones}
 
-        # track_id → 현재 머무는 zone_id 집합
+        # Confirmed zone membership used by events and CurrentStatus occupancy.
         self.current_zones: Dict[int, Set[str]] = {}
-
-        # (track_id, zone_id) → 진입 frame_number
         self.entry_frames: Dict[Tuple[int, str], int] = {}
-
-        # (track_id, zone_id) → DWELL 이벤트 이미 발생했나
         self.dwell_fired: Set[Tuple[int, str]] = set()
 
-        # track_id → 마지막으로 본 Track (화면 이탈 시 EXIT bbox 재사용)
+        # Candidate transition start frames for temporal debounce/hysteresis.
+        self.enter_candidate_frames: Dict[Tuple[int, str], int] = {}
+        self.exit_candidate_frames: Dict[Tuple[int, str], int] = {}
+
         self.last_track_info: Dict[int, Track] = {}
+        self.last_seen_frames: Dict[int, int] = {}
 
     def process(
         self,
@@ -40,88 +61,112 @@ class EventManager:
         frame_number: int,
         video_source: str,
     ) -> List[Event]:
-        """Track의 zone 상태 변화에 따라 Event 생성.
+        """Update one track and return newly confirmed zone events."""
+        track_id = track.track_id
+        self.last_track_info[track_id] = track
+        self.last_seen_frames[track_id] = frame_number
 
-        ENTER: 새로 진입한 zone
-        DWELL: 같은 zone에 dwell_threshold_sec 이상 머무름 (zone당 1회)
-        EXIT: 있던 zone에서 나감
-        """
-        events = []
-        self.last_track_info[track.track_id] = track
-        prev_zones = self.current_zones.get(track.track_id, set())
-        new_zones = set(zones_in)
+        stable_zones = set(self.current_zones.get(track_id, set()))
+        observed_zones = {
+            zone_id for zone_id in zones_in if zone_id in self.zones_map
+        }
+        entered: Set[str] = set()
+        exited: Set[str] = set()
 
-        # ============ ENTER ============
-        entered = new_zones - prev_zones
-        for zone_id in entered:
-            zone = self.zones_map.get(zone_id)
-            if zone and zone.rules.enter_alert:
-                event = Event.create(
-                    event_type="ENTER",
-                    track_id=track.track_id,
-                    zone_id=zone_id,
-                    bbox=track.bbox,
-                    foot_point=track.foot_point,
-                    frame_number=frame_number,
-                    video_source=video_source,
-                    timestamp=self._video_timestamp(frame_number),
+        for zone_id in sorted(self.zones_map):
+            key = (track_id, zone_id)
+            is_observed = zone_id in observed_zones
+            is_stable = zone_id in stable_zones
+
+            if is_observed:
+                self.exit_candidate_frames.pop(key, None)
+                if is_stable:
+                    self.enter_candidate_frames.pop(key, None)
+                    continue
+
+                candidate_frame = self.enter_candidate_frames.setdefault(
+                    key, frame_number
                 )
-                events.append(event)
-            # enter_alert 여부와 무관하게 DWELL 계산용 진입 시각 기록
-            self.entry_frames[(track.track_id, zone_id)] = frame_number
+                if self._has_elapsed(
+                    candidate_frame, frame_number, self.enter_confirm_sec
+                ):
+                    stable_zones.add(zone_id)
+                    entered.add(zone_id)
+                    self.enter_candidate_frames.pop(key, None)
+                    self.entry_frames[key] = frame_number
+                continue
 
-        # ============ DWELL ============
-        # 계속 머무는 zone에 대해, 임계시간 초과 + 아직 DWELL 안 발생
-        staying = new_zones & prev_zones
-        for zone_id in staying:
-            key = (track.track_id, zone_id)
+            self.enter_candidate_frames.pop(key, None)
+            if not is_stable:
+                self.exit_candidate_frames.pop(key, None)
+                continue
+
+            candidate_frame = self.exit_candidate_frames.setdefault(
+                key, frame_number
+            )
+            if self._has_elapsed(
+                candidate_frame, frame_number, self.exit_confirm_sec
+            ):
+                stable_zones.remove(zone_id)
+                exited.add(zone_id)
+                self.exit_candidate_frames.pop(key, None)
+
+        events: List[Event] = []
+
+        for zone_id in sorted(entered):
+            zone = self.zones_map[zone_id]
+            if zone.rules.enter_alert:
+                events.append(
+                    self._create_event(
+                        event_type=self._enter_event_type(zone),
+                        track=track,
+                        zone_id=zone_id,
+                        frame_number=frame_number,
+                        video_source=video_source,
+                    )
+                )
+
+        # A newly confirmed entry starts the dwell clock at this frame, so it
+        # cannot also produce a dwell event in the same process call.
+        staying = stable_zones - entered
+        for zone_id in sorted(staying):
+            key = (track_id, zone_id)
             if key in self.dwell_fired:
-                continue  # 이미 발생
+                continue
 
-            zone = self.zones_map.get(zone_id)
-            if zone is None:
-                continue  # 알 수 없는 zone (방어적)
-
+            zone = self.zones_map[zone_id]
             entered_frame = self.entry_frames.get(key)
             if entered_frame is None:
                 continue
 
             elapsed_sec = (frame_number - entered_frame) / self.fps
             if elapsed_sec >= zone.rules.dwell_threshold_sec:
-                event = Event.create(
-                    event_type="DWELL",
-                    track_id=track.track_id,
-                    zone_id=zone_id,
-                    bbox=track.bbox,
-                    foot_point=track.foot_point,
-                    frame_number=frame_number,
-                    video_source=video_source,
-                    timestamp=self._video_timestamp(frame_number),
+                events.append(
+                    self._create_event(
+                        event_type=self._dwell_event_type(zone),
+                        track=track,
+                        zone_id=zone_id,
+                        frame_number=frame_number,
+                        video_source=video_source,
+                    )
                 )
-                events.append(event)
                 self.dwell_fired.add(key)
 
-        # ============ EXIT ============
-        exited = prev_zones - new_zones
-        for zone_id in exited:
-            event = Event.create(
-                event_type="EXIT",
-                track_id=track.track_id,
-                zone_id=zone_id,
-                bbox=track.bbox,
-                foot_point=track.foot_point,
-                frame_number=frame_number,
-                video_source=video_source,
-                timestamp=self._video_timestamp(frame_number),
+        for zone_id in sorted(exited):
+            events.append(
+                self._create_event(
+                    event_type="EXIT",
+                    track=track,
+                    zone_id=zone_id,
+                    frame_number=frame_number,
+                    video_source=video_source,
+                )
             )
-            events.append(event)
-            # zone 나가면 진입 시각/DWELL 상태 초기화
-            key = (track.track_id, zone_id)
+            key = (track_id, zone_id)
             self.entry_frames.pop(key, None)
             self.dwell_fired.discard(key)
 
-        # 상태 업데이트
-        self.current_zones[track.track_id] = new_zones
+        self.current_zones[track_id] = stable_zones
         return events
 
     def flush_stale_tracks(
@@ -130,44 +175,46 @@ class EventManager:
         frame_number: int,
         video_source: str,
     ) -> List[Event]:
-        """화면에서 사라진 track의 zone 상태를 정리하고 EXIT 이벤트를 발생시킨다.
+        """Expire missing tracks after a grace period and emit confirmed exits."""
+        events: List[Event] = []
+        known_track_ids = set(self.last_track_info) | set(self.current_zones)
+        stale_ids = known_track_ids - active_track_ids
 
-        ByteTrack이 track_id를 버리면 process()가 다시 호출되지 않으므로
-        zone 안에 있던 track은 EXIT 없이 상태가 남는다.
-        매 프레임 현재 활성 track_id 집합을 넘겨 stale 항목을 청소한다.
-        """
-        events = []
-        stale_ids = set(self.current_zones.keys()) - active_track_ids
-        for track_id in stale_ids:
+        for track_id in sorted(stale_ids):
+            last_seen_frame = self.last_seen_frames.get(track_id)
             last_track = self.last_track_info.get(track_id)
-            if last_track is None:
-                # 방어적: last_track_info가 없으면 상태만 정리
+            if last_seen_frame is None or last_track is None:
                 self._clear_track_state(track_id)
                 continue
 
-            for zone_id in self.current_zones.get(track_id, set()):
-                event = Event.create(
-                    event_type="EXIT",
-                    track_id=track_id,
-                    zone_id=zone_id,
-                    bbox=last_track.bbox,
-                    foot_point=last_track.foot_point,
-                    frame_number=frame_number,
-                    video_source=video_source,
-                    timestamp=self._video_timestamp(frame_number),
+            # Candidate transitions require continuous observations. A missing
+            # track breaks that continuity, while confirmed occupancy remains
+            # stable until the separate lost-track grace period expires.
+            self._clear_transition_candidates(track_id)
+            if not self._has_elapsed(
+                last_seen_frame,
+                frame_number,
+                self.track_lost_grace_sec,
+            ):
+                continue
+
+            for zone_id in sorted(self.current_zones.get(track_id, set())):
+                events.append(
+                    self._create_event(
+                        event_type="EXIT",
+                        track=last_track,
+                        zone_id=zone_id,
+                        frame_number=frame_number,
+                        video_source=video_source,
+                    )
                 )
-                events.append(event)
 
             self._clear_track_state(track_id)
 
         return events
 
     def get_zone_occupancy(self) -> Dict[str, int]:
-        """현재 각 zone에 몇 명이 있는지 반환한다.
-
-        current_zones (track_id → set[zone_id])를 역전환해서 집계한다.
-        PUT /status/current 페이로드 생성에 사용한다.
-        """
+        """Return occupancy calculated from confirmed zone state."""
         occupancy: Dict[str, int] = {}
         for zone_ids in self.current_zones.values():
             for zone_id in zone_ids:
@@ -175,15 +222,69 @@ class EventManager:
         return occupancy
 
     def _clear_track_state(self, track_id: int) -> None:
-        zones = self.current_zones.pop(track_id, set())
-        for zone_id in zones:
-            key = (track_id, zone_id)
-            self.entry_frames.pop(key, None)
-            self.dwell_fired.discard(key)
+        self.current_zones.pop(track_id, None)
+        for state in (
+            self.entry_frames,
+            self.enter_candidate_frames,
+            self.exit_candidate_frames,
+        ):
+            for key in [key for key in state if key[0] == track_id]:
+                state.pop(key, None)
+        self.dwell_fired = {
+            key for key in self.dwell_fired if key[0] != track_id
+        }
         self.last_track_info.pop(track_id, None)
+        self.last_seen_frames.pop(track_id, None)
+
+    def _clear_transition_candidates(self, track_id: int) -> None:
+        for state in (
+            self.enter_candidate_frames,
+            self.exit_candidate_frames,
+        ):
+            for key in [key for key in state if key[0] == track_id]:
+                state.pop(key, None)
+
+    def _create_event(
+        self,
+        event_type: EventType,
+        track: Track,
+        zone_id: str,
+        frame_number: int,
+        video_source: str,
+    ) -> Event:
+        return Event.create(
+            event_type=event_type,
+            track_id=track.track_id,
+            zone_id=zone_id,
+            bbox=track.bbox,
+            foot_point=track.foot_point,
+            frame_number=frame_number,
+            video_source=video_source,
+            timestamp=self._video_timestamp(frame_number),
+        )
+
+    @staticmethod
+    def _enter_event_type(zone: Zone) -> EventType:
+        if zone.zone_type == "restricted":
+            return "ENTER_RESTRICTED"
+        return "ENTER"
+
+    @staticmethod
+    def _dwell_event_type(zone: Zone) -> EventType:
+        if zone.zone_type == "danger":
+            return "DANGER_ZONE_DWELL"
+        return "DWELL"
+
+    def _has_elapsed(
+        self,
+        start_frame: int,
+        frame_number: int,
+        duration_sec: float,
+    ) -> bool:
+        return (frame_number - start_frame) / self.fps >= duration_sec
 
     def _video_timestamp(self, frame_number: int) -> str:
-        """프레임 번호 → 영상 내 상대 시각 (HH:MM:SS.mmm)."""
+        """Convert a frame number to the Event Schema video timestamp."""
         total_seconds = frame_number / self.fps
         hours = int(total_seconds // 3600)
         minutes = int((total_seconds % 3600) // 60)
