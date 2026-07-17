@@ -1,14 +1,17 @@
 """scripts/train_fall_detector.py 테스트.
 
 실제 GPU 학습(Colab 전제)은 여기서 검증하지 않는다. 설정 로딩·검증과 산출물
-기록(run manifest) 로직만 다룬다 — ultralytics.YOLO.train() 자체는 이
-테스트의 대상이 아니다.
+기록(run manifest) 로직만 다룬다 — ultralytics.YOLO.train()의 실제 학습
+자체는 이 테스트의 대상이 아니다. 다만 run_training()이 model.train()에
+어떤 인자를 넘기는지(특히 project 절대경로 변환)는 ultralytics를 가짜
+모듈로 대체해 검증한다 — 무거운 실제 학습 없이도 회귀를 잡을 수 있다.
 """
 
 from __future__ import annotations
 
 import json
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -208,3 +211,73 @@ class TestWriteRunManifest:
 
         manifest = json.loads((run_dir / "run_manifest.json").read_text())
         assert "best_pt_sha256" not in manifest
+
+
+class TestRunTrainingProjectPath:
+    def _install_fake_ultralytics(self, monkeypatch, captured: dict):
+        class FakeYOLO:
+            def __init__(self, model_path):
+                self.model_path = model_path
+
+            def train(self, **kwargs):
+                captured.update(kwargs)
+                return types.SimpleNamespace(save_dir=None)
+
+        fake_module = types.ModuleType("ultralytics")
+        fake_module.YOLO = FakeYOLO
+        monkeypatch.setitem(sys.modules, "ultralytics", fake_module)
+
+    def test_relative_project_is_resolved_to_absolute_before_train_call(self, monkeypatch):
+        """configs/fall_training.json의 project가 상대경로여도 실제 model.train()
+
+        호출에는 절대경로가 전달돼야 한다 — Colab 등 다른 cwd에서 실행해도
+        run 디렉터리가 예상 위치에 생기도록 하기 위함이다.
+        """
+        captured: dict = {}
+        self._install_fake_ultralytics(monkeypatch, captured)
+
+        config = train.TrainingConfig(
+            model="yolo26n.pt",
+            task="detect",
+            data="configs/fall_training_dataset.yaml",
+            classes=["nofall", "fall"],
+            imgsz=640,
+            epochs=1,
+            patience=10,
+            seed=42,
+            device="",
+            project="outputs/fall_training/runs",
+            name="fall_detector",
+        )
+
+        train.run_training(config, epochs_override=None, device_override=None)
+
+        assert Path(captured["project"]).is_absolute()
+        assert captured["project"] == str(Path("outputs/fall_training/runs").resolve())
+
+    def test_epochs_and_device_overrides_are_passed_through(self, monkeypatch):
+        captured: dict = {}
+        self._install_fake_ultralytics(monkeypatch, captured)
+
+        config = train.TrainingConfig(
+            model="yolo26n.pt",
+            task="detect",
+            data="configs/fall_training_dataset.yaml",
+            classes=["nofall", "fall"],
+            imgsz=640,
+            epochs=50,
+            patience=10,
+            seed=42,
+            device="",
+            project="outputs/fall_training/runs",
+            name="fall_detector",
+        )
+
+        _, _, effective_epochs, effective_device = train.run_training(
+            config, epochs_override=1, device_override="0"
+        )
+
+        assert captured["epochs"] == 1
+        assert captured["device"] == "0"
+        assert effective_epochs == 1
+        assert effective_device == "0"

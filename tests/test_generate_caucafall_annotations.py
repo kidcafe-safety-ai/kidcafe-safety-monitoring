@@ -150,11 +150,56 @@ class TestHoldoutGuard:
         assert gen._contains_holdout_segment((tmp_path / "validation").resolve()) is False
 
     def test_split_subjects_never_include_9_or_10(self):
-        all_subjects = set(gen._SPLIT_SUBJECTS["development"]) | set(
-            gen._SPLIT_SUBJECTS["validation"]
-        )
+        split_subjects = gen.load_split_subjects(gen._DEFAULT_SPLIT_CONFIG_PATH)
+        all_subjects = set(split_subjects["development"]) | set(split_subjects["validation"])
         assert 9 not in all_subjects
         assert 10 not in all_subjects
+
+
+class TestLoadSplitSubjects:
+    def test_loads_real_config_file(self):
+        split_subjects = gen.load_split_subjects(gen._DEFAULT_SPLIT_CONFIG_PATH)
+
+        assert split_subjects["development"] == [1, 2, 3, 4, 5, 6]
+        assert split_subjects["validation"] == [7, 8]
+
+    def test_missing_required_split_raises(self, tmp_path):
+        path = tmp_path / "split.json"
+        path.write_text('{"development": [1, 2]}')
+
+        with pytest.raises(ValueError, match="validation"):
+            gen.load_split_subjects(str(path))
+
+    def test_custom_config_with_holdout_subject_raises(self, tmp_path):
+        path = tmp_path / "split.json"
+        path.write_text('{"development": [1, 2, 9], "validation": [7, 8]}')
+
+        with pytest.raises(ValueError, match="holdout"):
+            gen.load_split_subjects(str(path))
+
+    def test_custom_config_with_holdout_subject_10_in_validation_raises(self, tmp_path):
+        path = tmp_path / "split.json"
+        path.write_text('{"development": [1, 2], "validation": [7, 10]}')
+
+        with pytest.raises(ValueError, match="holdout"):
+            gen.load_split_subjects(str(path))
+
+    def test_custom_config_with_overlap_raises(self, tmp_path):
+        path = tmp_path / "split.json"
+        path.write_text('{"development": [1, 2, 7], "validation": [7, 8]}')
+
+        with pytest.raises(ValueError, match="양쪽"):
+            gen.load_split_subjects(str(path))
+
+    def test_custom_config_with_non_integer_subject_raises(self, tmp_path):
+        path = tmp_path / "split.json"
+        path.write_text('{"development": [1, "2"], "validation": [7, 8]}')
+
+        with pytest.raises(ValueError, match="정수"):
+            gen.load_split_subjects(str(path))
+
+
+_TEST_SPLIT_SUBJECTS = {"development": [1, 2, 3, 4, 5, 6], "validation": [7, 8]}
 
 
 class TestGenerateSplit:
@@ -167,7 +212,7 @@ class TestGenerateSplit:
             subject_dir, "Fall backwards", avi_frames=3, classes=["0", "1", "1"]
         )
 
-        drafts = gen.generate_split(dataset_dir, "development")
+        drafts = gen.generate_split(dataset_dir, "development", _TEST_SPLIT_SUBJECTS)
 
         assert len(drafts) == 2
         labels = {d.video_id: d.label for d in drafts}
@@ -179,7 +224,7 @@ class TestGenerateSplit:
         (dataset_dir / "development").mkdir(parents=True)
         # Subject.1~6 중 아무 것도 실제로 존재하지 않음
 
-        drafts = gen.generate_split(dataset_dir, "development")
+        drafts = gen.generate_split(dataset_dir, "development", _TEST_SPLIT_SUBJECTS)
 
         assert drafts == []
 

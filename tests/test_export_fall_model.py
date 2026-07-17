@@ -72,15 +72,35 @@ class TestVerifyAndExport:
         assert dest.read_bytes() == b"real weights"
         assert result["dest"] == str(dest)
 
-    def test_final_metrics_none_when_no_results_csv(self, tmp_path):
+    def test_best_epoch_metrics_uses_earlier_epoch_not_last(self, tmp_path):
+        """early stopping으로 best.pt가 마지막 epoch가 아닐 때 마지막 행을 쓰면 안 된다."""
+        run_dir = _make_run_dir(tmp_path, b"real weights")
+        (run_dir / "results.csv").write_text(
+            "epoch,metrics/precision(B),metrics/recall(B),metrics/mAP50(B),"
+            "metrics/mAP50-95(B)\n"
+            "1,0.9,0.85,0.9,0.8\n"  # 최고 mAP50-95(0.8) — 이 행이 선택돼야 함
+            "2,0.5,0.4,0.3,0.2\n"  # 이후 성능 하락(마지막 행이지만 best 아님)
+        )
+        dest = tmp_path / "models" / "fall_detector_v1.pt"
+
+        result = export.verify_and_export(run_dir, dest, force=False)
+
+        assert result["best_epoch_metrics"] == {
+            "precision": 0.9,
+            "recall": 0.85,
+            "mAP50": 0.9,
+            "mAP50_95": 0.8,
+        }
+
+    def test_best_epoch_metrics_none_when_no_results_csv(self, tmp_path):
         run_dir = _make_run_dir(tmp_path, b"real weights")
         dest = tmp_path / "models" / "fall_detector_v1.pt"
 
         result = export.verify_and_export(run_dir, dest, force=False)
 
-        assert result["final_metrics"] is None
+        assert result["best_epoch_metrics"] is None
 
-    def test_final_metrics_read_from_results_csv(self, tmp_path):
+    def test_best_epoch_metrics_read_from_results_csv(self, tmp_path):
         run_dir = _make_run_dir(tmp_path, b"real weights")
         (run_dir / "results.csv").write_text(
             "epoch,metrics/precision(B),metrics/recall(B),metrics/mAP50(B),"
@@ -92,7 +112,7 @@ class TestVerifyAndExport:
 
         result = export.verify_and_export(run_dir, dest, force=False)
 
-        assert result["final_metrics"] == {
+        assert result["best_epoch_metrics"] == {
             "precision": 0.9,
             "recall": 0.8,
             "mAP50": 0.7,
@@ -100,13 +120,13 @@ class TestVerifyAndExport:
         }
 
 
-class TestReadFinalMetrics:
+class TestReadBestEpochMetrics:
     def test_returns_none_for_empty_csv(self, tmp_path):
         run_dir = tmp_path / "run"
         run_dir.mkdir()
         (run_dir / "results.csv").write_text("epoch,metrics/precision(B)\n")
 
-        assert export._read_final_metrics(run_dir) is None
+        assert export._read_best_epoch_metrics(run_dir) is None
 
     def test_ignores_unknown_columns(self, tmp_path):
         run_dir = tmp_path / "run"
@@ -115,4 +135,4 @@ class TestReadFinalMetrics:
             "epoch,some/other/metric\n1,42\n"
         )
 
-        assert export._read_final_metrics(run_dir) is None
+        assert export._read_best_epoch_metrics(run_dir) is None

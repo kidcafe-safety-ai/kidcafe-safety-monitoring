@@ -1,7 +1,7 @@
 """configs/fall_training.json 기준으로 yolo26n.pt를 fall/nofall 2-class
 
-detection으로 fine-tuning한다 (docs/fall_evaluation.md §8, `feature/fall-detector`
-PR2 안에서 이어지는 세 번째 커밋 단위).
+detection으로 fine-tuning한다 (자세한 내용은 docs/fall_evaluation.md 참고,
+`feature/fall-detector` PR2 안에서 이어지는 세 번째 커밋 단위).
 
 처음부터 학습하지 않고 pretrained yolo26n.pt에서 transfer learning만 수행한다.
 학습 자체는 GPU가 필요해 Colab에서 실행하는 것을 전제로 하지만, 이 스크립트는
@@ -154,6 +154,11 @@ def run_training(
 
     epochs = epochs_override if epochs_override is not None else config.epochs
     device = device_override if device_override is not None else config.device
+    # project는 절대경로로 변환해 전달한다 — 상대경로를 그대로 넘기면
+    # Ultralytics가 호출 시점의 cwd 기준으로 해석해, 실행 위치에 따라(예: Colab
+    # 노트북 cwd가 스크립트 실행 스크립트와 다를 때) run 디렉터리가 예상과
+    # 다른 곳에 생길 수 있다.
+    project = str(Path(config.project).resolve())
 
     model = YOLO(config.model)
     results = model.train(
@@ -163,7 +168,7 @@ def run_training(
         patience=config.patience,
         seed=config.seed,
         device=device,
-        project=config.project,
+        project=project,
         name=config.name,
     )
     return model, results, epochs, device
@@ -244,7 +249,7 @@ def main() -> None:
     if hasattr(results, "save_dir"):
         run_dir = Path(results.save_dir)
     else:
-        run_dir = Path(config.project) / config.name
+        run_dir = Path(config.project).resolve() / config.name
     best_pt_path = run_dir / "weights" / "best.pt"
     write_run_manifest(
         run_dir,

@@ -25,10 +25,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import cv2
 
@@ -43,10 +44,58 @@ _REQUIRED_COLUMNS = [
 ]
 
 # Subject 9~10(holdout)은 이 스크립트에서 절대 다루지 않는다 (docs/data_sources.md).
-_SPLIT_SUBJECTS = {
-    "development": range(1, 7),
-    "validation": range(7, 9),
-}
+_DEFAULT_SPLIT_CONFIG_PATH = "configs/caucafall_v5_split.json"
+_HOLDOUT_SUBJECTS = {9, 10}
+
+
+def load_split_subjects(path: str) -> Dict[str, List[int]]:
+    """configs/caucafall_v5_split.json에서 development/validation Subject 번호를 읽는다.
+
+    이 파일이 docs/data_sources.md Subject 분할의 단일 기준이므로, 이 스크립트가
+    자체적으로 범위를 하드코딩하면 두 값이 갈라져도 알아챌 방법이 없다. holdout은
+    이 파일에 있어도 이 스크립트에서는 절대 쓰지 않는다 — 아래서 development/
+    validation만 읽는다.
+
+    기본 설정 파일(configs/caucafall_v5_split.json)뿐 아니라 --split-config로
+    임의의 파일을 지정할 수 있으므로, 커스텀 설정도 다음을 위반하면 조용히
+    넘어가지 않고 즉시 실패시킨다: Subject 9~10(holdout) 포함, development/
+    validation 중복, 정수가 아닌 Subject 번호.
+    """
+    with open(path, "r", encoding="utf-8") as file:
+        raw = json.load(file)
+    required = {"development", "validation"}
+    missing = required - set(raw)
+    if missing:
+        raise ValueError(f"{path}에 필수 분할이 없습니다: {sorted(missing)}")
+
+    split_subjects: Dict[str, List[int]] = {}
+    for key in ("development", "validation"):
+        subjects = raw[key]
+        for subject_num in subjects:
+            if not isinstance(subject_num, int) or isinstance(subject_num, bool):
+                raise ValueError(
+                    f"{path}의 '{key}'에 정수가 아닌 Subject 번호가 있습니다: {subject_num!r}"
+                )
+        split_subjects[key] = list(subjects)
+
+    holdout_hit = (set(split_subjects["development"]) | set(split_subjects["validation"])) & (
+        _HOLDOUT_SUBJECTS
+    )
+    if holdout_hit:
+        raise ValueError(
+            f"{path}에 holdout Subject {sorted(holdout_hit)}가 development/validation에 "
+            "포함되어 있습니다. Subject 9~10은 PR4 전까지 절대 사용할 수 없습니다."
+        )
+
+    overlap = set(split_subjects["development"]) & set(split_subjects["validation"])
+    if overlap:
+        raise ValueError(
+            f"{path}에서 Subject {sorted(overlap)}가 development/validation 양쪽에 "
+            "모두 포함되어 있습니다."
+        )
+
+    return split_subjects
+
 
 # docs/data_sources.md 기준 공식 수량. 이보다 적거나 다르면 데이터셋이 불완전한
 # 상태로 생성된 것이므로, 조용히 진행하지 않고 실패시킨다.
@@ -78,6 +127,11 @@ def parse_args() -> argparse.Namespace:
         help="CAUCAFall v5 루트 (development/validation/holdout 하위 디렉터리를 포함).",
     )
     parser.add_argument("--output-dir", required=True, help="CSV를 생성할 디렉터리")
+    parser.add_argument(
+        "--split-config",
+        default=_DEFAULT_SPLIT_CONFIG_PATH,
+        help="development/validation Subject 분할을 정의한 JSON (기본값: configs/caucafall_v5_split.json)",
+    )
     parser.add_argument(
         "--force",
         action="store_true",
@@ -168,10 +222,12 @@ def process_activity_folder(
     )
 
 
-def generate_split(dataset_dir: Path, split_name: str) -> List[_AnnotationDraft]:
+def generate_split(
+    dataset_dir: Path, split_name: str, split_subjects: Dict[str, List[int]]
+) -> List[_AnnotationDraft]:
     split_root = dataset_dir / split_name
     drafts: List[_AnnotationDraft] = []
-    for subject_num in _SPLIT_SUBJECTS[split_name]:
+    for subject_num in split_subjects[split_name]:
         subject_dir = split_root / f"Subject.{subject_num}"
         if not subject_dir.is_dir():
             print(f"  경고: {subject_dir} 없음, 건너뜀")
@@ -262,6 +318,7 @@ def main() -> None:
     args = parse_args()
     dataset_dir = Path(args.dataset_dir)
     guard_dataset_dir(dataset_dir)
+    split_subjects = load_split_subjects(args.split_config)
 
     output_dir = Path(args.output_dir)
     for split_name in ("development", "validation"):
@@ -269,7 +326,7 @@ def main() -> None:
         guard_existing_output(output_path, args.force)
 
         print(f"[{split_name}] annotation 생성 중...")
-        drafts = generate_split(dataset_dir, split_name)
+        drafts = generate_split(dataset_dir, split_name, split_subjects)
         verify_expected_counts(drafts, split_name)
 
         fall_count = sum(1 for d in drafts if d.label == "fall")

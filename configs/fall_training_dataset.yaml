@@ -10,7 +10,7 @@
 #
 # Subject 7~8(Validation)은 학습 중 val로 절대 쓰지 않는다 — early
 # stopping/모델 선택에 노출되면 최종 Event-level Validation이 오염된다
-# (docs/fall_evaluation.md §8).
+# (docs/fall_evaluation.md 참고).
 path: outputs/fall_training/dataset_internal
 train: images/train
 val: images/val

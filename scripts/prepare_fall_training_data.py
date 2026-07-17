@@ -18,7 +18,7 @@ Subject 기준 분할만 허용한다: 프레임을 무작위로 섞어 train/va
 `S{subject}_{activity_slug}_{원본 파일명}`으로 접두해 유일성을 보장한다.
 
 원본 데이터의 알려진 이름 불일치(Development 60개 영상 전수 확인,
-docs/fall_evaluation.md §8 참고):
+docs/fall_evaluation.md 참고):
     - `Subject.2/Fall backwards/cas200091 - copia.png`: 대응 라벨은
       `cas200091.txt`(" - copia" 접미사 없음)로 존재한다. 정확한 stem 매칭이
       실패하면 " - copia" 접미사를 제거한 stem으로 같은 폴더에서 라벨을 다시

@@ -40,7 +40,7 @@ data/datasets/
 
 - Subject(참가자) 10명, 참가자당 폴더 10개(활동별)
 - 폴더마다 영상(`.avi`), 프레임 이미지(`.png`), 프레임별 분할 라벨(`.txt`) 포함
-- 해상도 1080×960, 23fps
+- 해상도 720×480, 20fps (`ffprobe`로 Subject 1/3/6 샘플 영상 직접 확인, `docs/fall_evaluation.md`의 fine-tuning 기록 참고)
 - 낙상 5종: 전방, 후방, 좌측, 우측, 앉은 상태에서의 낙상 → `fall` 라벨
 - ADL 5종: 걷기, 뛰기(hopping), 물건 집기, 앉기, 무릎 꿇기 → `no-fall` 라벨
 
@@ -144,20 +144,25 @@ Phase 3 외부 접촉 원인 후보 추정 검증용 소규모 데이터셋.
 
 ---
 
-## Phase 3 평가 기준
+## Phase 3 평가 기준과 확인 상태
 
 ```text
-CAUCAFall Holdout Recall ≥ 75%
+PR2 Subject 7~8 Validation Recall ≥ 75%
 False alarm ≤ 0.2회/분
 평균 감지 지연 ≤ 2초
 낙상 1회당 이벤트 1회
-
-원인 후보 Track 정확도 ≥ 70%
-혼자 낙상 false attribution ≤ 20%
-bystander false attribution ≤ 20%
 
 기능 적용 후 FPS 저하 ≤ 20%
 API 장애 중 파이프라인 비정상 종료 없음
 ```
 
-동일 입력·동일 하드웨어에서 적용 전후 각각 3회 측정한다. 초기 baseline과 기준 차이가 크면 ADR에 근거를 기록한 뒤 한 번만 조정한다.
+PR2 동결 Validation 결과는 Recall 70.0%, false alarm 2.92회/분, 평균 감지 지연
+0.40초, 중복 Event 영상 1건이다. 따라서 지연 목표만 충족했으며, 기능은 기본
+비활성 opt-in PoC로 유지한다. 자세한 결과는 `docs/fall_evaluation.md`에 기록한다.
+
+동일 입력·동일 하드웨어에서 적용 전후 각각 3회 측정하는 FPS 기준은 아직 완료하지
+않았다. 짧은 파일 1회 비교에서는 opt-in 경로가 기본 경로보다 약 36.9% 낮았으며,
+장시간/IP 카메라 통합 측정에서 재확인한다.
+
+Subject 9~10 Holdout 평가는 PR4까지 보류한다. `FALL_SUSPECT.cause`의 원인 후보
+Track 정확도·false attribution 기준은 PR3 구현 후 별도로 적용한다.
