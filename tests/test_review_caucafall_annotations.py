@@ -29,11 +29,50 @@ _COLUMNS = [
 ]
 
 
-def _write_avi(path: Path, frame_count: int, fps: float = 10.0) -> None:
-    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (32, 32))
-    for _ in range(frame_count):
-        writer.write(np.zeros((32, 32, 3), dtype=np.uint8))
-    writer.release()
+_TEST_VIDEO_FRAMES = {}
+
+
+class _FakeVideoCapture:
+    """CI 코덱에 의존하지 않고 ReviewSession의 순차 디코딩 경로를 검증한다."""
+
+    def __init__(self, path: str) -> None:
+        self._frames = _TEST_VIDEO_FRAMES.get(str(Path(path).resolve()))
+        self._next_frame_index = 0
+        self._released = False
+
+    def isOpened(self) -> bool:
+        return self._frames is not None and not self._released
+
+    def read(self):
+        if not self.isOpened() or self._next_frame_index >= len(self._frames):
+            return False, None
+        frame = self._frames[self._next_frame_index].copy()
+        self._next_frame_index += 1
+        return True, frame
+
+    def release(self) -> None:
+        self._released = True
+
+
+@pytest.fixture(autouse=True)
+def _fake_video_capture(monkeypatch):
+    """OpenCV/FFmpeg 설치 상태와 무관하게 테스트 영상을 읽도록 고정한다."""
+    _TEST_VIDEO_FRAMES.clear()
+    monkeypatch.setattr(rev.cv2, "VideoCapture", _FakeVideoCapture)
+
+
+def _write_avi(path: Path, frame_count: int) -> None:
+    """테스트용 AVI 경로와 메모리 프레임을 함께 준비한다.
+
+    실제 AVI 인코딩은 macOS와 GitHub Actions Ubuntu의 코덱 지원 차이로
+    테스트를 불안정하게 만든다. 운영 GUI의 실제 AVI 재생은 수동 E2E로 확인하고,
+    여기서는 ReviewSession의 프레임 탐색과 상태 관리만 검증한다.
+    """
+    path.write_bytes(b"test-video")
+    _TEST_VIDEO_FRAMES[str(path.resolve())] = [
+        np.full((32, 32, 3), frame_index, dtype=np.uint8)
+        for frame_index in range(frame_count)
+    ]
 
 
 def _write_frame_labels_and_images(folder: Path, classes: list) -> None:
@@ -49,7 +88,8 @@ def _make_activity_folder(
 ) -> Path:
     folder = root / subject_dir_name / activity
     folder.mkdir(parents=True)
-    _write_avi(folder / f"{activity.replace(' ', '')}.avi", avi_frames)
+    video_stem = "".join(part.capitalize() for part in activity.split())
+    _write_avi(folder / f"{video_stem}.avi", avi_frames)
     _write_frame_labels_and_images(folder, classes)
     return folder
 

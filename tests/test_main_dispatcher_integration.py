@@ -1,6 +1,6 @@
 """main.py의 run_pipeline_from_source가 AsyncEventDispatcher를 올바르게
 
-연결하는지 확인하는 통합 테스트. 실제 모델·영상 없이 ByteTracker 등
+연결하는지 확인하는 통합 테스트. 실제 모델·영상 없이 PoseTracker 등
 무거운 의존성은 mock으로 대체하고, Event/CurrentStatus/Live Frame이
 dispatcher로 등록되는지, 종료 시 close()가 호출되는지, api_url이 없을
 때 기존 동작(dispatcher 미사용)이 유지되는지 검증한다.
@@ -30,7 +30,7 @@ def _make_mock_source(frame_count: int = 1):
 
 
 def _patch_pipeline_internals(fake_events):
-    """ByteTracker/zones/EventManager 등 무거운 의존성을 mock으로 교체한다."""
+    """PoseTracker/zones/EventManager 등 무거운 의존성을 mock으로 교체한다."""
     mock_track = MagicMock(track_id=1, bbox=[10.0, 10.0, 50.0, 50.0])
     mock_tracker = MagicMock()
     mock_tracker.update.return_value = MagicMock(tracks=[mock_track])
@@ -49,6 +49,7 @@ def _patch_pipeline_internals(fake_events):
     return patch.multiple(
         main_module,
         ByteTracker=MagicMock(return_value=mock_tracker),
+        PoseTracker=MagicMock(return_value=mock_tracker),
         load_zones=MagicMock(return_value=[]),
         ZoneChecker=MagicMock(return_value=mock_checker),
         EventManager=MagicMock(return_value=mock_event_manager),

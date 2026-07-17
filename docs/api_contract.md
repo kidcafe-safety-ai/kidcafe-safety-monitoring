@@ -2,8 +2,8 @@
 
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
-> **최종 수정**: 2026-07-16 (Phase 3 공간 안전정책 구현 반영)
-> **상태**: Phase 2.5 구현 완료 / Phase 3 Live Frame API 구현 / Phase 3 Event·Zone·EventCause 계약 구현 완료 / 공간 안전정책 구현 / FALL_SUSPECT 감지 로직 후속 구현
+> **최종 수정**: 2026-07-18 (Phase 3 FALL_SUSPECT opt-in PoC 구현 반영)
+> **상태**: Phase 2.5 구현 완료 / Phase 3 Live Frame API 구현 / Phase 3 Event·Zone·EventCause 계약 구현 완료 / 공간 안전정책 구현 / FALL_SUSPECT opt-in PoC 구현 완료 (`cause` 원인 후보 추정은 PR3)
 > **관련 문서**: [`dashboard_api.md`](dashboard_api.md), [`dashboard_analysis.md`](dashboard_analysis.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md), [`roadmap.md`](roadmap.md)
 
 이 문서는 Phase 1.5~2.5의 구현된 API, Phase 3 Live Frame API·Event/Zone 공용 계약, 그리고 Phase 3의 확정된 후속 계약(안전 감지 로직 등)을 구분해 정리한다.
@@ -590,7 +590,7 @@ WebSocket은 Phase 2.5와 Phase 3에서도 제외하며 Phase 4 이후 검토한
 
 ## Phase 3 계약
 
-> 상태: Live Frame API 구현 완료 / Event Schema v2·ZoneType·SQLite migration 구현 완료 / 공간 안전정책 구현 완료 / FALL_SUSPECT 감지 로직 후속 구현
+> 상태: Live Frame API 구현 완료 / Event Schema v2·ZoneType·SQLite migration 구현 완료 / 공간 안전정책 구현 완료 / FALL_SUSPECT opt-in PoC 구현 완료 (`cause` 원인 후보 추정은 PR3)
 > 기준선: v0.2.5-dashboard
 > 적용 시점: 아래 각 계약은 해당 구현 PR 머지 이후 적용됨
 
@@ -717,6 +717,8 @@ FALL_SUSPECT
 - `confidence`: optional (기존 DB 행은 null 허용)
 - `event_confidence`: optional, 0.0~1.0 또는 null
 - `cause`: optional, 전체 객체 또는 null (부분 객체 불허)
+- PR2의 `FALL_SUSPECT` 생성 경로는 `cause=null`을 기록한다. non-null 원인 후보
+  생성은 PR3의 외부 접촉 attribution 범위다.
 
 **EventCause 검증 범위** (상세 규칙은 `docs/interfaces.md`의 EventCause 검증 규칙 참조)
 

@@ -28,7 +28,8 @@
 - 감지 지연 기준: `impact_frame`/`lying_start_frame`은 이번 PR2에서 비워두고
   `fall_start_frame` 기준으로 지연을 측정하는 간소화 정책을 채택했다 (40개 영상
   전부에 `impact_frame`을 입력하는 상세 평가는 하지 않음).
-- 검수 완료 상태: Development 60/60, Validation 20/20 (`review_status=reviewed`).
+- 검수 상태: Development 59개 `reviewed` + 1개 `needs_review`
+  (`S6_fall_backwards`, 평가 제외), Validation 20개 `reviewed`.
 
 ## 3. 상태머신 설계 변경 (Tune 1)
 
@@ -50,22 +51,26 @@
 | 실행 | 구조 | Recall | False alarm/min | 평균 지연(초) | 중복 Event | 비고 |
 |---|---|---:|---:|---:|---:|---|
 | Baseline | 근거 2/3 동시 요구 | 13.3% (4/30) | 0.0 | 4.30 | 0 | `outputs/fall_eval/development_baseline.json` |
-| Tune 1 | 시간차 근거 분리 (§3) | 16.7% (5/30) | 0.0 | 1.92 | 0 | `outputs/fall_eval/development_tune_01_temporal_evidence.json` |
-| Tune 2 | + Pose torso_angle (§5.3, 폐기) | 20.0% (6/30) | 0.0 | 0.88 | 0 | `outputs/fall_eval/development_tune_02_pose_confirmation.json` |
-| Tune 2b | + Pose head_hip_diff_norm (§5.3) | 30.0% (9/30) | 0.0 | 1.14 | 1 (`S4_fall_forward`) | `outputs/fall_eval/development_tune_02b_pose_head_hip.json` |
-| **Tune 3 (최종, PR2 기준선)** | + cooldown pose 반영 + early tolerance 0.2s + `S6_fall_backwards` 제외 | **34.5% (10/29)** | 0.0 | 1.02 | 1 (`S4_fall_forward`, 원인 §5.6) | `outputs/fall_eval/development_tune_04_final.json` |
+| Tune 1 | 시간차 근거 분리 | 16.7% (5/30) | 0.0 | 1.92 | 0 | `outputs/fall_eval/development_tune_01_temporal_evidence.json` |
+| Tune 2 | + Pose torso_angle (폐기) | 20.0% (6/30) | 0.0 | 0.88 | 0 | `outputs/fall_eval/development_tune_02_pose_confirmation.json` |
+| Tune 2b | + Pose head_hip_diff_norm | 30.0% (9/30) | 0.0 | 1.14 | 1 | `outputs/fall_eval/development_tune_02b_pose_head_hip.json` |
+| Tune 3 | + cooldown pose 반영 + early tolerance 0.2초 | 34.5% (10/29) | 0.0 | 1.02 | 1 | `outputs/fall_eval/development_tune_04_final.json` |
+| Tune 5 | + fine-tuned fall/nofall 보조 모델 | 58.6% (17/29) | 0.0 | 0.60 | 1 | `outputs/fall_eval/development_tune_05_model.json` |
+| Tune 7 | `model_confirm_sec=0.2` | 62.1% (18/29) | 0.0 | 0.35 | 1 | `outputs/fall_eval/development_tune_07_mc02.json` |
+| Tune 11 | bounded temporal voting | 58.6% (17/29) | 0.0 | 0.30 | 0 | `outputs/fall_eval/development_tune_11_temporal_vote.json` |
+| Tune 12 | + model-assisted candidate 진입 | 82.8% (24/29) | 0.0 | 0.78 | 2 | `outputs/fall_eval/development_tune_12_model_candidate.json` |
+| **Tune 13 (최종 동결)** | + 공간 기반 cooldown 승계 | **82.8% (24/29)** | **0.0** | **0.78** | **0** | `outputs/fall_eval/development_tune_13_spatial_cooldown.json` |
 
-Tune 3부터는 `S6_fall_backwards`가 `needs_review`로 제외돼 fall 모수가 29개다
-(§5.5). 모든 실행에서 `evaluation_valid=true`(오류 영상 0개), Tune 3의
-`early_false_alarms=0`(early tolerance 0.2s 적용 후).
+Tune 3부터는 `S6_fall_backwards`가 `needs_review`로 제외돼 fall 모수가 29개다.
+모든 표의 실행은 `evaluation_valid=true`, `skipped_with_error=0`이며,
+early tolerance는 0.2초로 고정했다.
 
-**규칙 기반 단계(bbox+pose, 이 시점까지의 결론)**: False alarm(0.0/min ≤ 0.2)·
-평균 지연(1.02s ≤ 2.0s)은 목표를 만족하지만, **Recall 34.5%는 목표(≥75%)에
-크게 못 미친다**. §5.1·§5.3에서 확인한 카메라 깊이 방향 낙상의 구조적 한계
-때문에 규칙 기반 bbox+pose 방식만으로는 목표 달성이 어렵다고 판단했다.
-Recall 목표는 별도 PR이 아니라 **같은 PR2 안에서** §8의 YOLO fine-tuning
-(세 번째 커밋 단위)으로 달성한다 — bbox+pose는 fine-tuned 모델을 쓸 수 없을
-때의 fallback 경로로 남는다.
+**Development 결론**: bbox+pose 규칙만으로는 Recall 34.5%에 머물렀지만,
+fine-tuned 2-class detector와 시간·상태 제어를 결합한 Tune 13은 Development
+목표(Recall 75% 이상, false alarm 0.2/분 이하, 평균 지연 2초 이하, 중복 Event
+0건)를 모두 만족했다. 이 수치는 Subject 1~6 개발 데이터에서 설정을 고른
+결과이므로, 운영 성능의 증명은 아니며 Subject 7~8 Validation 결과와 분리해
+해석한다.
 
 ## 5. 알려진 한계: 낙상 방향에 따른 미검출
 
@@ -123,7 +128,7 @@ keypoint 관계로는 명확하게 포착한다.
 올라가는 프레임이 사실상 1개(frame 142, 37.5~71.8° 순간 스파이크)뿐이었다.
 원인은 카메라를 향해/멀어지는 방향(깊이 방향)으로 쓰러지면 몸 전체가 2D
 영상에 압축 투영되어 어깨-엉덩이 벡터도 수직에 가깝게 남는다는 것 —
-aspect_ratio(§5.1)와 동일한 카메라 각도 문제가 골격 각도에도 그대로
+앞서 확인한 aspect_ratio와 동일한 카메라 각도 문제가 골격 각도에도 그대로
 나타난다. 이는 CAUCAFall 공식 데이터셋 문서(`Dataset details.xlsx`,
 Figure8)로도 교차 확인됐다: `S1 Fall forward`의 공식 낙상 각도는 화면 기준
 **271.4°**로 기록되어 있어, 카메라 평면상 거의 수직에 가까운 각도로 촬영된
@@ -141,7 +146,7 @@ Figure8)로도 교차 확인됐다: `S1 Fall forward`의 공식 낙상 각도는
 
 - **recovery 억제**: pose가 "쓰러진 자세"로 보는 동안에는 회복 조건이
   성립해도 candidate를 초기화하지 않는다 (`_is_recovered`). 그렇지 않으면
-  aspect_ratio가 낮게 유지되는 낙상(§5.1)에서 회복 조건이 자주 만족돼
+  aspect_ratio가 낮게 유지되는 깊이 방향 낙상에서 회복 조건이 자주 만족돼
   pose confirm 진행이 중간에 끊긴다.
 - **recovery debounce**: 회복 조건은 단일 프레임이 아니라
   `recovery_confirm_sec`(0.3초) 이상 지속돼야 실제로 NORMAL로 되돌린다 —
@@ -154,14 +159,14 @@ Figure8)로도 교차 확인됐다: `S1 Fall forward`의 공식 낙상 각도는
   건다.
 - **cooldown pose 반영**: `_advance_cooldown`도 bbox `is_horizontal_posture`
   뿐 아니라 pose `is_fallen_pose`를 함께 확인한다. 처음에는 bbox만 봤는데,
-  깊이 방향 낙상(§5.1)에서 pose는 여전히 쓰러진 자세로 보는 동안 bbox가
+  깊이 방향 낙상에서 pose는 여전히 쓰러진 자세로 보는 동안 bbox가
   한 번도 수평으로 판정되지 않아 cooldown이 조기 만료되고, 같은 낙상이
   다시 candidate로 잡혀 중복 Event가 발생했다 (`S4_fall_forward`, frame
   41과 149 두 번 확정). recovery와 동일한 pose 우선 규칙을 적용해 고쳤다.
 
 머리-엉덩이 신호 도입 후 Development Recall은 30%(9/30)까지 올랐으나
 (`development_tune_02b_pose_head_hip.json`), 위 cooldown 버그로 인한 중복
-확정 1건이 섞여 있었다. 최종 결과는 §5.5 참고.
+확정 1건이 섞여 있었다. 최종 규칙 기반 결과는 Development 평가 표에 기록했다.
 
 ### 5.4 Early tolerance: annotation 라벨링 오차 허용
 
@@ -197,78 +202,90 @@ Development 평가 모수는 fall 29개(원래 30개 중 1개 제외)다. 후속
 Mendeley 원본 재다운로드 또는 257개 PNG로부터 AVI를 재구성하는 방안이
 필요하며, 아직 실행하지 않았다.
 
-### 5.6 알려진 한계: cooldown 중 track 소실 시 상태 초기화 (미해결)
+### 5.6 Track 소실과 ID 변경에 대한 cooldown 보완
 
-`_advance_cooldown()`이 bbox뿐 아니라 pose `is_fallen_pose`도 확인하도록
-고쳤음에도(§5.3 cooldown pose 반영) `S4_fall_forward`는 여전히 중복
-Event(frame 41, 149)가 발생한다. track_id를 프레임 단위로 직접 추적한
-결과, pose/bbox 판정 문제가 아니라 **frame 101~131(30프레임=1.5초) 동안
-사람이 전혀 검출되지 않는 구간**이 원인이었다(누운 자세에서의 occlusion
-추정). 이 공백이 `track_grace_sec`(0.5초)보다 훨씬 길어서
-`_forget_lost_tracks()`가 이 track의 `_TrackState`(COOLDOWN 포함)를
-완전히 삭제하고, frame 132에 같은 track_id로 재검출됐을 때
-`_advance_state`가 `setdefault`로 상태를 NORMAL부터 새로 만들어 cooldown
-기억이 사라진다. 즉 pose-blindness가 아니라 "cooldown 중 track이 grace
-period 이상 소실되면 cooldown 자체가 리셋된다"는 별도 원인이다.
+Tune 3의 `S4_fall_forward` 중복 Event는 candidate/pose 신호가 아니라,
+COOLDOWN 상태에서 Track이 0.5초 grace period보다 오래 소실된 뒤 같은
+`track_id`로 다시 검출되며 상태가 NORMAL로 초기화된 문제였다. COOLDOWN
+상태는 `cooldown_until_sec`까지 보존하고, 그 시각이 지난 뒤에도 Track이
+소실 상태일 때만 제거하도록 수정했다. 이로써 같은 ID가 잠시 사라졌다가
+돌아오는 경우의 중복 확정을 막는다.
 
-가능한 수정(`_forget_lost_tracks()`에서 `COOLDOWN` 상태 track은 삭제
-예외 처리)을 확인했으나, Pose 경로는 §8 fine-tuning 확정 전까지의 비교
-기준·fallback 역할로 한정하기로 해 이번 PR2에서는 추가로 수정하지 않고
-**알려진 한계로 남긴다**. `falls_with_multiple_events=1`(Tune 3, §4)이 이
-사례다.
+model-assisted candidate 진입을 추가한 Tune 12에서는 별도의 ID switch 문제가
+나타났다. `S2_fall_forward`, `S3_fall_right`에서 같은 사람이 새 `track_id`로
+재검출되면 기존 Track의 cooldown을 알 수 없어 두 번째 Event가 발생했다.
+정식 ReID는 이번 범위가 아니므로, 확인 시점의 bbox와 만료 시각을
+`_CooldownTombstone`으로 남기고 같은 `video_source`의 새 Track이 IoU 0.3
+이상 겹칠 때만 남은 cooldown을 승계하는 경량 보완을 적용했다.
+
+이 방식은 위치 기반 휴리스틱이며 외형 특징을 비교하는 ReID를 대체하지 않는다.
+다중 인원이 가까이 겹친 장면에서는 다른 아동의 새 Track bbox도 tombstone과
+IoU 기준을 만족할 수 있다. 이 경우 실제로 새로 발생한 다른 아동의 낙상까지
+cooldown을 승계해 `FALL_SUSPECT`를 억제하는 false negative 위험이 있다.
+현재 평가는 단일 대상 중심 데이터이므로 이 근접 다중 인원 상황을 정량 검증하지
+않았다. 따라서 밀집 장면에서의 ReID 검증과 IoU 임계값 재평가는 Phase 4 후속
+작업으로 남긴다. Development에서는 Tune 13에서 중복 Event가 0건으로 줄었고,
+다른 위치 Track의 독립 감지와 만료 tombstone 정리만 단위 테스트로 확인했다.
 
 ## 6. Validation (Subject 7~8)
 
-annotation은 검수 완료(20/20)됐으나, 평가는 **아직 실행하지 않았다** — 설정과
-모델(§8 fine-tuning 포함)을 모두 최종 동결한 뒤 한 번만 실행하고, 그 결과를
-보고 임계값이나 모델을 다시 조정하지 않는다 (개발/검증 분리 원칙). Subject
-7~8은 학습 과정의 early stopping·모델 선택에는 어떤 형태로도 관여하지 않는다
-— 그 역할은 Subject 6(내부 검증)이 맡는다 (§8).
+Tune 13 설정과 `fall_detector_v1.pt`를 동결한 뒤 Subject 7~8 20개 영상에서
+한 번 실행했다. 이 결과를 확인한 뒤에는 임계값·모델을 다시 조정하지 않았다.
+
+| 지표 | 결과 | 목표 | 판정 |
+|---|---:|---:|---|
+| Recall | 70.0% (7/10) | 75% 이상 | 미달 |
+| False alarm/min | 2.92 | 0.2 이하 | 미달 |
+| 평균 감지 지연 | 0.40초 | 2초 이하 | 통과 |
+| 중복 Event 영상 수 | 1 | 0 | 미달 |
+| 평가 오류 영상 수 | 0 | 0 | 통과 |
+
+결과 파일은 `outputs/fall_eval/validation_final.json`이다. 놓친 낙상은
+`S7_fall_backwards`, `S7_fall_sitting`, `S8_fall_right` 3개이며, 이 영상들은
+실제 낙상 시점 전에 발생한 Event가 cooldown으로 이어져 실제 낙상 구간의
+Event를 막은 사례를 포함한다. no-fall 영상의 false alarm은
+`S7_sit_down`에서 2건 발생했고, `S8_fall_backwards`는 Event가 2건 발생했다.
+
+따라서 Development에서의 목표 달성만으로 운영 사용 가능하다고 판단하지 않는다.
+이번 PR에서는 개발/검증 분리 원칙을 지켜 Validation 결과를 보고 재튜닝하지
+않았고, `--fall-detection-enabled`의 기본값을 `false`로 유지한다. 실제
+키즈카페/IP 카메라 hard-negative 데이터와 함께 오탐을 줄이는 후속 실험이
+필요하다.
 
 ## 7. Subject 9~10 사용 확인
 
-이번 PR2 전 과정(생성·검수·평가)에서 Subject 9~10(holdout)에는 접근하지
-않았다 — `generate_caucafall_annotations.py`/`evaluate_fall.py` 모두 holdout
-경로를 코드 수준에서 차단한다 (`guard_holdout`/`_contains_holdout_segment`).
+Subject 9~10 holdout은 로컬 원본 데이터에 존재하더라도 이번 PR2의 학습,
+체크포인트 선택, 임계값 튜닝, Development/Validation 평가에 사용하지 않았다.
+`generate_caucafall_annotations.py`와 `evaluate_fall.py`는 holdout split을 코드
+수준에서 차단한다(`guard_holdout`, `_contains_holdout_segment`). Holdout 평가는
+PR4 최종 평가 전까지 보류한다.
 
-## 8. PR2 범위 확정과 fine-tuning 통합 계획
+## 8. Fine-tuning 및 파이프라인 통합
 
-PR2(규칙 기반 bbox+pose)만으로는 Recall 목표(≥75%)를 달성하지 못했다.
-§5.1·§5.3에서 확인했듯 카메라를 향해/멀어지는 방향(깊이 방향) 낙상은
-aspect_ratio·skeleton 각도 등 어떤 단순 2D 투영 신호로도 구조적으로 분리가
-어렵다 — CAUCAFall 공식 문서(Figure8, 271.4°)로도 교차 확인된 한계다.
-반면 CAUCAFall은 프레임 단위 fall/nofall 라벨을 자체 제공하도록 설계되어
-있어(공식 참고 구현도 전신 keypoint 기반), YOLO 분류기를 직접 fine-tuning해
-confirm 신호로 쓰는 방식이 데이터셋 의도에 더 가깝다.
+### 8.1 Subject 단위 fine-tuning
 
-**fine-tuning은 별도 PR로 분리하지 않고, 같은 `feature/fall-detector`
-브랜치(PR2) 안에서 이어서 진행한다** — bbox 코어(§3~4)·pose 보완(§5.3)에
-이어지는 세 번째 커밋 단위로, PR2 자체가 Recall 목표를 만족하는 최종
-FALL_SUSPECT 감지기를 목표로 한다. bbox/pose 규칙 기반 경로는 최종 confirm
-신호가 아니라 fine-tuned 모델을 쓸 수 없을 때의 fallback으로 남긴다.
+bbox+pose 규칙만으로 깊이 방향 낙상을 안정적으로 구분하기 어려워,
+CAUCAFall의 프레임별 `nofall`/`fall` bbox 라벨로 `yolo26n.pt`를 2-class
+**detector**로 fine-tuning했다. 기존 사람 탐지·ByteTrack/PoseTracker를
+대체하는 모델이 아니라, `FALL_SUSPECT` 판단에 보조 근거를 주는 모델이다.
 
-학습 데이터 분할(Subject 기준, 인접 프레임 무작위 분할로 인한 누수 방지):
+학습/평가 분할은 인접 프레임이 서로 다른 split에 섞이지 않도록 Subject 단위로
+고정했다.
 
 | Subject | 역할 |
 |---|---|
 | 1~5 | fine-tuning 학습 |
-| 6 | 내부 검증(val): 모델 선택·early stopping. 여기서 고른 `best.pt`를
-그대로 최종 모델로 확정한다 — Subject 1~6 전체를 다시 합쳐 재학습하는
-단계는 두지 않는다 (train/internal-val/final-validation을 명확히 분리하기
-위함이며, `prepare_fall_training_data.py`가 애초에 val-subjects 없는 학습을
-지원하지 않는 것과도 일치한다). |
-| 7~8 | 모델·설정 동결 후 Event-level Validation **1회만** 실행 |
+| 6 | 내부 검증(val), 모델 선택·early stopping |
+| 7~8 | 모델·설정 동결 후 Event-level Validation 1회 |
 | 9~10 | PR4 Holdout, 접근 금지 |
 
-Subject 7~8은 학습 중 어떤 단계(모델 선택, early stopping, 임계값 튜닝)에도
-관여하지 않는다 — 학습 중 val로 쓰면 최종 Validation이 오염되기 때문이다.
-`S6_fall_backwards`는 AVI가 손상돼(§5.5) 학습 데이터 준비에서도 PNG/txt만
-사용하고 AVI는 쓰지 않는다.
+`best.pt`는 Subject 1~6 전체로 재학습하지 않고, Subject 6 internal validation
+기준으로 선택된 체크포인트를 그대로 사용했다. 학습 데이터 준비에서는 손상된
+`S6_fall_backwards` AVI가 아니라 PNG/txt 라벨만 사용한다.
 
-**학습 데이터의 원본 파일명 이상 (Development 60개 영상 전수 확인)**:
+학습 데이터 생성 과정에서는 원본 파일·라벨 이상 3건을 재현 가능하게 처리했다.
 `prepare_fall_training_data.py`가 PNG/txt 쌍을 모으는 과정에서 CAUCAFall
-원본 데이터 자체의 파일·라벨 이상 3건을 발견했다 — 원본 파일명은 바꾸지 않고
-스크립트가 이를 재현 가능하게 처리한다.
+원본 파일명은 변경하지 않는다.
 
 - `Subject.2/Fall backwards/cas200091 - copia.png`: 대응 라벨이
   `cas200091.txt`(" - copia" 접미사 없음)로 존재한다. 정확한 stem 매칭이
@@ -288,5 +305,98 @@ Subject 7~8은 학습 중 어떤 단계(모델 선택, early stopping, 임계값
 | train | 9,115 | 6,431 | 2,684 |
 | val | 2,181 | 1,425 | 756 |
 
-PR3(`FALL_SUSPECT.cause` 외부 접촉 후보 추정, ADR-016)는 PR2가 머지된 뒤
+Colab 학습은 15 epoch에서 early stopping으로 끝났으며, Subject 6 프레임 단위
+검증에서 `fall` 클래스 Recall 82.8%, mAP50 90.2%, mAP50-95 68.5%를 기록했다.
+이는 프레임 단위 detector 지표이며, 영상당 `FALL_SUSPECT` 생성 여부를 보는
+Event-level Recall과 같은 값이 아니다.
+
+PoC 실행용 보조 모델은 `outputs/fall_training/models/fall_detector_v1.pt`이며 SHA-256은
+다음과 같다.
+
+```text
+5985d5a24db8b69bf0d231644a4c7a71f6a1143724ed7df2be6d669373c83da7
+```
+
+학습 run 산출물은 `outputs/fall_training/colab_run/fall_detector/`에 보관하며,
+팀 공유본은 Google Drive `kidcafe-data/fall-training/`에 모델 파일과 run archive를
+함께 보관한다. `run_manifest.json`은 모델 SHA-256, 학습 설정, 환경 정보를 기록한다.
+
+### 8.2 Track-모델 매칭과 bounded temporal voting
+
+`AuxiliaryFallModel`은 fine-tuned detector의 fall/nofall bbox를 만들고,
+`match_detections_to_tracks()`가 같은 프레임의 Track과 IoU 0.3 이상일 때만
+연결한다. 이 매칭 결과는 `FallPipeline`을 통해 `FallDetector.process()`에
+Track별 `FallModelEvidence`로 전달한다.
+
+프레임 단위 `nofall` 한 번으로 누적 근거가 사라지는 문제를 피하기 위해,
+최근 0.5초 안의 `fall` 근거 시간을 합산하는 bounded temporal voting을 사용한다.
+합계가 0.2초 이상일 때 model confirm 조건을 만족한다. `nofall`/`unknown`은
+즉시 누적값을 초기화하지 않으며, 오래된 근거만 윈도우 밖으로 만료된다.
+모델 경로를 전달하지 않으면 이 근거는 완전히 비활성화되어 기존 bbox+pose
+동작을 유지한다.
+
+### 8.3 Model-assisted candidate 진입
+
+Tune 11에서 놓친 영상 12개 중 11개는 `fall_start_frame`에 활성 Track이 없었다.
+낙상 후 새 Track이 이미 누운 상태로 재획득되면 bbox 동적 변화가 없어 기존
+candidate 진입 조건을 만족할 수 없다. 이를 해결하기 위해 모델의 최근 fall
+근거가 0.1초 이상이면 bbox 동적 근거 없이도 `FALLING_CANDIDATE`에 진입하도록
+보완했다. 모델 1프레임만으로 Event를 만드는 것이 아니라, 이후 0.2초 model
+confirm 또는 기존 bbox/pose confirm을 추가로 통과해야 한다.
+
+이 변경으로 Development Event Recall은 58.6%에서 82.8%로 상승했다. Track이
+전혀 없는 프레임에서는 여전히 Event를 만들지 않으며, 정식 ReID는 이번 범위에
+포함하지 않는다.
+
+### 8.4 공간 기반 cooldown 승계
+
+새 Track ID가 기존 cooldown을 잃어 같은 낙상을 다시 확정하는 문제는
+`_CooldownTombstone`과 IoU 기반 cooldown 승계로 완화했다. 설정값
+`cooldown_inherit_iou_threshold=0.3`은 같은 video source 안에서만 적용하며,
+만료된 tombstone은 매 프레임 정리한다. Tune 12의 중복 Event 2건은 Tune 13에서
+0건으로 감소했고 Recall, false alarm, 지연값은 유지됐다.
+
+### 8.5 Development 동결 설정과 해석
+
+Development 최종 평가는 아래 설정을 사용한다.
+
+```text
+fall_model_conf = 0.5
+fall_model_iou_threshold = 0.3
+model_vote_window_sec = 0.5
+model_candidate_entry_sec = 0.1
+model_confirm_sec = 0.2
+cooldown_inherit_iou_threshold = 0.3
+```
+
+이 값은 Subject 1~6 Development에서 고정한 값이며, Subject 7~8 Validation 이후
+변경하지 않았다. Development 성능은 목표를 만족했지만 Validation false alarm이
+목표를 크게 넘었으므로, 현재 모델은 실시간 PoC의 선택적 기능이지 운영 환경에서
+기본으로 켜는 기능은 아니다.
+
+### 8.6 `main.py` 통합
+
+`--fall-detection-enabled`를 명시한 경우에만 `FallPipeline`을 생성한다. 기본값은
+`false`이며, 기본 실행은 기존 `yolo26n.pt` + `ByteTracker` 경로를 그대로 사용한다.
+낙상 감지를 켜면 기본 tracker는 `yolo26n-pose.pt` + `PoseTracker`로 바뀌고,
+`--fall-model-path`를 지정하면 fine-tuned 보조 모델까지 함께 사용한다.
+
+확정된 `FALL_SUSPECT` Event는 기존 `EventWriter` 로컬 저장과 비차단 API
+dispatcher 경로를 재사용한다. CAUCAFall `S1_fall_backwards` 파일을
+`--fall-detection-enabled`와 `fall_detector_v1.pt`로 실행한 짧은 E2E에서
+`FALL_SUSPECT` 1건이 로컬 JSONL, FastAPI 이벤트 조회, SQLite `events` 테이블,
+React Dashboard 이벤트 화면까지 전달되는 것을 확인했다. 실행 중 Live Frame도
+Dashboard에 표시되는 것을 확인했다. 이는 파일 입력 기준의 연결 검증이며,
+장시간 실행, IP 카메라 hard-negative 평가, Holdout 및 외부 데이터 평가는 후속
+통합/PR4 범위로 남긴다.
+
+같은 영상·720x480·MPS·FastAPI·Live Frame 조건에서 `--fall-detection-enabled`만
+제외한 기본 경로(`yolo26n.pt` + ByteTracker)도 한 번 실행했다. 워밍업 이후
+progress 출력(frame 31/61/91/121)의 단순 평균은 기본 경로 12.5 FPS, 낙상 opt-in
+경로(`yolo26n-pose.pt` + PoseTracker + 보조 detector) 7.9 FPS로 기록됐다.
+짧은 파일의 4개 표본 기준 약 4.6 FPS(36.9%) 차이이며, 모델·tracker가 함께
+바뀌는 실제 opt-in 기능 전체의 비교다. 이 값은 장시간 성능 벤치마크나 IP 카메라
+성능을 대표하지 않으며, 장시간/IP 카메라 FPS·latency 평가는 후속 통합에서 측정한다.
+
+PR3의 `FALL_SUSPECT.cause` 외부 접촉 후보 추정은 PR2가 머지된 최신 main에서
 시작한다.
