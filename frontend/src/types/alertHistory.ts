@@ -15,4 +15,5 @@ export interface AlertHistoryItem {
   event_type: EventType;
   message: string;
   action_note: string;
+  cause_text?: string;
 }

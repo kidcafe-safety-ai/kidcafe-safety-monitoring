@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getEvents } from "../api/eventsApi";
 import EventChart from "../components/EventChart";
 import EventTable from "../components/EventTable";
+import EventTimelineChart from "../components/EventTimelineChart";
 import { usePolling } from "../hooks/usePolling";
 import type { EventType, SafetyEvent } from "../types/event";
 import { getEventDisplayMeta, KNOWN_EVENT_TYPES } from "../utils/eventDisplay";
@@ -108,6 +109,7 @@ export default function EventsPage() {
             onPrevious: goToPreviousPage,
           }}
         />
+        <EventTimelineChart events={filteredEvents} />
       </section>
     </main>
   );
