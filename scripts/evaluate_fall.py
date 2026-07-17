@@ -55,7 +55,9 @@ import cv2
 # 직접 실행하는 스크립트라 `python -m` 모듈 실행처럼 자동으로 repo root가 잡히지 않는다.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.safety.fall_detector import FallDetector, FallDetectorConfig  # noqa: E402
+from src.safety.auxiliary_fall_model import AuxiliaryFallModel  # noqa: E402
+from src.safety.fall_detector import FallDetectorConfig  # noqa: E402
+from src.safety.fall_pipeline import FallPipeline  # noqa: E402
 from src.tracking.bytetrack_wrapper import ByteTracker  # noqa: E402
 from src.tracking.pose_tracker import PoseTracker  # noqa: E402
 
@@ -134,6 +136,24 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--device", default="auto", help="auto | cpu | mps | cuda")
+    parser.add_argument(
+        "--fall-model-path",
+        default=None,
+        help=(
+            "fine-tuned fall/nofall 2-class detector(fall_detector_v1.pt 등) 경로. "
+            "지정하면 AuxiliaryFallModel + IoU 매칭을 통해 model confirm 경로가 "
+            "추가로 활성화된다 (src/safety/fall_pipeline.py). 지정하지 않으면 "
+            "기존 bbox/pose 전용 동작과 동일하다."
+        ),
+    )
+    parser.add_argument("--fall-model-conf", type=float, default=0.5)
+    parser.add_argument("--fall-model-device", default="auto", help="auto | cpu | mps | cuda")
+    parser.add_argument(
+        "--fall-model-iou-threshold",
+        type=float,
+        default=0.3,
+        help="보조 모델 detection을 Track에 매칭할 최소 IoU (0보다 크고 1 이하).",
+    )
     parser.add_argument("--output", default="outputs/fall_eval/summary.json")
     parser.add_argument(
         "--include-unreviewed",
@@ -375,10 +395,14 @@ def _evaluate_video(
     config: FallDetectorConfig,
     tracker,
     early_tolerance_sec: float = 0.0,
+    auxiliary_model: Optional[AuxiliaryFallModel] = None,
+    fall_model_iou_threshold: float = 0.3,
 ) -> _VideoResult:
-    """tracker는 호출자가 한 번만 생성해 재사용한다 (YOLO 모델 로드+warmup 비용을
+    """tracker/auxiliary_model은 호출자가 한 번만 생성해 재사용한다 (YOLO 모델
 
-    영상 개수만큼 반복하지 않기 위함). tracker.fps만 영상별로 갱신한다.
+    로드+warmup 비용을 영상 개수만큼 반복하지 않기 위함). tracker.fps만
+    영상별로 갱신한다. auxiliary_model이 None이면(--fall-model-path 미지정)
+    기존 bbox/pose 전용 동작과 동일하다 (src/safety/fall_pipeline.py 참고).
     """
     video_path = resolve_video_path(row, videos_dir)
 
@@ -399,7 +423,12 @@ def _evaluate_video(
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     tracker.fps = fps
     tracker.reset()  # 이전 영상의 track ID/추적 이력이 섞이지 않도록 초기화
-    detector = FallDetector(fps=fps, config=config)
+    pipeline = FallPipeline(
+        fps=fps,
+        detector_config=config,
+        auxiliary_model=auxiliary_model,
+        iou_threshold=fall_model_iou_threshold,
+    )
 
     event_frames: List[int] = []
     frame_number = 0
@@ -409,7 +438,7 @@ def _evaluate_video(
             if not ret:
                 break
             result = tracker.update(frame, frame_number, row.video_id)
-            for event in detector.process(result):
+            for event in pipeline.process(frame, result):
                 event_frames.append(event.frame_number)
             frame_number += 1
     finally:
@@ -515,11 +544,29 @@ def main() -> None:
     model_path = args.model or default_model
     tracker = tracker_cls(model_path=model_path, conf=args.conf, fps=30.0, device=args.device)
 
+    # --fall-model-path를 지정한 경우에만 만든다 (전체 실행에서 한 번만 만들어
+    # tracker와 마찬가지로 영상마다 재로딩하지 않는다). 지정하지 않으면 None —
+    # FallPipeline이 이를 기존 bbox/pose 전용 동작으로 취급한다.
+    auxiliary_model = None
+    if args.fall_model_path is not None:
+        auxiliary_model = AuxiliaryFallModel(
+            model_path=args.fall_model_path,
+            conf=args.fall_model_conf,
+            device=args.fall_model_device,
+            enabled=True,
+        )
+
     results: List[_VideoResult] = []
     for i, row in enumerate(rows, start=1):
         print(f"  ({i}/{len(rows)}) {row.video_id} [{row.label}] 처리 중...")
         result = _evaluate_video(
-            row, videos_dir, config, tracker, early_tolerance_sec=args.early_tolerance_sec
+            row,
+            videos_dir,
+            config,
+            tracker,
+            early_tolerance_sec=args.early_tolerance_sec,
+            auxiliary_model=auxiliary_model,
+            fall_model_iou_threshold=args.fall_model_iou_threshold,
         )
         if result.error:
             print(f"    스킵: {result.error}")
@@ -538,6 +585,12 @@ def main() -> None:
         "annotations_path": args.annotations,
         "videos_dir": str(videos_dir),
         "early_tolerance_sec": args.early_tolerance_sec,
+        "fall_model_path": args.fall_model_path,
+        "fall_model_conf": args.fall_model_conf if args.fall_model_path else None,
+        "fall_model_device": args.fall_model_device if args.fall_model_path else None,
+        "fall_model_iou_threshold": (
+            args.fall_model_iou_threshold if args.fall_model_path else None
+        ),
     }
     summary["excluded_from_evaluation"] = {
         "count": len(excluded_rows),

@@ -79,6 +79,7 @@ class TestFallDetectorConfigValidation:
             {"min_track_age_sec": -1.0},
             {"fall_candidate_timeout_sec": -1.0},
             {"fall_confirm_sec": -0.5},
+            {"fall_confirm_sec": 0.0},
             {"cooldown_sec": -1.0},
             {"recovery_velocity_threshold": -0.1},
             {"history_window_sec": 0.0},
@@ -87,11 +88,27 @@ class TestFallDetectorConfigValidation:
             {"horizontal_aspect_ratio_threshold": 0.0},
             {"normal_aspect_ratio_threshold": 0.0},
             {"event_confidence_weights": {"posture": -0.1}},
+            {"model_confirm_sec": 0.0},
+            {"model_confirm_sec": -0.5},
+            {"model_vote_window_sec": 0.0},
+            {"model_vote_window_sec": -0.1},
+            {"model_candidate_entry_sec": 0.0},
+            {"model_candidate_entry_sec": -0.1},
+            {"cooldown_inherit_iou_threshold": 0.0},
+            {"cooldown_inherit_iou_threshold": 1.1},
         ],
     )
     def test_rejects_invalid_values(self, overrides):
         with pytest.raises(ValueError):
             FallDetectorConfig(**overrides)
+
+    def test_rejects_window_smaller_than_confirm_sec(self):
+        with pytest.raises(ValueError, match="model_vote_window_sec"):
+            FallDetectorConfig(model_confirm_sec=0.5, model_vote_window_sec=0.3)
+
+    def test_rejects_entry_sec_not_smaller_than_confirm_sec(self):
+        with pytest.raises(ValueError, match="model_candidate_entry_sec"):
+            FallDetectorConfig(model_candidate_entry_sec=0.2, model_confirm_sec=0.2)
 
     def test_rejects_horizontal_threshold_not_greater_than_normal(self):
         with pytest.raises(ValueError):
@@ -111,6 +128,37 @@ class TestFallDetectorInit:
     def test_uses_default_config_when_none_given(self):
         detector = FallDetector(fps=10.0)
         assert detector.config.fall_confirm_sec == FallDetectorConfig().fall_confirm_sec
+
+
+class TestResolveModelEvidence:
+    def test_none_dict_disables_model_path(self):
+        assert FallDetector._resolve_model_evidence(None, track_id=1) is None
+
+    def test_missing_track_id_becomes_unknown_not_none(self):
+        evidence = FallDetector._resolve_model_evidence({}, track_id=1)
+
+        assert evidence is not None
+        assert evidence.label == "unknown"
+        assert evidence.track_id == 1
+        assert evidence.confidence is None
+        assert evidence.iou is None
+
+    def test_present_track_id_returned_as_is(self):
+        from src.safety.fall_model_matching import FallModelEvidence
+
+        present = FallModelEvidence(track_id=1, label="fall", confidence=0.8, iou=0.5)
+        evidence = FallDetector._resolve_model_evidence({1: present}, track_id=1)
+
+        assert evidence is present
+
+    def test_mismatched_key_and_track_id_raises(self):
+        """딕셔너리 key(1)와 FallModelEvidence.track_id(2)가 다르면 조용히 쓰면 안 된다."""
+        from src.safety.fall_model_matching import FallModelEvidence
+
+        mismatched = FallModelEvidence(track_id=2, label="fall", confidence=0.9, iou=0.9)
+
+        with pytest.raises(ValueError, match="track_id"):
+            FallDetector._resolve_model_evidence({1: mismatched}, track_id=1)
 
 
 class TestNoEventBelowMinTrackAge:

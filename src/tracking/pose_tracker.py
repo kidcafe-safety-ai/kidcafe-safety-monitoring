@@ -6,8 +6,12 @@ ByteTracker(yolo26n.pt, detection 전용)와 구조는 같지만, yolo26n-pose.p
 상황에서 두 추적기의 ID가 서로 어긋날 수 있음), pose 모델 자체가 검출+추적을
 겸하므로 bbox와 keypoint가 항상 같은 track_id로 정확히 대응한다.
 
-Phase 3 낙상 pose 보완(FALL_SUSPECT 방향별 미검출 보완, docs/fall_evaluation.md
-§5.3)에서만 사용한다. 기존 ByteTracker/main.py 파이프라인은 그대로 유지한다.
+Phase 3 낙상 pose 보완(FALL_SUSPECT 방향별 미검출 보완)을 위해 도입했다.
+Development/Validation 튜닝 전체가 이 tracker로 동결됐으므로,
+`--fall-detection-enabled` 사용 시 src/main.py도 ByteTracker 대신 이
+tracker를 사용한다 — FallDetector의 pose confirm 경로가 실제 운영에서도
+keypoints를 받도록 하기 위함이다. Zone/기존 이벤트 로직은 Track.keypoints를
+쓰지 않으므로 영향이 없다. 자세한 튜닝 근거는 docs/fall_evaluation.md 참고.
 """
 
 import logging

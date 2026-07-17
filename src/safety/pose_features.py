@@ -1,7 +1,7 @@
 """COCO 17 keypoint에서 낙상 판정에 필요한 pose 특징을 추출한다.
 
 bbox aspect_ratio는 카메라 각도에 따라 일부 낙상 방향(forward·left)을
-놓친다 (docs/fall_evaluation.md §5.1). 처음에는 어깨-엉덩이 벡터가 수직에서
+놓친다 (docs/fall_evaluation.md 참고). 처음에는 어깨-엉덩이 벡터가 수직에서
 기운 각도(torso_angle)를 시도했으나, 카메라를 향해/멀어지는 방향(깊이 방향)
 으로 쓰러지면 몸 전체가 2D 영상에 압축 투영되어 이 벡터도 여전히 수직에
 가깝게 나온다 — bbox와 동일한 카메라 각도 문제가 골격 각도에도 그대로

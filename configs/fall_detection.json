@@ -17,6 +17,11 @@
   "pose_fallen_threshold": 0.2,
   "pose_min_keypoint_conf": 0.3,
 
+  "model_confirm_sec": 0.2,
+  "model_vote_window_sec": 0.5,
+  "model_candidate_entry_sec": 0.1,
+  "cooldown_inherit_iou_threshold": 0.3,
+
   "event_confidence_weights": {
     "posture": 0.35,
     "descent": 0.35,
