@@ -208,7 +208,9 @@ def process_activity_folder(
     label = "fall" if fall_start_frame is not None else "no_fall"
 
     video_id = f"S{subject_num}_{_activity_slug(folder.name)}"
-    video_path = str(avi_path.relative_to(split_root))
+    # .as_posix()로 고정 — str()은 Windows에서 '\\' 구분자를 써서, 그 결과가
+    # CSV에 그대로 저장되면 macOS/Linux에서 읽을 때 경로가 깨진다.
+    video_path = avi_path.relative_to(split_root).as_posix()
 
     return _AnnotationDraft(
         video_id=video_id,

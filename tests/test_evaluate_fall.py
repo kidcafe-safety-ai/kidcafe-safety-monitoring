@@ -296,7 +296,16 @@ class TestHoldoutGuard:
         real_video.write_bytes(b"")
 
         link = development_dir / "link.avi"
-        link.symlink_to(real_video)
+        try:
+            link.symlink_to(real_video)
+        except OSError as exc:
+            # Windows에서 Developer Mode/관리자 권한이 없으면 symlink 생성 자체가
+            # 거부된다(WinError 1314). 이 환경에서만 가드 로직을 검증할 수 없으므로
+            # skip한다 — 그 외 OSError(예: 다른 플랫폼의 예기치 못한 실패)는 실제
+            # 버그일 수 있으므로 숨기지 않고 그대로 올린다.
+            if getattr(exc, "winerror", None) == 1314:
+                pytest.skip(f"symlink 생성 권한이 없어 이 테스트를 건너뜁니다: {exc}")
+            raise
 
         row = _row(video_path="link.avi")
 
