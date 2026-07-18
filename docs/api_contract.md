@@ -50,13 +50,16 @@ API 계층에서는 별도 Pydantic schema로 매핑하며, 기존 Event datacla
 | --- | --- | --- |
 | `event_id` | `string` | 이벤트 UUID 또는 고유 ID |
 | `timestamp` | `string` | 영상 내 상대 시각, `HH:MM:SS.mmm` |
-| `event_type` | `"ENTER" | "DWELL" | "EXIT"` | 이벤트 종류 |
+| `event_type` | `EventType` | 이벤트 종류. 아래 Phase 3 활성 값 중 하나 |
 | `track_id` | `integer` | 사람 추적 ID |
 | `zone_id` | `string` | zone 식별자 |
 | `bbox` | `number[4]` | `[x1, y1, x2, y2]` pixel 좌표 |
 | `foot_point` | `number[2]` | `[cx, y2]` pixel 좌표 |
 | `frame_number` | `integer` | 이벤트 발생 프레임 번호 |
 | `video_source` | `string` | 입력 영상 경로 또는 소스 ID |
+
+Phase 3 활성 `EventType`은 `ENTER`, `DWELL`, `EXIT`, `ENTER_RESTRICTED`,
+`DANGER_ZONE_DWELL`, `FALL_SUSPECT`다. 기존 세 타입은 그대로 유지한다.
 
 ### Optional API/DB Fields
 
@@ -240,7 +243,7 @@ Phase 3에서도 `CurrentStatus.risk_level`은 `NORMAL | HIGH`를 유지한다.
 | --- | --- | --- | --- |
 | `limit` | `integer` | `50` | `1 <= limit <= 500` |
 | `offset` | `integer` | `0` | `offset >= 0` |
-| `event_type` | `string | null` | `null` | `ENTER`, `DWELL`, `EXIT`만 허용 |
+| `event_type` | `string | null` | `null` | Phase 3 활성 `EventType` 6종 중 하나 |
 | `zone_id` | `string | null` | `null` | zone ID 필터 |
 
 `total`은 필터 적용 후, `limit`/`offset` pagination 적용 전 전체 개수다.

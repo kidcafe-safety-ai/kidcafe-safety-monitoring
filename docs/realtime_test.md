@@ -1011,3 +1011,85 @@ docker compose up --build -d
 - 로컬 Vision AI → Docker FastAPI → SQLite → React Dashboard E2E 흐름 정상 동작
 - macOS + Docker 환경에서 Phase 2.5 재현 가능한 실행 환경 검증 완료
 - 웹캠 → YOLO + ByteTrack → 이벤트 9건 생성 → Docker FastAPI POST /events → SQLite 저장 전 구간 확인
+
+---
+
+## 2026-07-18 — Phase 3 B 공간 안전정책 적용 전후 비교
+
+### 목적
+
+동일한 파일 영상에서 `EventManager`의 zone 전이 확인시간을 비활성화한 기준과
+Phase 3 기본값을 비교해 반복 이벤트 억제, 확정 지연, 처리량 영향을 확인한다.
+
+현재 구현은 `foot_point` 좌표 자체에 smoothing을 적용하지 않는다. 매 프레임의
+raw `foot_point`로 polygon 포함 여부를 계산한 뒤, 그 zone 판정 결과를 시간
+조건으로 확인해 confirmed zone 상태를 안정화한다.
+
+### 환경 및 방법
+
+| 항목 | 값 |
+| --- | --- |
+| 실행 환경 | Windows, Python 가상환경 |
+| 입력 | `data/videos/test.mp4` 전체 409프레임 |
+| 입력 FPS | 25.0 |
+| 모델 | `yolo26n.pt`, confidence 0.5 |
+| zone | `data/zones/sample.json` (`danger`) |
+| 안정화 비활성 기준 | 진입 0초, 이탈 0초, Track 소실 유예 0초 |
+| Phase 3 기본값 | 진입 0.3초, 이탈 0.5초, Track 소실 유예 0.5초 |
+
+빠른 반전은 동일 `track_id`·`zone_id`에서 서로 다른 이벤트가 13프레임
+(약 0.52초) 이내 연속 발생한 경우로 계산했다. 영상 인코딩은 측정에서 제외하고
+두 실행 모두 동일한 detection·tracking·geofencing 경로를 사용했다.
+
+### 결과
+
+| 지표 | 안정화 비활성 | Phase 3 기본값 |
+| --- | ---: | ---: |
+| 전체 이벤트 | 28 | 15 |
+| ENTER | 14 | 8 |
+| EXIT | 14 | 7 |
+| 0.52초 이내 빠른 반전 | 12 | 0 |
+| 실행시간 | 33.572초 | 29.157초 |
+| 처리량 | 12.183 FPS | 14.027 FPS |
+
+- 전체 이벤트는 28건에서 15건으로 46.4% 감소했다.
+- 빠른 ENTER/EXIT 반전은 12건에서 0건으로 감소했다.
+- 매칭된 ENTER 확정 지연은 모두 8프레임, 평균 0.32초였다.
+- 매칭된 EXIT 확정 지연의 중앙값은 12프레임, 0.48초였다.
+- Track 15는 소실 후 재관측 영향으로 EXIT가 29프레임 뒤 확정됐다.
+- 안정화 실행에서 처리량 저하는 관찰되지 않았다. 단, 두 실행을 순차 수행해
+  모델·파일 캐시의 영향을 받을 수 있으므로 FPS 상승을 정책의 성능 개선으로
+  해석하지 않는다.
+
+### 판정 및 한계
+
+- 이 영상에서는 temporal hysteresis가 경계의 짧은 이벤트 반전을 억제했다.
+- `sample.json`의 dwell 기준이 5초이므로 비교 구간에는
+  `DANGER_ZONE_DWELL`이 발생하지 않았다.
+- 샘플 영상에 zone 진입 ground truth가 없어 false positive·false negative
+  정확도는 산출하지 않았다. 해당 평가는 7/22~7/28 통합 테스트에서 별도
+  annotation을 기준으로 수행한다.
+- 실행 산출물은 `outputs/phase3-b-baseline.*`과
+  `outputs/phase3-b-stabilized.*`이며 Git에 포함하지 않는다.
+
+---
+
+## 2026-07-18 — Phase 3 B SQLite 동시 쓰기 검증
+
+`tests/test_sqlite_concurrency.py`에서 하나의 격리된 테스트 DB에 32개 worker를
+동시에 시작했다.
+
+- `FALL_SUSPECT` 이벤트 24건 동시 저장
+- source가 서로 다른 CurrentStatus 8건 동시 upsert
+- `event_confidence`와 `cause_json` 포함
+- 이벤트 ID 중복·행 손실·`database is locked` 오류 없음
+- events 24행과 current_status 8행 저장 확인
+
+검증 명령어:
+
+```bash
+python -m pytest tests/test_sqlite_concurrency.py -q
+```
+
+결과: **1 passed**. 현재 연결 설정에서 검증 범위를 충족해 WAL이나 별도 timeout
+설정은 추가하지 않았다.
