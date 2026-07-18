@@ -55,17 +55,19 @@ class TrackingResult:
 | DWELL | 체류 | zone에 `dwell_threshold_sec` 이상 머무름 (zone당 1회) |
 | EXIT | 이탈 | 사람이 zone에서 나감 |
 
-**Phase 3 신규 (공간 안전정책 구현 완료 / 낙상 감지는 후속 PR)**
+**Phase 3 신규 (공간 안전정책 및 FALL_SUSPECT opt-in PoC 구현 완료)**
 
 `src/common/types.py`의 `EventType`/`VALID_EVENT_TYPES`와 `EventManager`의
-`ENTER_RESTRICTED`, `DANGER_ZONE_DWELL` 발생 로직까지 반영했다.
-`FALL_SUSPECT` 감지 로직은 A 역할 후속 PR 범위다.
+`ENTER_RESTRICTED`, `DANGER_ZONE_DWELL` 발생 로직을 반영했다. `FALL_SUSPECT`는
+`--fall-detection-enabled`에서만 동작하는 bbox·pose·보조 detector 기반 PoC다.
+Validation 운영 목표가 미달해 기본값은 비활성화이며, `cause` 원인 후보 추정은
+PR3 범위다.
 
 | 타입 | 의미 | 발생 조건 |
 |------|------|---------|
 | ENTER_RESTRICTED | 제한구역 진입 | `zone_type=restricted` 구역에 진입 (`ENTER` 대체) |
 | DANGER_ZONE_DWELL | 위험구역 체류 | `zone_type=danger` 구역에 기준 시간 이상 체류 (`DWELL` 대체) |
-| FALL_SUSPECT | 낙상 의심 | bbox 비율·속도·자세 기반 낙상 판정, optional `cause` 포함 |
+| FALL_SUSPECT | 낙상 의심 | bbox 비율·속도·자세와 선택적 보조 detector 기반 낙상 판정, optional `cause` 포함 |
 
 - 동일 상태 변화에서 일반·안전 이벤트 중복 생성 금지
 - `restricted`·`danger` 구역 이탈은 기존 `EXIT` 사용
@@ -514,8 +516,8 @@ RTSPSource
 
 ## 9. Phase 3 공용 계약
 
-> 상태: EventType·ZoneType·EventCause·DB migration·Frontend 타입 반영 완료 (`feature/phase-3-event-contract`)
-> 실제 감지 로직(FALL_SUSPECT 판정, zone_type 안전정책 룰)은 후속 A/B/C PR에서 구현
+> 상태: EventType·ZoneType·EventCause·DB migration·Frontend 타입·공간 안전정책 반영 완료 / FALL_SUSPECT opt-in PoC 구현 완료
+> `FALL_SUSPECT.cause` 원인 후보 추정과 신규 이벤트 Dashboard 표시 확장은 후속 PR에서 구현
 > 기준선: v0.2.5-dashboard
 
 ### ZoneType 계약
@@ -604,13 +606,20 @@ evidence.time_to_fall_sec: 0 이상의 실수
 **낙상 PoC 상태 흐름**
 
 ```text
-NORMAL → FALLING_CANDIDATE → FALL_CONFIRMED → COOLDOWN
+NORMAL → FALLING_CANDIDATE → (FALL_CONFIRMED) → COOLDOWN
 ```
 
-- Track당 낙상 이벤트는 `FALL_CONFIRMED` 전이 시 1회만 생성
-- `FALL_CONFIRMED` 판정 시 낙상 시작 직전 0.5~1초 Track 기록을 소급 조회해 `cause` 후보를 결정
+- `FALL_CONFIRMED`는 지속 상태가 아니라 confirm 조건이 만족되는 순간
+  Event를 내고 곧바로 `COOLDOWN`으로 전이하는 momentary transition이다 —
+  Track 상태로 별도로 저장되지 않는다(실제 상태값은 `NORMAL` /
+  `FALLING_CANDIDATE` / `COOLDOWN` 셋뿐).
+- Track당 낙상 이벤트는 이 전이 시 1회만 생성
+- PR2 범위에서 `cause`는 항상 `null`이다 — 낙상 시작 직전 Track 기록을
+  소급 조회해 원인 후보를 결정하는 로직은 PR3에서 구현 예정이다.
 - `COOLDOWN` 중 재진입은 새 낙상으로 집계하지 않음
-- Track 소실 시 grace period 이후 상태를 초기화
+- 일반 Track 상태는 소실 grace period 이후 초기화한다. 단, `COOLDOWN`은
+  `cooldown_until_sec`까지 보존해 같은 낙상의 중복 확정을 막는다. 새 Track ID의
+  cooldown 승계는 동일 `video_source`의 IoU 기반 PoC 보완이며 ReID를 대체하지 않는다.
 
 **Severity 정책**
 

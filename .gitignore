@@ -232,6 +232,9 @@ outputs/*.csv
 outputs/*.mp4
 outputs/*.db
 outputs/benchmark/
+outputs/e2e-*/
+outputs/fall_eval/
+outputs/fall_training/
 
 # Frontend
 frontend/node_modules/

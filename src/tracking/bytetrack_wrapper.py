@@ -112,6 +112,30 @@ class ByteTracker:
             tracks=tracks,
         )
 
+    def reset(self) -> None:
+        """이전 영상의 ByteTrack 상태(track ID, motion history)를 초기화한다.
+
+        update()는 매번 persist=True로 호출해 프레임 간 ID를 유지하는데, 이 상태는
+        ultralytics가 self.model.predictor에 내부적으로 보관한다. 같은 ByteTracker
+        인스턴스를 여러 영상에 재사용하면(모델 재로딩 비용을 아끼기 위해) 이전 영상의
+        track ID/추적 이력이 다음 영상 첫 프레임까지 이어져 섞일 수 있다.
+
+        predictor 자체를 None으로 비우면(과거 구현) 다음 update()에서 predictor가
+        새로 생성되면서 tracking postprocess callback이 매번 추가로 등록된다
+        (model.callbacks["on_predict_postprocess_end"]가 계속 누적됨) — 이러면
+        영상을 거듭할수록 callback이 중복 실행되어 추적 결과가 오염된다. 따라서
+        predictor는 그대로 두고, 그 안의 BYTETracker 상태만 초기화한다.
+        """
+        predictor = self.model.predictor
+        if predictor is None:
+            return
+
+        for tracker in getattr(predictor, "trackers", []):
+            tracker.reset()
+
+        if hasattr(predictor, "vid_path"):
+            predictor.vid_path = [None] * len(predictor.vid_path)
+
     def _warmup(self) -> None:
         """MPS/CUDA JIT 컴파일을 초기화 시점에 완료한다.
 

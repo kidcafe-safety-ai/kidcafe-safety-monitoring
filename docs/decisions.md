@@ -464,6 +464,11 @@ Phase 3에서 낙상 감지 PoC와 함께 낙상 직전 외부 접촉 원인 후
 
 독립 `COLLISION_SUSPECT` 이벤트를 생성하지 않는다. 낙상 확정(`FALL_CONFIRMED`) 시 낙상 시작 직전 0.5~1초의 Track 기록을 소급 조회하여, 근접 근거가 충분한 경우 `FALL_SUSPECT.cause`에 원인 후보 Track 정보를 기록한다. 근거 부족 시 `cause=null`을 유지한다.
 
+### Implementation Status
+
+PR2에서는 `FALL_SUSPECT` 감지와 `cause=null` 전송까지만 구현했다. non-null
+`cause`를 만드는 외부 접촉 attribution은 PR3에서 이 ADR의 기준으로 구현한다.
+
 ### Alternatives
 
 - **독립 COLLISION_SUSPECT**: 충돌 자체를 실시간 감지하는 별도 알고리즘 필요. 현재 데이터셋(CAUCAFall)이 낙상 데이터이므로 충돌 감지 검증 불가. 오탐률 제어 어려움.

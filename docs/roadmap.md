@@ -1,6 +1,6 @@
 # KidCafe Safety AI — 개발 로드맵
 
-> 최종 수정: 2026-07-16
+> 최종 수정: 2026-07-18
 > MVP baseline: `v0.1.0-mvp`
 > 본 문서는 MVP 1차 종료 이후 최종 제출까지의 상위 개발 로드맵이다.
 > 한이음 일정은 [2026년 창의도전형 공고](https://www.hanium.or.kr/comm/noticeView.do?ntcAtclSn=63940) 기준으로 갱신했다. 세부 일정(주차별 작업·보고서 내부 마감 등)은 팀 오피스 기준이며 공식 공고와 별개로 운영한다.
@@ -317,7 +317,7 @@ P2: Zone Settings 계약, 인증/인가 미니 ADR,
 
 ```text
 - Live View E2E (frame 제공 → API → React 표시) 확인
-- FALL_SUSPECT 낙상 PoC 1차 구현 및 cause 기록 동작 확인
+- FALL_SUSPECT opt-in PoC 구현 및 Development/Validation 정량 결과 기록 (`cause` 원인 후보 추정은 PR3)
 - zone_type 기반 ENTER_RESTRICTED / DANGER_ZONE_DWELL 이벤트 정상 발생
 - API 장애 중 추론 루프 유지
 - false positive·감지 지연·FPS 결과 기록
@@ -412,7 +412,8 @@ Phase 3 Open·계약 문서 PR
 - `zone_type` 분리 (`play | exit | restricted | danger`)
 - 안전구역 이탈 / 출입구 접근 / 제한구역 진입 규칙 정의
 - debounce / hysteresis 적용
-- FALL_SUSPECT 낙상 PoC 및 외부 접촉 원인 후보 추정
+- FALL_SUSPECT opt-in PoC 완료 및 Validation 오탐 개선 후속 계획 정리
+- FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 (PR3)
 - 실제 / 유사 키즈카페 영상 확보
 - 라벨링 기준 정리
 - 낙상 · 위험구역 이벤트 정의 확정
@@ -420,12 +421,13 @@ Phase 3 Open·계약 문서 PR
 ### 비고
 
 - 7월 일정은 계획보다 빠르게 진행되어야 한다.
-- 8월에는 ReID, cross-camera(후순위), 모델 비교, 공모전 1차 제출 준비가 겹치므로 7월 중순까지 공간 안전정책과 FALL_SUSPECT 낙상 PoC 및 외부 접촉 원인 후보 추정 1차 구현을 목표로 한다.
+- 8월에는 ReID, cross-camera(후순위), 모델 비교, 공모전 1차 제출 준비가 겹치므로 7월 중순까지 공간 안전정책과 FALL_SUSPECT opt-in PoC를 구현하고, 외부 접촉 원인 후보 추정은 PR3에서 진행한다.
 
 ### 산출물
 
 - 공간 안전정책 v1
-- FALL_SUSPECT 낙상 PoC 및 외부 접촉 원인 후보 추정
+- FALL_SUSPECT opt-in PoC 및 Development/Validation 평가 기록
+- FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 (PR3)
 - Live View latest-frame polling E2E
 - 실험 데이터 기준
 
