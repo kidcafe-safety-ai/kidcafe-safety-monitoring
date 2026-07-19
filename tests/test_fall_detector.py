@@ -8,10 +8,11 @@ Event 계약, 상태머신의 기본 동작 단위를 검증한다.
 from __future__ import annotations
 
 import json
+from unittest.mock import MagicMock
 
 import pytest
 
-from src.common.types import Track, TrackingResult
+from src.common.types import EventCause, EventCauseEvidence, Track, TrackingResult
 from src.safety.fall_detector import FallDetector, FallDetectorConfig
 
 _STANDING_BBOX = [40.0, 0.0, 60.0, 60.0]  # width 20, height 60, aspect_ratio 0.33
@@ -51,10 +52,13 @@ def _feed_standing(detector, num_frames, fps, start_frame=0, video_source="cam1"
 
 class TestFallDetectorConfig:
     def test_defaults_match_configs_fall_detection_json(self):
-        """configs/fall_detection.json이 dataclass 기본값과 어긋나지 않는지 확인한다."""
-        with open("configs/fall_detection.json", "r", encoding="utf-8") as file:
-            data = json.load(file)
-        cfg = FallDetectorConfig(**data)
+        """configs/fall_detection.json이 dataclass 기본값과 어긋나지 않는지 확인한다.
+
+        FallDetectorConfig.from_file()을 직접 써야 한다 — "cause_attribution"
+        섹션(FallCauseAttributorConfig 전용, from_file()이 걸러낸다)을 여기서
+        다시 수동으로 흉내내면 실제 로딩 경로와 어긋난다.
+        """
+        cfg = FallDetectorConfig.from_file("configs/fall_detection.json")
         assert cfg.horizontal_aspect_ratio_threshold == 1.3
         assert cfg.fall_confirm_sec == 0.5
         assert cfg.cooldown_sec == 5.0
@@ -256,3 +260,126 @@ class TestEventConfidenceRange:
 
         assert len(events) == 1
         assert 0.0 <= events[0].event_confidence <= 1.0
+
+
+class TestCauseAttribution:
+    """FallDetector가 cause_attributor를 어떻게 호출하는지 검증한다.
+
+    FallCauseAttributor.attribute() 자체의 후보 탐색·점수 계산 로직은
+    tests/test_fall_cause_attributor.py에서 이미 순수 시나리오로 검증했다.
+    여기서는 "FallDetector가 올바른 인자로, 올바른 시점에 그 메서드를
+    호출하는지"만 mock으로 확인한다 — 특히 candidate_since_sec을 리셋 전에
+    캡처해 넘기는지가 핵심이다(모듈 docstring, _confirm_fall 참고).
+    """
+
+    def test_cause_is_none_when_no_attributor_given(self):
+        """cause_attributor를 넘기지 않으면(기본값 None) 기존 PR2 동작과 완전히 동일해야 한다."""
+        fps = 10.0
+        detector = FallDetector(fps=fps, config=_fast_config())
+
+        _feed_standing(detector, num_frames=5, fps=fps)
+        detector.process(_result(5, _LYING_BBOX))
+        confirmed = []
+        for frame_number in range(6, 11):
+            confirmed += detector.process(_result(frame_number, _LYING_BBOX))
+
+        assert len(confirmed) == 1
+        assert confirmed[0].cause is None
+
+    def test_attribute_called_with_candidate_entry_time_not_confirm_time(self):
+        """가장 중요한 회귀 방지 지점: fall_start_sec은 candidate 진입 시각(frame 5,
+
+        0.5초)이어야 한다 — confirm 시각(frame 10, 1.0초)이 들어가면
+        state.candidate_since_sec을 리셋 전에 캡처하지 않았다는 뜻이다.
+        """
+        fps = 10.0
+        detector = FallDetector(fps=fps, config=_fast_config())
+        mock_attributor = MagicMock()
+        mock_attributor.attribute.return_value = None
+
+        _feed_standing(detector, num_frames=5, fps=fps)
+        detector.process(_result(5, _LYING_BBOX), cause_attributor=mock_attributor)
+        confirmed = []
+        for frame_number in range(6, 11):
+            confirmed += detector.process(
+                _result(frame_number, _LYING_BBOX), cause_attributor=mock_attributor
+            )
+
+        assert len(confirmed) == 1
+        mock_attributor.attribute.assert_called_once_with(
+            video_source="cam1",
+            victim_track_id=1,
+            fall_start_sec=pytest.approx(0.5),
+        )
+
+    def test_event_cause_is_attributor_return_value(self):
+        """attribute()가 EventCause를 반환하면 그대로 Event.cause에 실려야 한다."""
+        fps = 10.0
+        detector = FallDetector(fps=fps, config=_fast_config())
+        expected_cause = EventCause(
+            type="NEARBY_TRACK",
+            track_id=2,
+            score=0.75,
+            evidence=EventCauseEvidence(
+                min_distance_norm=0.3,
+                closing_speed_norm=0.6,
+                time_to_fall_sec=0.4,
+            ),
+        )
+        mock_attributor = MagicMock()
+        mock_attributor.attribute.return_value = expected_cause
+
+        _feed_standing(detector, num_frames=5, fps=fps)
+        detector.process(_result(5, _LYING_BBOX), cause_attributor=mock_attributor)
+        confirmed = []
+        for frame_number in range(6, 11):
+            confirmed += detector.process(
+                _result(frame_number, _LYING_BBOX), cause_attributor=mock_attributor
+            )
+
+        assert len(confirmed) == 1
+        assert confirmed[0].cause is expected_cause
+
+    def test_attribute_not_called_before_confirm(self):
+        """candidate 상태에 머무는 동안에는(아직 confirm 아님) attribute()가 호출되면 안 된다."""
+        fps = 10.0
+        detector = FallDetector(fps=fps, config=_fast_config())
+        mock_attributor = MagicMock()
+        mock_attributor.attribute.return_value = None
+
+        _feed_standing(detector, num_frames=5, fps=fps)
+        events = detector.process(_result(5, _LYING_BBOX), cause_attributor=mock_attributor)
+
+        assert events == []
+        mock_attributor.attribute.assert_not_called()
+
+    def test_attribute_exception_does_not_lose_the_fall_suspect_event(self, caplog):
+        """cause는 부가 정보다 — attribute()가 예외를 내도 이미 확정된
+
+        FALL_SUSPECT Event 자체는 반드시 반환돼야 한다(fail-closed,
+        cause=None). 이 호출 시점에는 이미 COOLDOWN 전이와 tombstone 기록이
+        끝난 상태라, 예외를 그대로 전파시키면 Event가 통째로 유실된다.
+        """
+        fps = 10.0
+        detector = FallDetector(fps=fps, config=_fast_config())
+        mock_attributor = MagicMock()
+        mock_attributor.attribute.side_effect = RuntimeError("attribution 내부 오류")
+
+        _feed_standing(detector, num_frames=5, fps=fps)
+        detector.process(_result(5, _LYING_BBOX), cause_attributor=mock_attributor)
+        confirmed = []
+        for frame_number in range(6, 11):
+            confirmed += detector.process(
+                _result(frame_number, _LYING_BBOX), cause_attributor=mock_attributor
+            )
+
+        assert len(confirmed) == 1
+        assert confirmed[0].event_type == "FALL_SUSPECT"
+        assert confirmed[0].cause is None
+        # Track은 이미 COOLDOWN으로 전이돼 있어야 한다(예외 이전 cleanup은 그대로 진행됨).
+        assert detector._states[("cam1", 1)].state == "COOLDOWN"
+        # 예외를 조용히 삼키지 않고 로그로는 남겨야 한다.
+        assert any(
+            record.levelname == "ERROR" and "cause attribution" in record.message
+            for record in caplog.records
+        )

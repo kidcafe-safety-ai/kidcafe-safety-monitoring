@@ -402,7 +402,7 @@ pytest --cov=src --cov-report=term-missing
 | React Live View (영상 영역) | Done — Phase 3 (latest-frame polling) |
 | WebSocket 실시간 push | Phase 4 이후 필요성 기반 재검토 |
 | FALL_SUSPECT 낙상 PoC | Done — Phase 3 (opt-in, Validation 운영 목표 미달) |
-| FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 | Phase 3 PR3 |
+| FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 | Done — Phase 3 PR3 (근접·접근 근거 기반 PoC, 정량 정확도 미검증) |
 | ReID / StrongSORT / BoT-SORT | Phase 4 |
 
 Phase 2.5에서 실시간 운영 대시보드 v1 안정화와 Docker 재현 환경 구축을 완료했다.

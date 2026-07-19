@@ -103,9 +103,32 @@ SHA-256: (다운로드 후 기입)
 
 ---
 
+## MPFDD (Multi-Person Falls Dataset)
+
+PR3 외부 접촉 원인 후보 추정(`FallCauseAttributor`)의 hard-negative 후보
+검토용으로 로컬에 클론했다. 원인 후보 양성 정확도 검증에는 쓰지 않는다
+(`docs/fall_evaluation.md` §9.3, `docs/decisions.md` ADR-016 참고).
+
+| 항목 | 내용 |
+|---|---|
+| 데이터셋명 | MPFDD (Multi-Person Falls Dataset) |
+| 공식 저장소 | https://github.com/Hnnuliulei123456/MPFDD |
+| 접근 방법 | 저장소 clone (`data/datasets/mpfdd`) |
+| 라이선스 | 저장소에 별도 LICENSE 파일이 없어 확인되지 않음 — 사용 전 원저자에게 확인 필요 |
+| 전체 규모(공식 README 기준) | 220개 영상(ADL 80 + fall 140), 실내/실외, 2~5인 시나리오 |
+| 로컬 보유분 | 공개 샘플 28개 영상(전체 220개 중 일부, Scene 1~4) |
+| 원인 라벨 | 없음 — "N인 낙상"은 낙상 시점에 여러 사람이 있었다는 뜻일 뿐, 접촉으로 낙상했다는 원인 라벨은 제공하지 않는다 |
+| 용도 | 원인 후보 hard-negative(다인 근접 + 원인 없는 독립 낙상) 후보 데이터 검토 |
+| 검토 상태 | 로컬 28개 파일명·README 내용 검토 완료(hard-negative 후보로 쓸 수 있음을 확인). `false_cause_rate` 등 실제 hard-negative 실행은 아직 하지 않음 |
+
+---
+
 ## 원인 후보 Mini Set (직접 촬영)
 
-Phase 3 외부 접촉 원인 후보 추정 검증용 소규모 데이터셋.
+Phase 4 외부 접촉 원인 후보 추정 정량 검증(precision/recall, false
+attribution)용 소규모 데이터셋. PR3에서는 합성 multi-track 테스트와 MPFDD
+공개 샘플 검토만 수행했고, 이 Mini Set 자체는 아직 촬영·사용하지 않았다
+(`docs/decisions.md` ADR-016, `docs/fall_evaluation.md` §9.3 참고).
 
 | 시나리오 | 최소 샘플 수 |
 |---|---|
@@ -165,4 +188,5 @@ PR2 동결 Validation 결과는 Recall 70.0%, false alarm 2.92회/분, 평균 �
 장시간/IP 카메라 통합 측정에서 재확인한다.
 
 Subject 9~10 Holdout 평가는 PR4까지 보류한다. `FALL_SUSPECT.cause`의 원인 후보
-Track 정확도·false attribution 기준은 PR3 구현 후 별도로 적용한다.
+Track 정확도·false attribution 기준은 PR3에서 계약(휴리스틱 설계)만 구현했고,
+정량 검증은 Phase 4에서 위 Mini Set 또는 외부 데이터로 적용한다.

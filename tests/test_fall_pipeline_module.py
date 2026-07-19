@@ -149,3 +149,357 @@ class TestFallPipelineEndToEndConfirmation:
 
         assert len(events) == 1
         assert events[0].event_type == "FALL_SUSPECT"
+
+
+class TestFallPipelineCauseAttributorWiring:
+    """FallCauseAttributor 자체의 후보 탐색·점수 계산은
+
+    tests/test_fall_cause_attributor.py에서 이미 검증했다. 여기서는
+    FallPipeline이 그 인스턴스를 올바르게 만들고(fall_config_path 로딩
+    포함) 매 프레임 update()를 호출하는지만 배선 관점에서 확인한다.
+    """
+
+    def test_cause_attributor_created_with_default_config_when_no_path_given(self):
+        pipeline = FallPipeline(fps=10.0)
+
+        assert pipeline.cause_attributor is not None
+        assert pipeline.cause_attributor.config.enabled is True
+
+    def test_fall_config_path_loads_cause_attribution_section(self):
+        pipeline = FallPipeline(fps=10.0, fall_config_path="configs/fall_detection.json")
+
+        assert pipeline.cause_attributor.config.lookback_sec == 1.0
+        assert pipeline.cause_attributor.config.history_window_sec == 4.0
+        assert pipeline.cause_attributor.config.track_grace_sec == 4.0
+        assert pipeline.cause_attributor.config.max_pairing_gap_frames == 1.5
+
+    def test_fall_config_path_actually_reads_non_default_values(self, tmp_path):
+        """configs/fall_detection.json의 값이 우연히 dataclass 기본값과 같아서
+
+        "읽었다"는 착각을 주지 않도록, 기본값과 다른 값을 넣은 임시 설정
+        파일로 실제 파일을 읽는지 확인한다.
+        """
+        import json
+
+        custom_config = tmp_path / "custom_fall_detection.json"
+        custom_config.write_text(
+            json.dumps(
+                {
+                    "cause_attribution": {
+                        "enabled": False,
+                        "lookback_sec": 2.5,
+                        "history_window_sec": 9.0,
+                        "track_grace_sec": 9.0,
+                        "score_threshold": 0.9,
+                        "max_pairing_gap_frames": 3.0,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        pipeline = FallPipeline(fps=10.0, fall_config_path=str(custom_config))
+
+        assert pipeline.cause_attributor.config.enabled is False
+        assert pipeline.cause_attributor.config.lookback_sec == 2.5
+        assert pipeline.cause_attributor.config.history_window_sec == 9.0
+        assert pipeline.cause_attributor.config.track_grace_sec == 9.0
+        assert pipeline.cause_attributor.config.score_threshold == 0.9
+        assert pipeline.cause_attributor.config.max_pairing_gap_frames == 3.0
+
+    def test_cause_attributor_history_grows_every_frame(self):
+        """update()가 매 프레임 호출되는지, FallDetector.process()보다 먼저
+
+        호출돼도 문제없는지 간접 확인한다 (같은 프레임 데이터가 이력에 반영됨).
+        """
+        pipeline = FallPipeline(fps=10.0, auxiliary_model=None)
+
+        for frame_number in range(3):
+            pipeline.process(_FRAME, _tracking_result(frame_number, _BBOX))
+
+        history = pipeline.cause_attributor._history[("cam1", 1)]
+        assert len(history) == 3
+
+
+class TestCauseAttributionWindowCrossValidation:
+    """FallCauseAttributorConfig와 FallDetectorConfig는 서로 독립된
+
+    dataclass라 각자의 __post_init__만으로는 history_window_sec/
+    track_grace_sec이 fall_candidate_timeout_sec + lookback_sec을
+    덮는지 확인할 수 없다 — 둘 다 아는 FallPipeline 생성 시점에서
+    교차 검증돼야 한다.
+    """
+
+    def _write_config(self, tmp_path, **cause_overrides):
+        import json
+
+        from src.safety.fall_detector import FallDetectorConfig
+
+        config_path = tmp_path / "fall_detection.json"
+        config_path.write_text(
+            json.dumps({"cause_attribution": cause_overrides}), encoding="utf-8"
+        )
+        return str(config_path), FallDetectorConfig(fall_candidate_timeout_sec=2.0)
+
+    def test_rejects_history_window_shorter_than_timeout_plus_lookback(self, tmp_path):
+        config_path, detector_config = self._write_config(
+            tmp_path,
+            lookback_sec=1.0,
+            history_window_sec=2.5,  # 필요치(2.0+1.0=3.0) 미달
+            track_grace_sec=4.0,
+        )
+
+        with pytest.raises(ValueError, match="history_window_sec"):
+            FallPipeline(
+                fps=10.0, detector_config=detector_config, fall_config_path=config_path
+            )
+
+    def test_rejects_track_grace_shorter_than_timeout_plus_lookback(self, tmp_path):
+        config_path, detector_config = self._write_config(
+            tmp_path,
+            lookback_sec=1.0,
+            history_window_sec=4.0,
+            track_grace_sec=2.5,  # 필요치(2.0+1.0=3.0) 미달
+        )
+
+        with pytest.raises(ValueError, match="track_grace_sec"):
+            FallPipeline(
+                fps=10.0, detector_config=detector_config, fall_config_path=config_path
+            )
+
+    def test_accepts_exactly_sufficient_window(self, tmp_path):
+        config_path, detector_config = self._write_config(
+            tmp_path,
+            lookback_sec=1.0,
+            history_window_sec=3.0,  # 정확히 필요치
+            track_grace_sec=3.0,
+        )
+
+        FallPipeline(
+            fps=10.0, detector_config=detector_config, fall_config_path=config_path
+        )  # 예외 없이 생성돼야 함
+
+    def test_disabled_attribution_skips_cross_validation(self, tmp_path):
+        """enabled=False면 attribution이 아예 동작하지 않으므로, window가
+
+        짧아도 검증에서 걸러지면 안 된다 (불필요한 제약이 된다).
+        """
+        config_path, detector_config = self._write_config(
+            tmp_path,
+            enabled=False,
+            lookback_sec=1.0,
+            history_window_sec=1.5,  # 필요치 미달이지만 enabled=False라 무관
+            track_grace_sec=1.5,
+        )
+
+        FallPipeline(
+            fps=10.0, detector_config=detector_config, fall_config_path=config_path
+        )  # 예외 없이 생성돼야 함
+
+
+class TestFallPipelineCauseAttributionEndToEnd:
+    """모델 confirm 경로로 낙상이 확정될 때, 실제로 근접·접근 중이던 다른
+
+    Track이 cause=NEARBY_TRACK으로 기록되는지 FallCauseAttributor·
+    FallDetector·FallPipeline을 전부 실제로 연결해 검증한다 (mock은
+    AuxiliaryFallModel뿐 — cause attribution 경로는 전부 실제 코드다).
+
+    victim은 TestFallPipelineEndToEndConfirmation과 동일한 bbox 쌍을 쓴다.
+    이 조합은 매 프레임 동일한 위치의 FallDetection과 IoU 매칭되어 이미
+    STANDING 구간(frame 0~2)부터 모델 근거가 쌓이기 시작해 frame 3(t=0.3초)
+    에 candidate 진입, frame 4(t=0.4초)에 바로 confirm된다 — 순서가 빠르므로
+    candidate(접근하는 Track)도 이 짧은 lookback 구간(0.0~0.3초) 안에서
+    확실히 가까워지도록 설계했다.
+    """
+
+    _STANDING_BBOX = (40.0, 0.0, 60.0, 60.0)
+    _NON_HORIZONTAL_BBOX = (40.0, 20.0, 60.0, 80.0)
+
+    def _victim_bbox(self, frame_number: int) -> tuple:
+        return self._STANDING_BBOX if frame_number < 5 else self._NON_HORIZONTAL_BBOX
+
+    def _make_stub_model(self, num_frames: int = 15) -> _StubAuxiliaryModel:
+        fall_detection = [
+            FallDetection(bbox=list(self._NON_HORIZONTAL_BBOX), label="fall", confidence=0.9)
+        ]
+        return _StubAuxiliaryModel(detections_by_call=[fall_detection for _ in range(num_frames)])
+
+    def _approaching_candidate_bbox(self, frame_number: int) -> tuple:
+        """t=0.0(cx=200, 멀리)에서 t=0.3(cx=75, victim 근처)까지 접근한 뒤 정지한다.
+
+        confirm이 t=0.4초에 일어나고 fall_start_sec(candidate 진입 시각)은
+        t=0.3초이므로, lookback 구간(기본 1.0초)이 사실상 [0.0, 0.3]이다.
+        y범위(20~80)는 victim의 NON_HORIZONTAL_BBOX와 맞춰 같은 '바닥 높이'를
+        흉내내되, x범위는 victim의 bbox(40~60)·AuxiliaryFallModel detection
+        (40~60)과 항상 5px 이상 떨어뜨려 IoU 매칭이나 자체 낙상 오판정과
+        절대 얽히지 않게 한다.
+        """
+        t = frame_number / 10.0
+        progress = min(t / 0.3, 1.0)
+        cx = 200.0 - (200.0 - 75.0) * progress
+        return (cx - 10.0, 20.0, cx + 10.0, 80.0)
+
+    def _multi_track_result(self, frame_number: int, candidate_bbox: tuple) -> TrackingResult:
+        victim_bbox = self._victim_bbox(frame_number)
+        return TrackingResult(
+            frame_number=frame_number,
+            timestamp="00:00:00.000",
+            video_source="cam1",
+            tracks=[
+                Track(
+                    track_id=1,
+                    bbox=list(victim_bbox),
+                    foot_point=[(victim_bbox[0] + victim_bbox[2]) / 2.0, victim_bbox[3]],
+                    confidence=0.9,
+                ),
+                Track(
+                    track_id=2,
+                    bbox=list(candidate_bbox),
+                    foot_point=[
+                        (candidate_bbox[0] + candidate_bbox[2]) / 2.0,
+                        candidate_bbox[3],
+                    ],
+                    confidence=0.9,
+                ),
+            ],
+        )
+
+    def test_approaching_track_becomes_cause_of_confirmed_fall(self):
+        from src.safety.fall_detector import FallDetectorConfig
+
+        config = FallDetectorConfig(cooldown_sec=1.0)
+        pipeline = FallPipeline(
+            fps=10.0, detector_config=config, auxiliary_model=self._make_stub_model()
+        )
+
+        events = []
+        for frame_number in range(15):
+            candidate_bbox = self._approaching_candidate_bbox(frame_number)
+            events += pipeline.process(
+                _FRAME, self._multi_track_result(frame_number, candidate_bbox)
+            )
+
+        assert len(events) == 1
+        event = events[0]
+        assert event.event_type == "FALL_SUSPECT"
+        assert event.track_id == 1
+        assert event.cause is not None
+        assert event.cause.type == "NEARBY_TRACK"
+        assert event.cause.track_id == 2
+        assert 0.0 < event.cause.score <= 1.0
+
+    def test_stationary_far_track_does_not_become_cause(self):
+        """후보가 접근하지 않고 계속 멀리 있으면 cause=null이어야 한다."""
+        from src.safety.fall_detector import FallDetectorConfig
+
+        config = FallDetectorConfig(cooldown_sec=1.0)
+        pipeline = FallPipeline(
+            fps=10.0, detector_config=config, auxiliary_model=self._make_stub_model()
+        )
+        far_candidate_bbox = (500.0, 20.0, 520.0, 80.0)  # 계속 멀리, 접근 없음
+
+        events = []
+        for frame_number in range(15):
+            events += pipeline.process(
+                _FRAME, self._multi_track_result(frame_number, far_candidate_bbox)
+            )
+
+        assert len(events) == 1
+        assert events[0].cause is None
+
+
+class TestCauseAttributionSurvivesDelayedConfirm:
+    """candidate가 fall_candidate_timeout_sec에 가깝게 오래 머물다 confirm돼도
+
+    (모델 근거 없이 순수 bbox 수평 자세 지속만으로), 교차 검증을 통과하는
+    history_window_sec/track_grace_sec이면 lookback 구간의 후보 이력이
+    evict되지 않고 여전히 attribution에 쓰일 수 있어야 한다.
+    """
+
+    _STANDING_BBOX = (40.0, 0.0, 60.0, 60.0)
+    _LYING_BBOX = (10.0, 50.0, 90.0, 70.0)
+
+    def _victim_result(self, frame_number: int) -> TrackingResult:
+        bbox = self._STANDING_BBOX if frame_number < 5 else self._LYING_BBOX
+        tracks = [
+            Track(
+                track_id=1,
+                bbox=list(bbox),
+                foot_point=[(bbox[0] + bbox[2]) / 2.0, bbox[3]],
+                confidence=0.9,
+            )
+        ]
+        return TrackingResult(
+            frame_number=frame_number, timestamp="00:00:00.000", video_source="cam1",
+            tracks=tracks,
+        )
+
+    def _multi_result(self, frame_number: int, candidate_cx: float) -> TrackingResult:
+        result = self._victim_result(frame_number)
+        candidate_bbox = (candidate_cx - 10.0, 0.0, candidate_cx + 10.0, 60.0)
+        result.tracks.append(
+            Track(
+                track_id=2,
+                bbox=list(candidate_bbox),
+                foot_point=[candidate_cx, 60.0],
+                confidence=0.9,
+            )
+        )
+        return result
+
+    def test_cause_still_found_when_confirm_is_delayed_near_timeout(self, tmp_path):
+        import json
+
+        from src.safety.fall_detector import FallDetectorConfig
+
+        # candidate 진입(t=0.5) 후 fall_confirm_sec(1.5초)만큼 수평 자세가
+        # 지속돼야 confirm된다(t=2.0) — fall_candidate_timeout_sec(1.8초)
+        # 이내라 타임아웃 전에 confirm되지만, candidate 진입 시각과 confirm
+        # 시각 사이의 간격(1.5초)이 짧지 않다.
+        detector_config = FallDetectorConfig(
+            cooldown_sec=1.0, fall_confirm_sec=1.5, fall_candidate_timeout_sec=1.8
+        )
+        # 필요 최소치(1.8+0.5=2.3)를 충족하는 값으로 설정.
+        config_path = tmp_path / "fall_detection.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "cause_attribution": {
+                        "enabled": True,
+                        "lookback_sec": 0.5,
+                        "history_window_sec": 2.3,
+                        "track_grace_sec": 2.5,
+                        "min_samples": 2,
+                        "distance_threshold": 1.5,
+                        "closing_speed_threshold": 1.0,
+                        "min_closing_speed_norm": 0.1,
+                        "distance_weight": 0.5,
+                        "speed_weight": 0.5,
+                        "score_threshold": 0.5,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        pipeline = FallPipeline(
+            fps=10.0,
+            detector_config=detector_config,
+            auxiliary_model=None,
+            fall_config_path=str(config_path),
+        )
+
+        events = []
+        for frame_number in range(30):
+            t = frame_number / 10.0
+            if t <= 0.5:
+                # candidate가 lookback 구간(0.0~0.5초) 동안만 victim에게
+                # 접근한 뒤, 그 이후로는 화면에서 완전히 사라진다.
+                progress = t / 0.5
+                candidate_cx = 200.0 - (200.0 - 75.0) * progress
+                events += pipeline.process(_FRAME, self._multi_result(frame_number, candidate_cx))
+            else:
+                events += pipeline.process(_FRAME, self._victim_result(frame_number))
+
+        assert len(events) == 1
+        assert events[0].cause is not None
+        assert events[0].cause.track_id == 2

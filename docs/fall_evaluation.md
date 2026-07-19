@@ -398,5 +398,81 @@ progress 출력(frame 31/61/91/121)의 단순 평균은 기본 경로 12.5 FPS, 
 바뀌는 실제 opt-in 기능 전체의 비교다. 이 값은 장시간 성능 벤치마크나 IP 카메라
 성능을 대표하지 않으며, 장시간/IP 카메라 FPS·latency 평가는 후속 통합에서 측정한다.
 
-PR3의 `FALL_SUSPECT.cause` 외부 접촉 후보 추정은 PR2가 머지된 최신 main에서
-시작한다.
+## 9. PR3: `FALL_SUSPECT.cause` 외부 접촉 원인 후보 추정
+
+### 9.1 설계 요지
+
+`src/safety/fall_cause_attributor.py`(`FallCauseAttributor`)가
+`FALL_CONFIRMED` 순간에만 호출된다. 매 프레임 별도 추론이나 모델 호출을
+하지 않으며, `FallDetector`가 낙상 판정에 쓰는 `MultiTrackHistory`와는
+완전히 독립된 자체 이력(Track별 foot_point·bbox 높이·시각)을 갖는다 —
+attribution에 필요한 lookback을 위해 낙상 판정용 이력 window를 늘리면
+PR2에서 이미 튜닝·동결한 속도/변화율 계산과 Development/Validation 수치가
+조용히 바뀔 위험이 있었기 때문이다(`docs/decisions.md` ADR-016 참고).
+
+낙상 시작 시각은 confirm 시각이 아니라 `FALLING_CANDIDATE` 진입 시각을
+쓴다(운영상 onset proxy이지 임상적 충돌 시점이 아니다). `FallDetector.
+_confirm_fall()`은 이 값(`state.candidate_since_sec`)을 cleanup 중 `None`으로
+리셋하므로, attribution에 넘기기 전에 반드시 로컬 변수로 먼저 꺼내둔다 —
+순서를 반대로 하면 항상 `None`이 들어가 `cause`가 절대 채워지지 않는다.
+
+후보 조건(전부 만족해야 함): 같은 `video_source`, 피해 Track 자신 아님,
+lookback 구간(`[fall_start_sec - lookback_sec, fall_start_sec]`, 기본
+1.0초) 안에 피해자·후보 모두 최소 샘플 수 이상, 후보의 전체 이력 중 가장
+오래된 샘플이 `fall_start_sec` 이전(낙상 시작 "뒤"에 처음 등장한 Track은
+제외), 정규화 최소 거리가 `distance_threshold`(기본 1.5, victim bbox 높이
+기준 정규화) 이내, 순 접근 속도(정규화)가 `min_closing_speed_norm`(기본
+0.1) 이상(멀어지거나 정지한 경우는 제외). 점수는 근접도와 접근 속도의
+가중합이며, 동점은 (score 내림차순 → min_distance_norm 오름차순 →
+track_id 오름차순)으로 결정적으로 처리한다.
+
+`configs/fall_detection.json`의 `"cause_attribution"` 하위 섹션에서
+설정을 로드한다(`FallDetectorConfig`와는 독립된 `FallCauseAttributorConfig`
+가 이 섹션만 읽고, `FallDetectorConfig.from_file()`은 반대로 이 섹션을
+걸러내 서로 간섭하지 않는다). `4.0초`인 `history_window_sec`/
+`track_grace_sec`는 기본 `fall_candidate_timeout_sec`(2.0초) + lookback
+(1.0초) + 여유를 덮도록 정했다 — candidate가 타임아웃 근처까지 버티다
+confirm돼도 lookback 구간 이력이 이미 잘려나가지 않게 하기 위함이다.
+
+### 9.2 main.py/evaluate_fall.py 연동 범위
+
+`FallPipeline`은 `fall_config_path` keyword 인자를 받아 그 경로의
+`"cause_attribution"` 섹션을 로드한다. `src/main.py`(`--fall-config`가
+가리키는 경로)와 `scripts/evaluate_fall.py`(`--config`가 가리키는 경로)
+모두 이미 갖고 있던 그 경로를 `FallPipeline(...)` 호출에 그대로 한 번 더
+전달하도록 배선했다 — 새 CLI 옵션이나 새 계약을 추가한 것이 아니라, 기존
+`FallDetectorConfig`용 경로를 `FallCauseAttributorConfig`에도 재사용한
+것이다. 따라서 `configs/fall_detection.json`의 `"cause_attribution"`
+섹션(`enabled`, 각 threshold, history/grace, score weight 등)을 고치면
+`main.py`/`evaluate_fall.py` 실행 모두에 그대로 반영된다.
+
+### 9.3 검증 데이터 정책
+
+PR3 구현 자체에는 외부 데이터셋이 필요 없었다 — 정식 자동 테스트는
+`tests/test_fall_cause_attributor.py`(후보 탐색·점수 계산·tie-break·
+독립 이력 유지 범위를 합성 시나리오로 검증)와 `tests/test_fall_detector.py`
+·`tests/test_fall_pipeline_module.py`(candidate 진입 시각 캡처, 실제 낙상
+confirm 시 cause 연결까지 mock 없이 end-to-end로 검증)로 커버했다.
+
+CAUCAFall은 주로 단일 인원 낙상 데이터라 원인 후보 정확도를 증명하는
+데이터가 아니다. 로컬 `data/datasets/mpfdd`(공개 샘플 28개 영상, 전체
+MPFDD 220개 중 일부)도 여러 사람이 같은 장면에 있는 낙상 영상은 있지만
+접촉으로 낙상했다는 원인 라벨은 제공하지 않는다 — 그래서 PR3에서는
+`cause` 양성 정확도를 이 데이터로 주장하지 않는다. PR3에서 실제로 한 것은
+28개 공개 샘플의 파일명·설명을 검토해 hard-negative(원인 없는 다인 근접)
+후보 데이터로 쓸 수 있다는 것만 확인한 수준이다 — `false_cause_rate` 측정
+등 실제 hard-negative 실행은 아직 하지 않았다. 실제 접촉 원인 후보
+정확도(precision/recall, false attribution) 평가와 hard-negative 실행은
+Phase 4에서 접촉 유발 영상 또는 권한·라벨이 명확한 외부 데이터로 진행한다.
+
+### 9.4 알려진 한계
+
+- 2D 화면상 근접은 실제 접촉을 보장하지 않는다 — `cause`는 "외부 접촉
+  의심 후보"이지 충돌·인과관계를 확정하는 기능이 아니다.
+- ReID가 없어 Track ID가 낙상 직전 바뀌면(재획득) 후보 연속성이 끊길 수
+  있다 — 그 Track의 이력 시작 시각이 `fall_start_sec` 이후라면 §9.1의
+  "낙상 시작 뒤에 처음 등장한 Track 제외" 규칙에 걸려 후보에서 빠진다.
+- 다중 인원이 근접한 상황에서 false cause(원인이 없는데 후보가 잡히는
+  경우) 가능성이 있다 — 정량 평가는 Phase 4로 남겨뒀다.
+- `distance_threshold`·`closing_speed_threshold`·`score_threshold` 등은
+  튜닝된 값이 아니라 초기 PoC 기본값이다.

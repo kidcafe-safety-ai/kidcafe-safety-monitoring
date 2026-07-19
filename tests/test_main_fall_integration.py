@@ -205,6 +205,27 @@ class TestFallDetectionEnabled:
         _, kwargs = mock_fall_pipeline_cls.call_args
         assert kwargs["auxiliary_model"] is mock_aux_cls.return_value
 
+    def test_fall_config_path_is_forwarded_to_pipeline(self):
+        """cause_attribution 설정(configs/fall_detection.json)이 실제로
+
+        FallPipeline까지 전달되는지 확인한다 — 넘기지 않으면
+        FallCauseAttributorConfig가 코드 기본값으로 조용히 대체된다.
+        """
+        patcher, _, _ = _patch_pipeline_internals()
+
+        with patcher, patch.object(
+            main_module, "FallPipeline", return_value=MagicMock(process=MagicMock(return_value=[]))
+        ) as mock_fall_pipeline_cls:
+            run_pipeline_from_source(
+                source=_make_mock_source(),
+                zones_path="unused.json",
+                fall_detection_enabled=True,
+                fall_config_path="configs/fall_detection.json",
+            )
+
+        _, kwargs = mock_fall_pipeline_cls.call_args
+        assert kwargs["fall_config_path"] == "configs/fall_detection.json"
+
     def test_zone_and_fall_events_both_flow_to_writer(self):
         from src.common.types import Event as EventType
 
