@@ -623,6 +623,9 @@ Frontend SafetyEvent.severity:    LOW | MEDIUM | HIGH       (Phase 3 신규, 파
 
 | EventType | Severity |
 |---|---|
+| ENTER | LOW |
+| DWELL | LOW |
+| EXIT | LOW |
 | ENTER_RESTRICTED | HIGH |
 | DANGER_ZONE_DWELL | HIGH |
 | FALL_SUSPECT | HIGH |
