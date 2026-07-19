@@ -5,8 +5,12 @@
 FALL_CONFIRMED는 지속 상태가 아니라 momentary transition).
 
 Track별로 독립된 상태머신을 유지하며, confirm 전이 시에만 Track당 1개의
-FALL_SUSPECT Event를 생성한다. cause는 이번 PR에서 항상 None이다(외부 접촉
-원인 후보 추정은 후속 PR, ADR-016).
+FALL_SUSPECT Event를 생성한다. cause는 이 클래스가 직접 만들지 않는다 —
+process()에 cause_attributor(FallCauseAttributor)를 넘기면 confirm 시점에
+그 인스턴스의 attribute()를 호출해 cause를 채우고, 넘기지 않으면(기본값
+None) 항상 None이다(ADR-016, src/safety/fall_cause_attributor.py 모듈
+docstring 참고). 외부 접촉 원인 후보 추정 로직 자체는 이 파일의 책임이
+아니다 — 근접 이력 관리·점수 계산은 전부 FallCauseAttributor가 소유한다.
 
 각 메커니즘의 설계 배경·튜닝 실험·Subject별 실측 수치는 코드가 아니라
 docs/fall_evaluation.md에 둔다(문서 구조가 바뀌어도 이 파일이 깨지지 않도록
@@ -100,14 +104,18 @@ Track은 NORMAL이 아니라 그 tombstone의 남은 cooldown을 물려받은 CO
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 
-from src.common.types import Event, Track, TrackingResult
+from src.common.types import Event, EventCause, Track, TrackingResult
+from src.safety.fall_cause_attributor import FallCauseAttributor
 from src.safety.fall_features import FallFeatureExtractor, FallFeatures
 from src.safety.fall_model_matching import FallModelEvidence, compute_iou
 from src.safety.multi_track_history import MultiTrackHistory, TrackKey
 from src.safety.pose_features import PoseFeatureExtractor, PoseFeatures
+
+LOGGER = logging.getLogger(__name__)
 
 _STATE_NORMAL = "NORMAL"
 _STATE_FALLING_CANDIDATE = "FALLING_CANDIDATE"
@@ -226,6 +234,11 @@ class FallDetectorConfig:
     def from_file(cls, path: str) -> "FallDetectorConfig":
         with open(path, "r", encoding="utf-8") as file:
             data = json.load(file)
+        # "cause_attribution"은 FallCauseAttributorConfig 전용 하위 섹션이다 —
+        # FallDetectorConfig는 이 키를 모르므로(**data 언패킹이 TypeError를 냄)
+        # 여기서 제거한다. 같은 JSON 파일을 공유하되 두 config는 서로 독립이다
+        # (src/safety/fall_cause_attributor.py 모듈 docstring 참고).
+        data = {key: value for key, value in data.items() if key != "cause_attribution"}
         return cls(**data)
 
 
@@ -287,6 +300,7 @@ class FallDetector:
         self,
         tracking_result: TrackingResult,
         model_evidence: Optional[Dict[int, FallModelEvidence]] = None,
+        cause_attributor: Optional[FallCauseAttributor] = None,
     ) -> List[Event]:
         """한 프레임의 TrackingResult를 반영하고, FALL_CONFIRMED 전이가 있으면 Event를 반환한다.
 
@@ -295,6 +309,9 @@ class FallDetector:
             None으로 두면 된다 — model confirm 경로가 완전히 비활성화되어 기존
             bbox/pose 전용 동작과 하위 호환된다. 이 딕셔너리를 만드는 IoU 매칭은
             이 클래스의 책임이 아니다 (src/safety/fall_model_matching.py).
+        cause_attributor: 지정하면 confirm 시 FallCauseAttributor.attribute()를
+            호출해 EventCause를 채운다. None이면(기본값, 기존 호출과 하위 호환)
+            cause는 항상 None이다 — PR2 동작과 완전히 동일하다.
         """
         self._history.update(tracking_result)
         now_sec = tracking_result.frame_number / self.fps
@@ -327,6 +344,7 @@ class FallDetector:
                 tracking_result.frame_number,
                 video_source,
                 timestamp,
+                cause_attributor,
             )
             if event is not None:
                 events.append(event)
@@ -458,6 +476,7 @@ class FallDetector:
         frame_number: int,
         video_source: str,
         timestamp: str,
+        cause_attributor: Optional[FallCauseAttributor],
     ) -> Optional[Event]:
         is_new_track = key not in self._states
         state = self._states.setdefault(key, _TrackState())
@@ -492,6 +511,7 @@ class FallDetector:
                 frame_number,
                 video_source,
                 timestamp,
+                cause_attributor,
             )
 
         if state.state == _STATE_COOLDOWN:
@@ -535,6 +555,7 @@ class FallDetector:
         frame_number: int,
         video_source: str,
         timestamp: str,
+        cause_attributor: Optional[FallCauseAttributor],
     ) -> Optional[Event]:
         cfg = self.config
         # model_duration_sec은 _advance_state에서 이미 갱신됐다(recovery 판단보다
@@ -572,7 +593,14 @@ class FallDetector:
             or state.model_duration_sec >= cfg.model_confirm_sec
         ):
             return self._confirm_fall(
-                state, features, now_sec, track, frame_number, video_source, timestamp
+                state,
+                features,
+                now_sec,
+                track,
+                frame_number,
+                video_source,
+                timestamp,
+                cause_attributor,
             )
 
         if (
@@ -667,8 +695,14 @@ class FallDetector:
         frame_number: int,
         video_source: str,
         timestamp: str,
+        cause_attributor: Optional[FallCauseAttributor],
     ) -> Event:
         event_confidence = self._compute_event_confidence(features, state)
+        # fall_start_sec(onset proxy)은 FALLING_CANDIDATE 진입 시각이다. 아래
+        # cleanup에서 state.candidate_since_sec을 None으로 리셋하므로, attribution에
+        # 넘기기 전에 반드시 로컬 변수로 먼저 꺼내둔다 — 순서를 바꾸면 항상
+        # None이 들어가 cause가 절대 채워지지 않는다 (모듈 docstring 참고).
+        fall_start_sec = state.candidate_since_sec
 
         state.state = _STATE_COOLDOWN
         state.cooldown_until_sec = now_sec + self.config.cooldown_sec
@@ -685,6 +719,27 @@ class FallDetector:
             _CooldownTombstone(bbox=list(track.bbox), cooldown_until_sec=state.cooldown_until_sec)
         )
 
+        cause: Optional[EventCause] = None
+        if cause_attributor is not None:
+            # cause는 이미 확정된 낙상에 덧붙이는 부가 정보다 — 이 호출이
+            # 예외를 내더라도 핵심 FALL_SUSPECT Event 자체(위에서 이미
+            # COOLDOWN 전이와 tombstone 기록까지 끝났다)는 반드시 반환돼야
+            # 한다. fail-closed: 예외는 로그로 남기고 cause=None으로 진행한다.
+            try:
+                cause = cause_attributor.attribute(
+                    video_source=video_source,
+                    victim_track_id=track.track_id,
+                    fall_start_sec=fall_start_sec,
+                )
+            except Exception:
+                LOGGER.exception(
+                    "cause attribution 실패(track_id=%s, video_source=%s) — "
+                    "cause=None으로 진행합니다.",
+                    track.track_id,
+                    video_source,
+                )
+                cause = None
+
         return Event.create(
             event_type="FALL_SUSPECT",
             track_id=track.track_id,
@@ -696,7 +751,7 @@ class FallDetector:
             timestamp=timestamp,
             confidence=features.avg_confidence,
             event_confidence=event_confidence,
-            cause=None,
+            cause=cause,
         )
 
     def _dynamic_evidence(self, features: FallFeatures) -> bool:

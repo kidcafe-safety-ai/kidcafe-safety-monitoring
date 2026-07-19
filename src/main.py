@@ -199,6 +199,7 @@ def run_pipeline_from_source(
                 detector_config=FallDetectorConfig.from_file(fall_config_path),
                 auxiliary_model=auxiliary_model,
                 iou_threshold=fall_model_iou_threshold,
+                fall_config_path=fall_config_path,
             )
             LOGGER.info(
                 "Fall Detection 활성화: config=%s, model=%s",

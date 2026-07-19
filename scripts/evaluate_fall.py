@@ -397,6 +397,7 @@ def _evaluate_video(
     early_tolerance_sec: float = 0.0,
     auxiliary_model: Optional[AuxiliaryFallModel] = None,
     fall_model_iou_threshold: float = 0.3,
+    fall_config_path: Optional[str] = None,
 ) -> _VideoResult:
     """tracker/auxiliary_model은 호출자가 한 번만 생성해 재사용한다 (YOLO 모델
 
@@ -428,6 +429,7 @@ def _evaluate_video(
         detector_config=config,
         auxiliary_model=auxiliary_model,
         iou_threshold=fall_model_iou_threshold,
+        fall_config_path=fall_config_path,
     )
 
     event_frames: List[int] = []
@@ -567,6 +569,7 @@ def main() -> None:
             early_tolerance_sec=args.early_tolerance_sec,
             auxiliary_model=auxiliary_model,
             fall_model_iou_threshold=args.fall_model_iou_threshold,
+            fall_config_path=args.config,
         )
         if result.error:
             print(f"    스킵: {result.error}")
