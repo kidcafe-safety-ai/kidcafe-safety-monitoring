@@ -60,8 +60,9 @@ class TrackingResult:
 `src/common/types.py`의 `EventType`/`VALID_EVENT_TYPES`와 `EventManager`의
 `ENTER_RESTRICTED`, `DANGER_ZONE_DWELL` 발생 로직을 반영했다. `FALL_SUSPECT`는
 `--fall-detection-enabled`에서만 동작하는 bbox·pose·보조 detector 기반 PoC다.
-Validation 운영 목표가 미달해 기본값은 비활성화이며, `cause` 원인 후보 추정은
-PR3 범위다.
+Validation 운영 목표가 미달해 기본값은 비활성화다. `cause` 외부 접촉 원인
+후보 추정은 PR3에서 구현했다 — 근거가 충분하면 `NEARBY_TRACK`을, 부족하면
+여전히 `null`을 기록한다(정량 정확도 미검증 PoC, 아래 상태 흐름 절 참고).
 
 | 타입 | 의미 | 발생 조건 |
 |------|------|---------|
@@ -516,8 +517,7 @@ RTSPSource
 
 ## 9. Phase 3 공용 계약
 
-> 상태: EventType·ZoneType·EventCause·DB migration·Frontend 타입·공간 안전정책 반영 완료 / FALL_SUSPECT opt-in PoC 구현 완료
-> `FALL_SUSPECT.cause` 원인 후보 추정과 신규 이벤트 Dashboard 표시 확장은 후속 PR에서 구현
+> 상태: EventType·ZoneType·EventCause·DB migration·Frontend 타입·공간 안전정책 반영 완료 / FALL_SUSPECT opt-in PoC 구현 완료 / `FALL_SUSPECT.cause` 외부 접촉 원인 후보 추정 구현 완료(PR3, 정량 정확도 미검증) / 신규 이벤트 타입 Dashboard 표시(배지·필터·차트·`cause` 표기)는 별도 PR(`feature/react-dashboard` 계열)에서 구현·리뷰 완료됐으나 아직 main에 병합되지 않아 진행 중
 > 기준선: v0.2.5-dashboard
 
 ### ZoneType 계약
@@ -614,8 +614,14 @@ NORMAL → FALLING_CANDIDATE → (FALL_CONFIRMED) → COOLDOWN
   Track 상태로 별도로 저장되지 않는다(실제 상태값은 `NORMAL` /
   `FALLING_CANDIDATE` / `COOLDOWN` 셋뿐).
 - Track당 낙상 이벤트는 이 전이 시 1회만 생성
-- PR2 범위에서 `cause`는 항상 `null`이다 — 낙상 시작 직전 Track 기록을
-  소급 조회해 원인 후보를 결정하는 로직은 PR3에서 구현 예정이다.
+- PR3부터 `cause`는 `FallCauseAttributor`(src/safety/fall_cause_attributor.py)가
+  채운다 — confirm 시점에 `FALLING_CANDIDATE` 진입 시각(onset proxy, 임상적
+  충돌 시점이 아님) 기준 직전 lookback 구간에서 같은 `video_source`의 다른
+  Track과의 근접·접근 근거를 본다. 근거가 충분하면 `EventCause(type=
+  "NEARBY_TRACK", ...)`를, 부족하면(후보 없음·이력 부족·접근 근거 없음 등)
+  여전히 `cause=null`을 반환한다 — 실제 충돌·인과관계를 확정하는 기능이
+  아니다. FALL_SUSPECT 감지 자체(임계값·모델·기본 비활성 정책)는 이 attribution과
+  무관하게 그대로 유지된다.
 - `COOLDOWN` 중 재진입은 새 낙상으로 집계하지 않음
 - 일반 Track 상태는 소실 grace period 이후 초기화한다. 단, `COOLDOWN`은
   `cooldown_until_sec`까지 보존해 같은 낙상의 중복 확정을 막는다. 새 Track ID의

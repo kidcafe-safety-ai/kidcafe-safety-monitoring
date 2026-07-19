@@ -317,7 +317,7 @@ P2: Zone Settings 계약, 인증/인가 미니 ADR,
 
 ```text
 - Live View E2E (frame 제공 → API → React 표시) 확인
-- FALL_SUSPECT opt-in PoC 구현 및 Development/Validation 정량 결과 기록 (`cause` 원인 후보 추정은 PR3)
+- FALL_SUSPECT opt-in PoC 구현 및 Development/Validation 정량 결과 기록 (`cause` 원인 후보 추정 PR3 완료, 정량 정확도는 Phase 4)
 - zone_type 기반 ENTER_RESTRICTED / DANGER_ZONE_DWELL 이벤트 정상 발생
 - API 장애 중 추론 루프 유지
 - false positive·감지 지연·FPS 결과 기록
@@ -413,7 +413,7 @@ Phase 3 Open·계약 문서 PR
 - 안전구역 이탈 / 출입구 접근 / 제한구역 진입 규칙 정의
 - debounce / hysteresis 적용
 - FALL_SUSPECT opt-in PoC 완료 및 Validation 오탐 개선 후속 계획 정리
-- FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 (PR3)
+- FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 완료 (PR3, 정량 정확도 평가는 Phase 4)
 - 실제 / 유사 키즈카페 영상 확보
 - 라벨링 기준 정리
 - 낙상 · 위험구역 이벤트 정의 확정
@@ -421,13 +421,13 @@ Phase 3 Open·계약 문서 PR
 ### 비고
 
 - 7월 일정은 계획보다 빠르게 진행되어야 한다.
-- 8월에는 ReID, cross-camera(후순위), 모델 비교, 공모전 1차 제출 준비가 겹치므로 7월 중순까지 공간 안전정책과 FALL_SUSPECT opt-in PoC를 구현하고, 외부 접촉 원인 후보 추정은 PR3에서 진행한다.
+- 8월에는 ReID, cross-camera(후순위), 모델 비교, 공모전 1차 제출 준비가 겹치므로 7월 중순까지 공간 안전정책과 FALL_SUSPECT opt-in PoC, 외부 접촉 원인 후보 추정(PR3)까지 구현을 마쳤다.
 
 ### 산출물
 
 - 공간 안전정책 v1
 - FALL_SUSPECT opt-in PoC 및 Development/Validation 평가 기록
-- FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 (PR3)
+- FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 완료 (PR3, 정량 정확도 평가는 Phase 4)
 - Live View latest-frame polling E2E
 - 실험 데이터 기준
 
