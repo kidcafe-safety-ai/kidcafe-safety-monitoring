@@ -8,18 +8,21 @@ import type {
 } from "../types/alertHistory";
 import type { EventType, SafetyEvent } from "../types/event";
 import {
+  formatSeoulDateTime,
+  getSeoulDateKey,
+  getSeoulDateParts,
+  parseUtcTimestamp,
+} from "../utils/eventDateTime";
+import {
   formatEventCause,
   getEventDisplayMeta,
+  getEventSeverity,
   KNOWN_EVENT_TYPES,
 } from "../utils/eventDisplay";
 
 type PeriodFilter = "전체" | "오늘" | "최근 7일";
 type AlertStatusFilter = "전체" | AlertStatus;
 type AlertTypeFilter = "전체" | EventType;
-type SafetyEventWithApiFields = SafetyEvent & {
-  created_at?: unknown;
-  zone_name?: unknown;
-};
 
 const PERIOD_FILTERS: PeriodFilter[] = ["전체", "오늘", "최근 7일"];
 const STATUS_FILTERS: AlertStatusFilter[] = [
@@ -38,65 +41,6 @@ function isApiMode() {
   return API_MODE === "api";
 }
 
-function readOptionalString(value: unknown) {
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : undefined;
-}
-
-function formatDatePartsInSeoul(date: Date) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
-  const partMap = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-
-  return {
-    dateKey: `${partMap.year}-${partMap.month}-${partMap.day}`,
-    dateTime: `${partMap.year}-${partMap.month}-${partMap.day} ${partMap.hour}:${partMap.minute}:${partMap.second}`,
-  };
-}
-
-function getSeoulDateKey(date = new Date()) {
-  return formatDatePartsInSeoul(date).dateKey;
-}
-
-function formatOccurredAt(event: SafetyEventWithApiFields) {
-  const createdAt = readOptionalString(event.created_at);
-
-  if (createdAt) {
-    const parsedDate = new Date(createdAt);
-
-    if (!Number.isNaN(parsedDate.getTime())) {
-      return formatDatePartsInSeoul(parsedDate).dateTime;
-    }
-  }
-
-  return event.timestamp || "-";
-}
-
-function getDateKeyFromDisplayValue(value: string) {
-  const dateKeyMatch = value.match(/^(\d{4}-\d{2}-\d{2})/);
-
-  if (dateKeyMatch) {
-    return dateKeyMatch[1];
-  }
-
-  const parsedDate = new Date(value);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return null;
-  }
-
-  return getSeoulDateKey(parsedDate);
-}
-
 function getDateDiffDays(fromDateKey: string, toDateKey: string) {
   const fromTime = new Date(`${fromDateKey}T00:00:00+09:00`).getTime();
   const toTime = new Date(`${toDateKey}T00:00:00+09:00`).getTime();
@@ -113,10 +57,10 @@ function matchesPeriod(alert: AlertHistoryItem, period: PeriodFilter) {
     return true;
   }
 
-  const alertDateKey = getDateKeyFromDisplayValue(alert.occurred_at);
+  const alertDateKey = alert.occurred_at_date_key ?? null;
 
   if (alertDateKey === null) {
-    return true;
+    return false;
   }
 
   const todayDateKey = getSeoulDateKey();
@@ -154,11 +98,27 @@ function getStatusClass(status: AlertStatus) {
   return "risk-normal";
 }
 
-function getZoneName(event: SafetyEventWithApiFields) {
-  const apiZoneName = readOptionalString(event.zone_name);
+function getOccurredAtInfo(event: SafetyEvent) {
+  const createdAtDate = parseUtcTimestamp(event.created_at);
 
-  if (apiZoneName) {
-    return apiZoneName;
+  if (createdAtDate !== null) {
+    return {
+      display: formatSeoulDateTime(createdAtDate),
+      dateKey: getSeoulDateParts(createdAtDate).dateKey,
+      source: "created_at" as const,
+    };
+  }
+
+  return {
+    display: event.timestamp || "-",
+    dateKey: null,
+    source: "timestamp" as const,
+  };
+}
+
+function getZoneName(event: SafetyEvent) {
+  if (event.zone_name && event.zone_name.trim().length > 0) {
+    return event.zone_name.trim();
   }
 
   const zoneId = event.zone_id.trim();
@@ -200,18 +160,21 @@ function getAlertMessage(event: SafetyEvent, causeText?: string) {
 }
 
 function mapEventToAlertHistoryItem(event: SafetyEvent): AlertHistoryItem {
-  const eventWithApiFields = event as SafetyEventWithApiFields;
   const meta = getEventDisplayMeta(event.event_type);
-  const zoneName = getZoneName(eventWithApiFields);
+  const occurredAt = getOccurredAtInfo(event);
+  const zoneName = getZoneName(event);
   const causeText =
     event.event_type === "FALL_SUSPECT"
       ? formatEventCause(event.cause)
       : undefined;
-  const severity = (event.severity ?? meta.severity ?? "LOW") as AlertSeverity;
+  const severity = (getEventSeverity(event.event_type, event.severity) ??
+    "LOW") as AlertSeverity;
 
   return {
     alert_id: event.event_id,
-    occurred_at: formatOccurredAt(eventWithApiFields),
+    occurred_at: occurredAt.display,
+    occurred_at_date_key: occurredAt.dateKey,
+    occurred_at_source: occurredAt.source,
     title: meta.label,
     zone_id: event.zone_id,
     zone_name: zoneName,
@@ -291,6 +254,9 @@ export default function AlertHistoryPage() {
     filteredAlerts.find((alert) => alert.alert_id === selectedAlertId) ??
     filteredAlerts[0] ??
     null;
+  const eventScopeText = isApiMode()
+    ? `현재 /events 응답으로 수신한 최근 ${alerts.length}건 범위 기준입니다. 기간 필터도 이 범위 안에서 적용됩니다.`
+    : `Mock 이벤트 ${alerts.length}건 범위 기준입니다.`;
 
   return (
     <main className="page alert-history-page">
@@ -377,12 +343,11 @@ export default function AlertHistoryPage() {
           API 연결에 실패했습니다. 이벤트 데이터를 불러올 수 없습니다.
         </div>
       ) : null}
-      {!isApiMode() ? (
+      {isLoading ? null : (
         <div className="state-banner alert-source-note">
-          현재 VITE_API_MODE=mock 기준으로 표시 중입니다. API 모드에서는 FastAPI
-          이벤트 데이터를 사용합니다.
+          {eventScopeText}
         </div>
-      ) : null}
+      )}
       {!isLoading && filteredAlerts.length === 0 ? (
         <div className="state-banner empty">표시할 알림 기록이 없습니다.</div>
       ) : null}
@@ -392,9 +357,7 @@ export default function AlertHistoryPage() {
           <div className="panel-header">
             <div>
               <h2>알림 목록</h2>
-              <span>
-                {isApiMode() ? "실제 이벤트 데이터 기준" : "mock 이벤트 데이터 기준"}
-              </span>
+              <span>{eventScopeText}</span>
             </div>
             <span>{filteredAlerts.length}건</span>
           </div>
@@ -428,12 +391,7 @@ export default function AlertHistoryPage() {
                         <span className={`type-badge ${meta.badgeClass}`}>
                           {meta.label}
                         </span>
-                        <strong className="alert-table-title">{alert.title}</strong>
-                        {alert.cause_text ? (
-                          <span className="alert-cause-text">
-                            {alert.cause_text}
-                          </span>
-                        ) : null}
+                        <strong className="alert-table-title">{alert.message}</strong>
                       </td>
                       <td>{alert.zone_name}</td>
                       <td>{alert.target}</td>
@@ -464,9 +422,6 @@ export default function AlertHistoryPage() {
                 <div>
                   <strong>{selectedAlert.title}</strong>
                   <p>{selectedAlert.message}</p>
-                  {selectedAlert.cause_text ? (
-                    <p className="alert-cause-text">{selectedAlert.cause_text}</p>
-                  ) : null}
                 </div>
                 <dl className="alert-detail-list">
                   <div>

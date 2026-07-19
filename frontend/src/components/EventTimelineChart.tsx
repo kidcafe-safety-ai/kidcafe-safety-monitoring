@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { SafetyEvent } from "../types/event";
+import { formatSeoulTime, parseUtcTimestamp } from "../utils/eventDateTime";
 
 interface EventTimelineChartProps {
   events: SafetyEvent[];
@@ -13,6 +14,7 @@ interface TimelineBucket {
 }
 
 const BUCKET_SECONDS = 10;
+const MAX_BUCKETS_WITH_EMPTY_GAPS = 120;
 const CHART_WIDTH = 760;
 const CHART_HEIGHT = 220;
 const PADDING = {
@@ -21,66 +23,20 @@ const PADDING = {
   bottom: 42,
   left: 42,
 };
-const ABSOLUTE_TIMESTAMP_THRESHOLD_SECONDS = 365 * 24 * 60 * 60;
-
-function parseTimestampToSeconds(timestamp: string) {
-  const trimmed = timestamp.trim();
-  const timeMatch = trimmed.match(/^(\d{1,2}):([0-5]\d):([0-5]\d)(?:\.(\d{1,3}))?$/);
-
-  if (timeMatch) {
-    const hours = Number(timeMatch[1]);
-    const minutes = Number(timeMatch[2]);
-    const seconds = Number(timeMatch[3]);
-    const milliseconds = Number((timeMatch[4] ?? "0").padEnd(3, "0"));
-
-    return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000;
-  }
-
-  const parsedDate = Date.parse(trimmed);
-
-  if (Number.isNaN(parsedDate)) {
-    return null;
-  }
-
-  return parsedDate / 1000;
-}
-
-function padTime(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-function formatRelativeTime(totalSeconds: number) {
-  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
-  const hours = Math.floor(safeSeconds / 3600);
-  const minutes = Math.floor((safeSeconds % 3600) / 60);
-  const seconds = safeSeconds % 60;
-
-  if (hours > 0) {
-    return `${padTime(hours)}:${padTime(minutes)}:${padTime(seconds)}`;
-  }
-
-  return `${padTime(minutes)}:${padTime(seconds)}`;
-}
-
-function formatAbsoluteTime(totalSeconds: number) {
-  return new Date(totalSeconds * 1000).toLocaleTimeString("ko-KR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-}
 
 function formatBucketLabel(start: number, end: number) {
-  const isAbsolute = start > ABSOLUTE_TIMESTAMP_THRESHOLD_SECONDS;
-  const formatter = isAbsolute ? formatAbsoluteTime : formatRelativeTime;
-
-  return `${formatter(start)}~${formatter(end)}`;
+  return `${formatSeoulTime(new Date(start * 1000))}~${formatSeoulTime(
+    new Date(end * 1000),
+  )}`;
 }
 
 function buildTimelineBuckets(events: SafetyEvent[]) {
   const parsedSeconds = events
-    .map((event) => parseTimestampToSeconds(event.timestamp))
+    .map((event) => {
+      const createdAtDate = parseUtcTimestamp(event.created_at);
+
+      return createdAtDate === null ? null : createdAtDate.getTime() / 1000;
+    })
     .filter((seconds): seconds is number => seconds !== null && Number.isFinite(seconds));
 
   if (parsedSeconds.length === 0) {
@@ -99,8 +55,15 @@ function buildTimelineBuckets(events: SafetyEvent[]) {
     bucketCounts.set(bucketStart, (bucketCounts.get(bucketStart) ?? 0) + 1);
   });
 
-  return Array.from({ length: bucketCount }, (_, index) => {
-    const start = minBucketStart + index * BUCKET_SECONDS;
+  const visibleBucketStarts =
+    bucketCount <= MAX_BUCKETS_WITH_EMPTY_GAPS
+      ? Array.from(
+          { length: bucketCount },
+          (_, index) => minBucketStart + index * BUCKET_SECONDS,
+        )
+      : Array.from(new Set(bucketStarts)).sort((a, b) => a - b);
+
+  return visibleBucketStarts.map((start) => {
     const end = start + BUCKET_SECONDS;
 
     return {
@@ -154,7 +117,7 @@ export default function EventTimelineChart({ events }: EventTimelineChartProps) 
         <div className="panel-header">
           <div>
             <h2>시간대별 이벤트 발생 추이</h2>
-            <span>이벤트 발생 시간을 기준으로 구간별 이벤트 수를 표시합니다.</span>
+            <span>이벤트 저장 시각(created_at)을 기준으로 구간별 이벤트 수를 표시합니다.</span>
           </div>
           <span>Line Chart</span>
         </div>
@@ -194,7 +157,7 @@ export default function EventTimelineChart({ events }: EventTimelineChartProps) 
       <div className="panel-header">
         <div>
           <h2>시간대별 이벤트 발생 추이</h2>
-          <span>이벤트 발생 시간을 기준으로 구간별 이벤트 수를 표시합니다.</span>
+          <span>이벤트 저장 시각(created_at)을 기준으로 구간별 이벤트 수를 표시합니다.</span>
         </div>
         <div className="timeline-summary">
           <span>총 {totalCount}건</span>
