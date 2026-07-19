@@ -70,7 +70,7 @@ export default function EventsPage() {
       <div className="page-heading">
         <div>
           <h1>이벤트 기록 / 통계</h1>
-          <p>Event Schema v1 기반 이벤트 조회와 타입별 통계</p>
+          <p>안전 이벤트 조회와 타입별 통계</p>
         </div>
       </div>
 
