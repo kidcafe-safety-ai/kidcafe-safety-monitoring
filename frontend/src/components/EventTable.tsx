@@ -70,7 +70,7 @@ export default function EventTable({
                     <td>{causeText}</td>
                     <td>{event.frame_number}</td>
                     <td>{event.video_source}</td>
-                    <td>{event.severity ?? meta.severity ?? "-"}</td>
+                    <td>{meta.severity ?? event.severity ?? "-"}</td>
                   </tr>
                 );
               })}
