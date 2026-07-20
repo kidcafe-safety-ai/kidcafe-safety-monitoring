@@ -1,48 +1,13 @@
-"""FALL_SUSPECT 확정 시 외부 접촉 원인 후보(EventCause)를 추정한다.
+"""FALL_SUSPECT 확정 시 외부 접촉 원인 후보를 추정한다.
 
-계약: docs/interfaces.md FALL_SUSPECT·EventCause 계약, docs/decisions.md
-ADR-016. `cause.type`은 항상 `"NEARBY_TRACK"`이고, 근거가 부족하면 반드시
-`cause=None`이다. 실제 충돌·가해자·인과관계를 확정하는 기능이 아니라 "외부
-접촉 의심 후보"를 남기는 PoC 휴리스틱이다 — 근거는 2D 화면상 근접·접근
-속도뿐이며, 실제 접촉 여부를 보장하지 않는다.
+결과는 ``NEARBY_TRACK`` 후보 또는 ``None``이며 실제 충돌이나 인과관계를
+확정하지 않는다. 낙상 판정의 특징 창을 바꾸지 않도록 foot point, bbox 높이,
+시각만 별도 이력으로 관리한다.
 
-독립 이력을 쓰는 이유: `FallDetector`가 낙상 판정에 쓰는
-`MultiTrackHistory(history_window_sec=2.0)`를 그대로 재사용하면, attribution에
-필요한 더 긴 lookback을 위해 그 window를 늘려야 한다. 하지만
-`src/safety/fall_features.py`의 속도·변화율 계산과 `track_age_sec`가 이
-window 전체 구간을 기반으로 하므로, window를 늘리면 PR2에서 이미
-튜닝·동결한 낙상 판정 자체가(Development/Validation 수치 포함) 조용히
-바뀔 위험이 있다. 그래서 `FallCauseAttributor`는 완전히 별도의 Track별
-이력(foot_point·bbox 높이·시각)을 직접 관리한다 — `FallDetector`의 판정
-로직과 수치에는 전혀 영향을 주지 않는다.
-
-`FALLING_CANDIDATE` 진입 시각(onset proxy)을 낙상 시작 시각으로 쓴다. 이는
-임상적인 실제 충돌 시점이 아니라 상태머신이 "낙상이 시작된 것으로 보이는"
-운영상 근사치다. `FallDetector._confirm_fall()`은 이 값을(`state.
-candidate_since_sec`) confirm 처리 중 `None`으로 리셋하므로, 호출자가 리셋
-전에 반드시 로컬 변수로 미리 꺼내 `attribute()`에 넘겨야 한다 — `None`이
-들어오면(리셋 후 값이 흘러들어온 것이든, 진짜로 candidate 이력이 없는
-것이든) 현재 시각으로 조용히 대체하지 않고 즉시 `cause=None`을 반환한다.
-
-후보 조건(전부 만족해야 함):
-    - 피해 Track과 같은 video_source
-    - 피해 Track 자신이 아님
-    - lookback 구간(`[fall_start_sec - lookback_sec, fall_start_sec]`) 안에서
-      피해자·후보 샘플을 프레임 단위로 짝지었을 때, 실제로 짝지어진(=
-      max_pairing_gap_frames 이내로 동시 관측된) 거리 샘플이 min_samples개
-      이상이어야 함 — 두 Track이 사실상 한 번도 같은 순간에 관측된 적이
-      없는데(예: 피해자는 frame 10·20, 후보는 frame 14·16만 존재) "가장
-      가까운 시각" 매칭만으로 근접·접근 패턴을 인위적으로 만들면 안 되므로,
-      시간 차이가 max_pairing_gap_frames(기본 1.5프레임)를 넘는 짝은
-      아예 버린다.
-    - 후보의 전체 이력 중 가장 오래된 샘플이 fall_start_sec 이전이어야 함
-      (낙상 시작 "뒤"에 처음 등장한 Track은 애초에 원인일 수 없으므로 제외)
-    - 최소 거리(정규화)가 distance_threshold 이내
-    - 순 접근 속도(정규화)가 min_closing_speed_norm 이상(멀어지거나 정지한
-      경우는 후보에서 제외 — "가까워도 접근 근거가 없으면 cause=null")
-
-점수는 근접도와 접근 속도의 가중합이며, 동점은 (score 내림차순 →
-min_distance_norm 오름차순 → track_id 오름차순)으로 결정적으로 처리한다.
+Candidate 진입 시각 이전의 동시 관측 샘플에서 거리와 접근 속도 기준을 모두
+만족한 Track만 채점한다. 승계 전 피해 Track ID는 alias로 병합하되 후보에서는
+제외한다. 세부 계약과 임계값 근거는 ``docs/interfaces.md``와
+``docs/decisions.md`` ADR-016에 기록한다.
 """
 
 from __future__ import annotations
@@ -51,7 +16,7 @@ import json
 import math
 from collections import deque
 from dataclasses import dataclass
-from typing import Deque, Dict, List, Optional, Tuple
+from typing import Deque, Dict, FrozenSet, List, Optional, Tuple
 
 from src.common.types import EventCause, EventCauseEvidence, TrackingResult
 
@@ -83,11 +48,8 @@ class FallCauseAttributorConfig:
     distance_weight: float = 0.5
     speed_weight: float = 0.5
     score_threshold: float = 0.5
-    # 피해자·후보 샘플을 짝지을 때 허용하는 최대 시간 차이(프레임 수 단위,
-    # fps로 나눠 초 단위로 변환한다). 이보다 멀리 떨어진 샘플끼리는 "같은
-    # 순간 근접해 있었다"고 볼 수 없으므로 짝짓지 않는다 — 그렇지 않으면
-    # 두 Track이 단 한 프레임도 동시에 관측된 적이 없어도 "가장 가까운
-    # 시각" 매칭만으로 그럴듯한 접근 패턴이 인위적으로 만들어질 수 있다.
+    # 동시 관측으로 간주할 최대 샘플 간격. 멀리 떨어진 시점의 Track을
+    # 짝지어 인위적인 접근 패턴을 만들지 않는다.
     max_pairing_gap_frames: float = 1.5
 
     def __post_init__(self):
@@ -195,19 +157,35 @@ class FallCauseAttributor:
         video_source: str,
         victim_track_id: int,
         fall_start_sec: Optional[float],
+        victim_track_id_aliases: FrozenSet[int] = frozenset(),
     ) -> Optional[EventCause]:
         """확정된 낙상 하나에 대해 외부 접촉 원인 후보를 찾는다. 근거 부족 시 None.
 
         fall_start_sec: FALLING_CANDIDATE 진입 시각(onset proxy). None이면
             (state 불변식 위반이든, attribution 비활성 상태에서 흘러들어온
             값이든) 현재 시각으로 대체하지 않고 즉시 None을 반환한다.
+        victim_track_id_aliases: Candidate Handoff(src/safety/fall_detector.py
+            모듈 docstring)로 이 피해자가 승계 이전에 썼던 옛 track_id들.
+            이 클래스는 `FallDetector`와 완전히 독립된 자체 이력을 Track별로
+            관리하므로(모듈 docstring), handoff로 track_id가 바뀌면 그 전
+            시각의 샘플은 옛 track_id 밑에 그대로 남아있다 — fall_start_sec
+            직전 lookback 구간이 handoff 이전 시각까지 걸쳐 있으면, 새
+            track_id만 조회해서는 그 구간의 victim 샘플을 못 찾아 근거
+            부족으로 잘못 cause=None이 될 수 있다. 또한 옛 track_id는
+            피해자 자신의 이력이므로, 후보(가해자 의심 Track) 목록에서도
+            제외해야 한다 — 그러지 않으면 피해자가 자기 자신의 예전
+            track_id를 스스로의 낙상 원인으로 지목하는 자기 참조가 생긴다.
         """
         if not self.config.enabled or fall_start_sec is None:
             return None
 
-        victim_history = self._history.get((video_source, victim_track_id))
+        victim_track_ids = victim_track_id_aliases | {victim_track_id}
+        victim_history: List[_CauseSample] = []
+        for vid in victim_track_ids:
+            victim_history.extend(self._history.get((video_source, vid), []))
         if not victim_history:
             return None
+        victim_history.sort(key=lambda s: s.time_sec)
 
         window_start = fall_start_sec - self.config.lookback_sec
         victim_samples = [
@@ -219,7 +197,7 @@ class FallCauseAttributor:
         scored_candidates: List[_ScoredCandidate] = []
         for key, history in self._history.items():
             candidate_video_source, candidate_track_id = key
-            if candidate_video_source != video_source or candidate_track_id == victim_track_id:
+            if candidate_video_source != video_source or candidate_track_id in victim_track_ids:
                 continue
             if not history or history[0].time_sec > fall_start_sec:
                 # 낙상 시작 "뒤"에 처음 등장한 Track은 원인일 수 없다.
