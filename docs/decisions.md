@@ -690,9 +690,10 @@ bbox/Pose 보조 근거 요구 등)는 **구현하지 않는다** — 기본 비
 
 - 현재 Cooldown Handoff까지의 설정(`configs/fall_detection.json`)을
   기준선으로 동결한다.
-- 잔존 오탐 대응은 Subject 7~8 진단 데이터의 no_fall 오분류를
-  hard-negative로 명시해 재학습하거나, Phase 4의 경량 temporal classifier로
-  전환하는 쪽으로 진행한다. Subject 9~10 holdout은 재학습에 사용하지 않는다.
+- Subject 7~8의 정상 활동 전체 프레임을 추가한 hard-negative 교차 실험은
+  한쪽 Fold의 Recall 하락으로 채택하지 않는다. 후속 데이터 개선은 실제
+  false Event 주변 구간만 선별하거나, Phase 4의 경량 temporal classifier로
+  전환하는 방식으로 제한한다. Subject 9~10 holdout은 재학습에 사용하지 않는다.
 - Validation 디렉터리(Subject 7~8)는 이 진단 과정에서 직접 보고 규칙을
   설계·검증하는 데 이미 쓰였으므로, 이 시점부터 "보지 않은 최종 검증
   데이터"가 아니라 tuning/diagnostic 데이터로 취급한다. 이후 최종 성능
@@ -729,7 +730,7 @@ bbox/Pose 보조 근거 요구 등)는 **구현하지 않는다** — 기본 비
 
 - Cooldown Handoff 이후 설정이 이 시점의 동결 기준선이다 — 오탐 4건은
   알려진 한계로 남는다.
-- 다음 정확도 개선은 코드 규칙이 아니라 데이터(hard-negative 재학습) 또는
+- 다음 정확도 개선은 코드 규칙이 아니라 오탐 구간 중심 데이터 보강 또는
   모델 아키텍처(Phase 4 temporal classifier) 방향이다.
 - Subject 9~10 holdout 평가 전, Subject 7~8 기반 수치를 "최종 성능"으로
   보고하지 않도록 문서·리포트에서 주의가 필요하다.

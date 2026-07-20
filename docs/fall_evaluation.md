@@ -234,7 +234,9 @@ cooldown을 승계해 `FALL_SUSPECT`를 억제하는 false negative 위험이 �
 ## 6. 초기 V1 Validation (Subject 7~8)
 
 Tune 13 설정과 `fall_detector_v1.pt`를 동결한 뒤 Subject 7~8 20개 영상에서
-한 번 실행했다. 이 결과를 확인한 뒤에는 임계값·모델을 다시 조정하지 않았다.
+한 번 실행했다. 이 초기 Validation 단계에서는 결과를 확인한 뒤 임계값·모델을
+다시 조정하지 않았다. 이후 Track handoff 오류 분석부터는 10장에 명시한 대로
+Subject 7~8을 tuning/diagnostic 데이터로 전환했다.
 
 | 지표 | 결과 | 목표 | 판정 |
 |---|---:|---:|---|
@@ -252,9 +254,8 @@ Event를 막은 사례를 포함한다. no-fall 영상의 false alarm은
 
 따라서 Development에서의 목표 달성만으로 운영 사용 가능하다고 판단하지 않는다.
 초기 평가에서는 개발/검증 분리 원칙을 지켜 이 결과를 보고 재튜닝하지 않았고,
-`--fall-detection-enabled`의 기본값을 `false`로 유지했다. 실제
-키즈카페/IP 카메라 hard-negative 데이터와 함께 오탐을 줄이는 후속 실험이
-필요하다.
+`--fall-detection-enabled`의 기본값을 `false`로 유지했다. 실제 키즈카페/IP
+카메라 데이터와 temporal 동작 분류를 포함한 후속 검증이 필요하다.
 
 ## 7. Subject 9~10 사용 확인
 
@@ -628,11 +629,11 @@ temporal vote(K-of-N + max-gap) 확장과 약한 motion 게이트(aspect_ratio
 
 즉 잔존 문제는 임계값이 부정확한 게 아니라, 보조 fine-tuned 모델이
 "앉기·무릎 꿇기·줍기"와 "낙상"을 bbox/Pose 수준의 정적·동적 특징만으로는
-의미적으로 구분하지 못하는 것이다. 규칙을 더 얹기보다 Subject 7~8의
-no_fall 오분류를 hard-negative로 명시해 재학습하거나,
-Phase 4의 경량 temporal classifier로 전환하는 쪽이 맞다 — 이 결정에 따라
-규칙 기반 게이트는 구현하지 않았다(기본 비활성 실험 옵션으로도 추가하지
-않기로 함, 불필요한 표면적을 늘리지 않기 위함).
+의미적으로 구분하지 못하는 것이다. 규칙을 더 얹기보다 실제 오탐 구간을
+선별한 hard-negative 재학습이나 Phase 4의 경량 temporal classifier로
+전환하는 쪽이 맞다 — 이 결정에 따라 규칙 기반 게이트는 구현하지 않았다
+(기본 비활성 실험 옵션으로도 추가하지 않기로 함, 불필요한 표면적을 늘리지
+않기 위함).
 
 **중요한 방법론적 주의**: 이 진단 과정에서 S7·S8(Validation) 영상을 직접
 보고 규칙을 설계·검증했다 — 즉 이 시점부터 `validation/` split은 더 이상
@@ -641,29 +642,19 @@ Phase 4의 경량 temporal classifier로 전환하는 쪽이 맞다 — 이 결�
 (holdout) 또는 별도 외부 데이터로 최종 평가해야 하며, Subject 7~8 수치를
 그대로 "최종 성능"으로 보고하면 안 된다.
 
-### 10.6 Hard-negative 재학습 실험 계약
+### 10.6 전체 활동 프레임 hard-negative 재학습 결과 (미채택)
 
-잔존 오탐 4건을 임계값 규칙으로 억제하지 않고 보조 detector의 nofall
-학습 데이터로 보강한다. 첫 실험은 기존 `yolo26n.pt`에서 동일한 설정
-(`imgsz=640`, 최대 50 epoch, patience 10, seed 42)으로 다시 시작하며,
-기존 실험과 달라지는 독립변수는 hard-negative 데이터뿐이다.
+Phase 3 종료 전 추가 실험으로 Subject 7·8의 무릎 꿇기·물건 집기·앉기
+활동 전체 프레임을 `nofall` 학습 데이터로 보강하고, 반대 Subject에서
+교차 평가했다.
 
-| 구분 | train 프레임(nofall/fall) | internal val | 교차 Event 평가 |
-|---|---:|---|---|
-| 기존 기준선 | 9,115 (6,431/2,684) | S6 2,181 (1,425/756) | S7+S8 |
-| Fold A | 9,666 (6,982/2,684) | 기존 S6 그대로 | S8 |
-| Fold B | 9,852 (7,168/2,684) | 기존 S6 그대로 | S7 |
+| 실험 | 교차 평가 | Recall | timely Recall | false Event | 판정 |
+|---|---|---:|---:|---:|---|
+| Subject 7 보강 | Subject 8 | 60% (기준 100%) | 40% (기준 80%) | 0건 (기준 1건) | 미채택 |
+| Subject 8 보강 | Subject 7 | 100% | 100% | 2건 (기준 3건) | 단독 통과 |
 
-Fold A는 S7 정상행동 3종을, Fold B는 S8 정상행동 3종을 train에만 추가한다.
-각 Fold가 보지 않은 반대 Subject에서 다음 조건을 모두 만족할 때만
-hard-negative 보강을 채택한다.
-
-- fall Recall과 timely Recall이 해당 Subject 기준선보다 낮아지지 않을 것
-- nofall false Event 수가 해당 Subject 기준선(S8 1건, S7 3건)보다 감소할 것
-- 중복 Event가 0건을 유지할 것
-- Subject 6 frame-level internal validation 결과와 추론 속도를 함께 기록할 것
-
-Fold 교차 실험은 데이터 방향을 선택하기 위한 tuning 절차다. 채택 후 S7+S8의
-동일 정상행동을 합친 최종 보조 모델을 한 번 학습하고, 그 모델·낙상 설정을
-동결한 뒤 Subject 9~10 holdout에서 최초이자 최종 평가를 수행한다. 새 모델은
-가중치와 detection 결과가 달라지므로 기존 signal cache를 재사용하지 않는다.
+한쪽 Fold에서 실제 낙상 Recall이 크게 하락했고, 다른 Fold도 운영 FAR 목표를
+충족하지 못했다. 따라서 두 가중치와 전체 활동 프레임 보강 방식은 채택하지
+않고 기존 `fall_detector_v1.pt`를 유지한다. 연속된 활동 전체 프레임 대신
+실제 false Event 주변 구간만 선별하는 방식은 Phase 4 후보로 남긴다.
+Subject 9~10 holdout은 이 실험에서도 사용하지 않았다.

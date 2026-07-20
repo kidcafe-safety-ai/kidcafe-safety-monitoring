@@ -1,4 +1,0 @@
-video_id,subject,activity,relative_dir,expected_class,reason
-S8_kneel,8,Kneel,Subject.8/Kneel,nofall,cross_subject_hard_negative
-S8_pick_up_object,8,Pick up object,Subject.8/Pick up object,nofall,cross_subject_hard_negative
-S8_sit_down,8,Sit down,Subject.8/Sit down,nofall,false_alarm
