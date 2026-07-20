@@ -466,9 +466,9 @@ Phase 3에서 낙상 감지 PoC와 함께 낙상 직전 외부 접촉 원인 후
 
 ### Implementation Status
 
-PR2에서는 `FALL_SUSPECT` 감지와 `cause=null` 전송까지만 구현했다. PR3에서
+`FALL_SUSPECT` 감지와 `cause=null` 전송 경로에 이어
 `src/safety/fall_cause_attributor.py`(`FallCauseAttributor`)로 non-null
-`cause` 생성을 구현했다 — `FallDetector._confirm_fall()`이 confirm 시점에
+`cause` 생성도 구현했다. `FallDetector._confirm_fall()`이 confirm 시점에
 `FALLING_CANDIDATE` 진입 시각(onset proxy)을 기준으로
 `FallCauseAttributor.attribute()`를 호출하고, 근거가 충분하면
 `EventCause(type="NEARBY_TRACK", ...)`를, 부족하면 `cause=None`을 그대로
@@ -477,16 +477,27 @@ PR2에서는 `FALL_SUSPECT` 감지와 `cause=null` 전송까지만 구현했다.
 `FallCauseAttributor`는 `FallDetector`가 낙상 판정에 쓰는
 `MultiTrackHistory`와 완전히 분리된 자체 이력을 갖는다 — 두 컴포넌트를
 합치면 attribution에 필요한 더 긴 lookback을 위해 낙상 판정용 이력 window를
-늘려야 하는데, 그러면 PR2에서 이미 튜닝·동결한 속도/변화율 계산과
-Development/Validation 수치가 조용히 바뀔 위험이 있었다. 이 분리 결정으로
+늘려야 하는데, 그러면 이미 동결한 속도/변화율 계산과 평가 수치가 조용히
+바뀔 위험이 있었다. 이 분리 결정으로
 그 위험을 피했다(자세한 근거는 `src/safety/fall_cause_attributor.py` 모듈
 docstring 참고).
 
-`FALL_SUSPECT` 감지 자체(임계값·모델·기본 비활성 정책)는 PR3에서 전혀
-바꾸지 않았다 — attribution은 이미 확정된 낙상에 사후적으로 원인 후보만
+Candidate Handoff로 ReID 없이 승계된 낙상은 `FALLING_CANDIDATE` 진입
+당시의 track_id와 confirm 시점의 track_id가 다를 수 있다 —
+`FallCauseAttributor`는 `FallDetector`와 완전히 독립된 자체 이력을 Track별로
+관리하므로, confirm 시 최종 track_id만 넘기면 handoff 이전 시각(=lookback
+구간이 걸칠 수 있는 구간)의 victim 샘플을 찾지 못해 근거가 있어도 잘못
+`cause=None`이 될 수 있다. `FallDetector._confirm_fall()`이 승계 이전
+alias track_id 전체(`_TrackState.origin_track_ids`)를 `attribute()`의
+`victim_track_id_aliases`로 함께 넘겨, 그 track_id들의 이력도 victim
+샘플에 병합하고 후보 목록에서는 제외하도록 확장했다(자세한 근거는
+`src/safety/fall_cause_attributor.py`의 `attribute()` docstring 참고).
+
+Attribution은 `FALL_SUSPECT` 감지 임계값·모델·기본 비활성 정책을 바꾸지
+않고, 이미 확정된 낙상에 사후적으로 원인 후보만
 덧붙이는 순수 추가 기능이다. 정량 정확도 검증은 접촉 원인 정답 라벨이 있는
-데이터가 없어 PR3 범위에 포함하지 않았다(합성 multi-track 테스트로 계약을
-검증했고, MPFDD는 공개 샘플 내용을 검토해 hard-negative 후보로만 확인했다
+데이터가 없어 수행하지 않았다(합성 multi-track 테스트로 계약을 검증했고,
+MPFDD는 공개 샘플 내용을 검토해 hard-negative 후보로만 확인했다
 — 실제 hard-negative 실행·false_cause_rate 측정은 아직 하지 않았다,
 `docs/fall_evaluation.md` 참고). 실제 접촉 유발 영상 기반 정확도 평가는
 Phase 4로 이관한다.
@@ -638,7 +649,7 @@ Track 소실 유예: 0.5초
 - `restricted` 진입은 `ENTER_RESTRICTED`가 `ENTER`를 대체한다.
 - `danger` 체류는 `DANGER_ZONE_DWELL`이 `DWELL`을 대체한다.
 - 이탈은 모든 zone type에서 기존 `EXIT`를 사용한다.
-- polygon buffer 기반 공간 hysteresis는 이번 단계에 추가하지 않는다.
+- polygon buffer 기반 공간 hysteresis는 현재 구현에 추가하지 않는다.
 
 ### Alternatives
 
@@ -653,4 +664,73 @@ Track 소실 유예: 0.5초
 - 실제 확인 프레임 수는 `ceil(confirm_sec * fps)`이며, 매 프레임 처리되는 정상 루프에서는 임계시간 이후 최대 약 1프레임의 추가 지연이 발생할 수 있다.
 - DWELL 시간과 CurrentStatus 점유는 confirmed zone 상태를 기준으로 한다.
 - 기본 임계값은 생성자 인자로 조정 가능하며 실영상 전후 비교 후 재튜닝한다.
+
+---
+
+## ADR-020: Track ID 안정화 범위와 잔존 오탐 대응 방향
+
+**Date**: 2026-07-20
+**Status**: Accepted
+
+### Context
+
+동결한 낙상 판정 로직·cause attribution 자체는 바꾸지 않는다는
+전제 아래, ByteTrack/PoseTracker의 ReID 부재로 Track ID가 바뀌는 경우의
+견고성을 보강했다(Candidate Handoff, Cooldown Handoff). 상세 설계와 수치는
+`docs/fall_evaluation.md`의 Track ID 안정화 절에 기록한다. 안정화 이후
+Subject 7~8 진단에 남은 오탐 4건(S7_kneel, S7_pick_up_object, S7_sit_down,
+S8_sit_down)은 전부 `confirm_path=model`이라, temporal vote 강화나 약한
+motion 게이트로 추가 필터링할지 결정이 필요했다.
+
+### Decision
+
+규칙 기반 게이트(temporal vote 확장, aspect_ratio/속도 하한, 최근
+bbox/Pose 보조 근거 요구 등)는 **구현하지 않는다** — 기본 비활성 실험
+옵션으로도 추가하지 않는다. 대신 다음을 채택한다.
+
+- 현재 Cooldown Handoff까지의 설정(`configs/fall_detection.json`)을
+  기준선으로 동결한다.
+- 잔존 오탐 대응은 Subject 7~8 진단 데이터의 no_fall 오분류를
+  hard-negative로 명시해 재학습하거나, Phase 4의 경량 temporal classifier로
+  전환하는 쪽으로 진행한다. Subject 9~10 holdout은 재학습에 사용하지 않는다.
+- Validation 디렉터리(Subject 7~8)는 이 진단 과정에서 직접 보고 규칙을
+  설계·검증하는 데 이미 쓰였으므로, 이 시점부터 "보지 않은 최종 검증
+  데이터"가 아니라 tuning/diagnostic 데이터로 취급한다. 이후 최종 성능
+  평가는 Subject 9~10(holdout) 또는 별도 외부 데이터로 한다.
+
+### Reason
+
+- 이미 `model_vote_window_sec` 기반 bounded temporal voting을 쓰고
+  있고, 오탐 4건 모두 `model="fall"` 연속 구간이 5~9프레임(0.25~0.45초)
+  으로 짧게 흩어진 패턴이 아니다 — voting을 더 엄격하게 해도 걸러지지
+  않는다.
+- 캐시 데이터로 직접 검증한 결과, 진짜 model-only TP(S8_fall_forward,
+  `aspect_ratio` 0.34~0.4)와 오탐(S7_sit_down, `aspect_ratio`
+  0.33~0.41)의 aspect_ratio·속도가 사실상 겹친다. 최근 bbox/Pose 보조
+  근거를 추가로 요구하는 규칙은 Subject 7~8 FAR를 0/min까지 낮추지만
+  Development의 `S4_fall_sitting` TP(강한 동적 근거 없는 model-only
+  케이스)를 함께 잃어 Development Recall이 83.3%→76.7%로 떨어진다 —
+  오탐 제거가 아니라 Precision-Recall 교환이다.
+- 즉 잔존 문제는 임계값이 부정확한 게 아니라, 보조 모델이 "앉기·무릎
+  꿇기·줍기"와 "낙상"을 bbox/Pose 수준의 정적·동적 특징만으로는 의미적으로
+  구분하지 못하는 것이다 — 얕은 기하학적 규칙을 더 얹는 방향으로는 원리상
+  한계가 있다.
+
+### Alternatives
+
+- **약한 motion/aspect_ratio 게이트 채택**: 구현은 간단하지만 위 근거대로
+  실측 TP 손실이 확인됐다. 기각.
+- **temporal vote 창/K-of-N 강화**: 오탐이 짧게 흩어진 패턴이 아니므로
+  효과가 제한적일 것으로 판단해 기각.
+- **model-only candidate 진입 전면 차단**: Recall 손실이 더 크다(model-only
+  경로가 복구하는 timely TP를 함께 잃어 기각).
+
+### Consequences
+
+- Cooldown Handoff 이후 설정이 이 시점의 동결 기준선이다 — 오탐 4건은
+  알려진 한계로 남는다.
+- 다음 정확도 개선은 코드 규칙이 아니라 데이터(hard-negative 재학습) 또는
+  모델 아키텍처(Phase 4 temporal classifier) 방향이다.
+- Subject 9~10 holdout 평가 전, Subject 7~8 기반 수치를 "최종 성능"으로
+  보고하지 않도록 문서·리포트에서 주의가 필요하다.
 - ReID 기반 Track 재연결과 공간 buffer 튜닝은 별도 후속 작업이다.

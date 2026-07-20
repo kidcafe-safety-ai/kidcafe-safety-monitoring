@@ -1,7 +1,7 @@
 # Phase 3 FALL_SUSPECT 평가 기록
 
-`feature/fall-detector` (PR2) 낙상 감지 코어의 실측 평가 기록. 데이터·설정·결과를
-버전과 함께 남겨, 나중에 같은 조건을 재현하거나 회귀를 확인할 수 있게 한다.
+낙상 감지 코어의 실측 평가 기록이다. 데이터·설정·결과를 버전과 함께 남겨
+같은 조건을 재현하고 회귀를 확인할 수 있게 한다.
 
 ## 1. 데이터셋
 
@@ -9,29 +9,33 @@
 - 상세 라이선스·체크섬: [docs/data_sources.md](data_sources.md)
 - 분할 (docs/data_sources.md, configs/caucafall_v5_split.json과 동일):
   - Development (Subject 1~6): 60개 영상 — fall 30, no_fall 30
-  - Validation (Subject 7~8): 20개 영상 — fall 10, no_fall 10
-  - Holdout (Subject 9~10): 미사용 (PR4 최종 평가 전까지 접근 금지)
+  - 진단·튜닝 (Subject 7~8, 디렉터리명 `validation`): 20개 영상 — fall 10, no_fall 10
+  - Holdout (Subject 9~10): 최종 평가 전까지 미사용
 
 ## 2. Annotation 생성·검수
 
-- 생성: `scripts/generate_caucafall_annotations.py`가 CAUCAFall이 이미 제공하는
-  프레임별 YOLO 라벨(`class 0=nofall, 1=fall`)에서 class가 0→1로 바뀌는 지점을
-  `fall_start_frame` 후보로 자동 추출한다. txt 파일명 숫자는 `subject_id*100000
-  + 순번` 형식이라 그대로 frame 번호로 쓸 수 없어 정렬 순서(0-base)를 사용했고,
-  txt 개수가 실제 AVI 디코딩 프레임 수보다 많은(관측상 대부분 +1, 최대 +23인
-  예외 1건 `S6_fall_backwards` 포함) 경우 초과분은 뒤에서 제외하고 경고로
-  남겼다 (`{split}_generation_report.csv`).
-- 검수: `scripts/review_caucafall_annotations.py`로 AVI를 순차 디코딩해 사람이
-  직접 확인했다. fall 40개(Development 30 + Validation 10) 전부 프레임 단위로
-  검수했고, no_fall 40개는 실제 프레임 범위의 class가 전부 0인지 자동 검증
-  (`--auto-verify-no-fall`) 후 표본을 사람이 확인했다.
-- 감지 지연 기준: `impact_frame`/`lying_start_frame`은 이번 PR2에서 비워두고
-  `fall_start_frame` 기준으로 지연을 측정하는 간소화 정책을 채택했다 (40개 영상
-  전부에 `impact_frame`을 입력하는 상세 평가는 하지 않음).
-- 검수 상태: Development 59개 `reviewed` + 1개 `needs_review`
-  (`S6_fall_backwards`, 평가 제외), Validation 20개 `reviewed`.
+초기 V1 annotation은 `scripts/generate_caucafall_annotations.py`가 프레임별
+YOLO 라벨(`class 0=nofall, 1=fall`)의 0→1 전환을 `fall_start_frame`으로
+사용했다. 이 값은 데이터셋 분류 라벨의 시작점이지 실제 동작 onset과 항상
+같지는 않으므로, V1 결과는 역사적 기준선으로만 유지한다.
 
-## 3. 상태머신 설계 변경 (Tune 1)
+현재 평가는 `scripts/generate_caucafall_annotations_v2.py`가 만든 V2 CSV를
+사용한다. 원본 0→1 전환은 `dataset_fall_label_frame`에 보존하고, 사람이 AVI를
+순차 디코딩하며 아래 세 시점을 별도로 기록했다.
+
+- `fall_start_frame`: 균형을 잃고 낙상이 시작된 첫 프레임
+- `impact_frame`: 신체가 바닥과 충돌한 첫 프레임
+- `lying_start_frame`: 넘어진 자세가 안정적으로 유지되기 시작한 프레임
+
+Development 60개와 Subject 7~8 20개, 총 80개 행을 모두 `reviewed`로 확정했고
+구조 검증을 통과했다. no_fall 40개는 실제 AVI 프레임 범위의 class가 모두 0인지
+자동 검증한 뒤 표본을 사람이 확인했다. 현재 공식 기준선은
+`development_annotations_v2.csv`와 `validation_annotations_v2.csv`를 사용한다.
+
+txt 파일명 숫자는 실제 frame 번호가 아니므로 정렬 순서(0-base)를 사용한다.
+txt가 AVI 프레임보다 많은 경우 초과분을 뒤에서 제외하고 생성 리포트에 남긴다.
+
+## 3. 초기 V1 상태머신 설계 변경 (Tune 1)
 
 최초 구현은 "하강 속도 / 높이 수축률 / 수평 자세" 3개 근거 중 2개 이상이 **같은
 프레임에** 동시에 있어야 candidate에 진입했다. Subject 1 Fall backwards로
@@ -44,7 +48,7 @@
 사용하도록 시간적으로 분리했다. `_is_recovered()`도 이에 맞춰 유지한다
 (`src/safety/fall_detector.py` 모듈 docstring 참고).
 
-## 4. Development 평가 결과
+## 4. 초기 V1 Development 평가 결과
 
 동결된 설정: [configs/fall_detection.json](../configs/fall_detection.json)
 
@@ -227,7 +231,7 @@ cooldown을 승계해 `FALL_SUSPECT`를 억제하는 false negative 위험이 �
 작업으로 남긴다. Development에서는 Tune 13에서 중복 Event가 0건으로 줄었고,
 다른 위치 Track의 독립 감지와 만료 tombstone 정리만 단위 테스트로 확인했다.
 
-## 6. Validation (Subject 7~8)
+## 6. 초기 V1 Validation (Subject 7~8)
 
 Tune 13 설정과 `fall_detector_v1.pt`를 동결한 뒤 Subject 7~8 20개 영상에서
 한 번 실행했다. 이 결과를 확인한 뒤에는 임계값·모델을 다시 조정하지 않았다.
@@ -247,18 +251,18 @@ Event를 막은 사례를 포함한다. no-fall 영상의 false alarm은
 `S7_sit_down`에서 2건 발생했고, `S8_fall_backwards`는 Event가 2건 발생했다.
 
 따라서 Development에서의 목표 달성만으로 운영 사용 가능하다고 판단하지 않는다.
-이번 PR에서는 개발/검증 분리 원칙을 지켜 Validation 결과를 보고 재튜닝하지
-않았고, `--fall-detection-enabled`의 기본값을 `false`로 유지한다. 실제
+초기 평가에서는 개발/검증 분리 원칙을 지켜 이 결과를 보고 재튜닝하지 않았고,
+`--fall-detection-enabled`의 기본값을 `false`로 유지했다. 실제
 키즈카페/IP 카메라 hard-negative 데이터와 함께 오탐을 줄이는 후속 실험이
 필요하다.
 
 ## 7. Subject 9~10 사용 확인
 
-Subject 9~10 holdout은 로컬 원본 데이터에 존재하더라도 이번 PR2의 학습,
+Subject 9~10 holdout은 로컬 원본 데이터에 존재하더라도 학습,
 체크포인트 선택, 임계값 튜닝, Development/Validation 평가에 사용하지 않았다.
 `generate_caucafall_annotations.py`와 `evaluate_fall.py`는 holdout split을 코드
 수준에서 차단한다(`guard_holdout`, `_contains_holdout_segment`). Holdout 평가는
-PR4 최종 평가 전까지 보류한다.
+설정 동결 후 최종 평가까지 보류한다.
 
 ## 8. Fine-tuning 및 파이프라인 통합
 
@@ -276,8 +280,8 @@ CAUCAFall의 프레임별 `nofall`/`fall` bbox 라벨로 `yolo26n.pt`를 2-class
 |---|---|
 | 1~5 | fine-tuning 학습 |
 | 6 | 내부 검증(val), 모델 선택·early stopping |
-| 7~8 | 모델·설정 동결 후 Event-level Validation 1회 |
-| 9~10 | PR4 Holdout, 접근 금지 |
+| 7~8 | 초기 Event-level Validation, 이후 진단·튜닝 데이터 |
+| 9~10 | 최종 Holdout, 접근 금지 |
 
 `best.pt`는 Subject 1~6 전체로 재학습하지 않고, Subject 6 internal validation
 기준으로 선택된 체크포인트를 그대로 사용했다. 학습 데이터 준비에서는 손상된
@@ -356,7 +360,7 @@ confirm 또는 기존 bbox/pose confirm을 추가로 통과해야 한다.
 만료된 tombstone은 매 프레임 정리한다. Tune 12의 중복 Event 2건은 Tune 13에서
 0건으로 감소했고 Recall, false alarm, 지연값은 유지됐다.
 
-### 8.5 Development 동결 설정과 해석
+### 8.5 초기 Development 동결 설정과 해석
 
 Development 최종 평가는 아래 설정을 사용한다.
 
@@ -369,10 +373,10 @@ model_confirm_sec = 0.2
 cooldown_inherit_iou_threshold = 0.3
 ```
 
-이 값은 Subject 1~6 Development에서 고정한 값이며, Subject 7~8 Validation 이후
-변경하지 않았다. Development 성능은 목표를 만족했지만 Validation false alarm이
-목표를 크게 넘었으므로, 현재 모델은 실시간 PoC의 선택적 기능이지 운영 환경에서
-기본으로 켜는 기능은 아니다.
+이 값은 초기 V1 실험에서 Subject 1~6 Development로 고정했고 첫 Subject 7~8
+평가 뒤에는 변경하지 않았다. 이후 Annotation V2와 Track handoff 안정화 결과는
+10절에 별도로 기록한다. 오탐 목표를 충족하지 못했으므로 현재 모델은 실시간
+PoC의 선택적 기능이지 운영 환경에서 기본으로 켜는 기능은 아니다.
 
 ### 8.6 `main.py` 통합
 
@@ -388,7 +392,7 @@ dispatcher 경로를 재사용한다. CAUCAFall `S1_fall_backwards` 파일을
 React Dashboard 이벤트 화면까지 전달되는 것을 확인했다. 실행 중 Live Frame도
 Dashboard에 표시되는 것을 확인했다. 이는 파일 입력 기준의 연결 검증이며,
 장시간 실행, IP 카메라 hard-negative 평가, Holdout 및 외부 데이터 평가는 후속
-통합/PR4 범위로 남긴다.
+범위로 남긴다.
 
 같은 영상·720x480·MPS·FastAPI·Live Frame 조건에서 `--fall-detection-enabled`만
 제외한 기본 경로(`yolo26n.pt` + ByteTracker)도 한 번 실행했다. 워밍업 이후
@@ -398,7 +402,7 @@ progress 출력(frame 31/61/91/121)의 단순 평균은 기본 경로 12.5 FPS, 
 바뀌는 실제 opt-in 기능 전체의 비교다. 이 값은 장시간 성능 벤치마크나 IP 카메라
 성능을 대표하지 않으며, 장시간/IP 카메라 FPS·latency 평가는 후속 통합에서 측정한다.
 
-## 9. PR3: `FALL_SUSPECT.cause` 외부 접촉 원인 후보 추정
+## 9. `FALL_SUSPECT.cause` 외부 접촉 원인 후보 추정
 
 ### 9.1 설계 요지
 
@@ -407,7 +411,7 @@ progress 출력(frame 31/61/91/121)의 단순 평균은 기본 경로 12.5 FPS, 
 하지 않으며, `FallDetector`가 낙상 판정에 쓰는 `MultiTrackHistory`와는
 완전히 독립된 자체 이력(Track별 foot_point·bbox 높이·시각)을 갖는다 —
 attribution에 필요한 lookback을 위해 낙상 판정용 이력 window를 늘리면
-PR2에서 이미 튜닝·동결한 속도/변화율 계산과 Development/Validation 수치가
+이미 튜닝·동결한 속도/변화율 계산과 평가 수치가
 조용히 바뀔 위험이 있었기 때문이다(`docs/decisions.md` ADR-016 참고).
 
 낙상 시작 시각은 confirm 시각이 아니라 `FALLING_CANDIDATE` 진입 시각을
@@ -448,7 +452,7 @@ confirm돼도 lookback 구간 이력이 이미 잘려나가지 않게 하기 위
 
 ### 9.3 검증 데이터 정책
 
-PR3 구현 자체에는 외부 데이터셋이 필요 없었다 — 정식 자동 테스트는
+구현 자체에는 외부 데이터셋이 필요 없었다. 정식 자동 테스트는
 `tests/test_fall_cause_attributor.py`(후보 탐색·점수 계산·tie-break·
 독립 이력 유지 범위를 합성 시나리오로 검증)와 `tests/test_fall_detector.py`
 ·`tests/test_fall_pipeline_module.py`(candidate 진입 시각 캡처, 실제 낙상
@@ -457,8 +461,8 @@ confirm 시 cause 연결까지 mock 없이 end-to-end로 검증)로 커버했다
 CAUCAFall은 주로 단일 인원 낙상 데이터라 원인 후보 정확도를 증명하는
 데이터가 아니다. 로컬 `data/datasets/mpfdd`(공개 샘플 28개 영상, 전체
 MPFDD 220개 중 일부)도 여러 사람이 같은 장면에 있는 낙상 영상은 있지만
-접촉으로 낙상했다는 원인 라벨은 제공하지 않는다 — 그래서 PR3에서는
-`cause` 양성 정확도를 이 데이터로 주장하지 않는다. PR3에서 실제로 한 것은
+접촉으로 낙상했다는 원인 라벨은 제공하지 않는다. 따라서
+`cause` 양성 정확도를 이 데이터로 주장하지 않는다. 현재 확인한 것은
 28개 공개 샘플의 파일명·설명을 검토해 hard-negative(원인 없는 다인 근접)
 후보 데이터로 쓸 수 있다는 것만 확인한 수준이다 — `false_cause_rate` 측정
 등 실제 hard-negative 실행은 아직 하지 않았다. 실제 접촉 원인 후보
@@ -470,9 +474,169 @@ Phase 4에서 접촉 유발 영상 또는 권한·라벨이 명확한 외부 데
 - 2D 화면상 근접은 실제 접촉을 보장하지 않는다 — `cause`는 "외부 접촉
   의심 후보"이지 충돌·인과관계를 확정하는 기능이 아니다.
 - ReID가 없어 Track ID가 낙상 직전 바뀌면(재획득) 후보 연속성이 끊길 수
-  있다 — 그 Track의 이력 시작 시각이 `fall_start_sec` 이후라면 §9.1의
+  있다 — 그 Track의 이력 시작 시각이 `fall_start_sec` 이후라면 설계 요지의
   "낙상 시작 뒤에 처음 등장한 Track 제외" 규칙에 걸려 후보에서 빠진다.
 - 다중 인원이 근접한 상황에서 false cause(원인이 없는데 후보가 잡히는
   경우) 가능성이 있다 — 정량 평가는 Phase 4로 남겨뒀다.
 - `distance_threshold`·`closing_speed_threshold`·`score_threshold` 등은
   튜닝된 값이 아니라 초기 PoC 기본값이다.
+
+## 10. Track ID 안정화와 잔존 오탐 진단
+
+동결한 상태머신·cause attribution 로직 자체는 바꾸지 않고,
+ByteTrack/PoseTracker의 ReID 부재로 Track ID가 바뀌는 경우에 대한 견고성만
+보강한다. Annotation V2(2절의 onset/impact/lying-start 재라벨링), 평가
+프로토콜 V2(`timely_recall` 주 지표, `scripts/evaluate_fall.py`의
+`event_diagnostics` — Event별 `track_id`/`confirm_path`/
+`candidate_entry_reason`을 label·timely 구간과 무관하게 기록), Signal
+Cache(`scripts/cache_fall_signals.py` + `scripts/evaluate_fall_from_cache.py`,
+YOLO 추론과 상태머신 평가를 분리해 설정을 바꿔가며 반복 평가할 때 재추론을
+피함) 위에서 구현·검증했다.
+
+### 10.1 Candidate Handoff
+
+confirm 이전(`FALLING_CANDIDATE`) 단계에서 Track을 놓치면 새 Track은
+NORMAL부터 다시 시작해 최소 지속시간을 다시 채우지 못해 Event를 놓칠 수
+있다. Track이 사라진 바로 그 프레임에 tombstone(`_CandidateTombstone`,
+`src/safety/fall_detector.py`)을 등록하고, IoU·정규화된 foot_point 거리를
+모두 만족하는 새 Track에 `candidate_since_sec`·`max_descent_score`를
+승계한다(정적 지속시간 필드는 승계하지 않아 즉시 확정을 막는다). 승계
+과정에서 발견·수정한 실제 버그:
+
+- 승계 성공 후 원본 `_TrackState`를 지우지 않으면 다음 프레임에
+  tombstone이 재생성돼 다른 Track이 같은 candidate를 중복 승계할 수 있다.
+- `1 → 2 → 1`처럼 alias가 원래 track_id로 돌아오는 경우, 전체 alias를
+  무조건 삭제하면 방금 승계받은 현재 Track의 상태까지 지워진다 —
+  `source_track_id`(tombstone을 만든 바로 그 소실 시점 id)만 재등장
+  취소 대상으로 삼고, 그 외 alias는 정상 승계 경로로 처리해야 한다.
+- tombstone 재등장 취소 로직이 "source_track_id가 재등장하면 자기 상태가
+  살아있다"고 무조건 가정했는데, `track_grace_sec`이
+  `candidate_handoff_ttl_sec`보다 짧은(둘 다 기본값 사용 시 0.5s <
+  1.0s) 설정에서는 그 가정이 깨진다 — 소실 중 자기 상태가 이미
+  `_forget_lost_tracks()`로 지워진 뒤 재등장하면 "취소"가 아니라 handoff로
+  재구성해야 한다.
+
+### 10.2 Cause attribution 호환(victim_track_id_aliases)
+
+`FallCauseAttributor`는 `FallDetector`와 완전히 독립된 자체 이력을 쓴다
+(9절의 설계 요지 참고). Candidate Handoff로 피해자의 track_id가 승계 전후로 바뀌면, 확정
+시 최종 track_id만 넘길 경우 lookback 구간(`fall_start_sec` 기준 최대
+`lookback_sec` 이전)이 handoff 이전 시각까지 걸쳐 있어도 그 구간의 victim
+샘플을 못 찾아 근거가 있어도 잘못 `cause=None`이 될 수 있다.
+`_confirm_fall()`이 `state.origin_track_ids`를 리셋 전에 캡처해
+`attribute()`의 `victim_track_id_aliases`로 함께 넘기고,
+`FallCauseAttributor`는 그 alias들의 이력도 victim 샘플에 병합하고
+후보(가해자 의심 Track) 목록에서는 제외한다(자기 자신의 예전 track_id를
+스스로의 낙상 원인으로 지목하는 자기 참조 방지). 기존 호출은 새 파라미터의
+기본값(빈 집합)으로 완전히 하위 호환된다.
+
+### 10.3 Cooldown Handoff
+
+confirm 이후(`COOLDOWN`) 단계에서도 같은 문제가 발생한다. 기존 공간 기반
+cooldown 승계(8.4절, `_try_inherit_cooldown`)는 confirm 시점 bbox를 IoU로만
+비교하고, tombstone도 `cooldown_until_sec`이 지나면 함께 만료된다. 두
+가지 실패 모드를 Subject 7~8 진단(S7_fall_right, S8_fall_backwards)에서
+확인했다.
+
+- **S7_fall_right**(같은 track_id 재확정): Track이 소실된 채로
+  `cooldown_until_sec`을 넘기면 `_forget_lost_tracks()`가 COOLDOWN 예외
+  보존을 거둬 `_TrackState`를 지운다. 그 뒤 같은 track_id가 재등장하면
+  "회복했다"는 근거 없이 새 NORMAL부터 시작해 재확정된다.
+- **S8_fall_backwards**(다른 track_id로 재확정): 재검출 시 자세가 조금
+  바뀌어 confirm 시점 bbox 기준 IoU(0.2466)가
+  `cooldown_inherit_iou_threshold`(0.3)에 못 미친다.
+
+Candidate Handoff와 같은 패턴으로 별도 tombstone(`_CooldownHandoffTombstone`)
+을 두되, 두 지점을 다르게 설계했다.
+
+- 만료를 `cooldown_until_sec`이 아니라 **`max(cooldown_until_sec,
+  last_seen_sec + cooldown_handoff_ttl_sec)`**로 판정한다. TTL만 쓰면
+  cooldown이 아직 한참 남았는데도 먼저 만료될 수 있다 — S8_fall_backwards의
+  실제 소실 간격은 3.1초(마지막 관측 frame95 → 재등장 두 번째 관측
+  frame157, `FallFeatureExtractor`가 history 샘플 2개를 요구하므로 첫
+  관측이 아니라 두 번째 관측 시점이 실제 판정 프레임이다)로 최초 TTL
+  기본값(2.0초)보다 길었지만, 그 시점 `cooldown_until_sec`(confirm 시점
+  기준 아직 안 지남)이 하한이 되어 커버됐다. TTL 자체(기본 3.5초)는
+  cooldown이 짧게 설정된 경우를 위한 추가 여유분이다.
+- IoU(`cooldown_handoff_iou_threshold`, 0.2 — 기존 0.3보다 낮음)와
+  정규화된 foot_point 거리(`cooldown_handoff_max_foot_distance_norm`,
+  0.5)를 Candidate Handoff와 동일하게 **AND**로 결합한다. OR 조건은 근처에
+  선 다른 Track에도 foot 거리만으로 COOLDOWN을 잘못 승계할 수 있다.
+- 소실 직전 마지막 관측 bbox(`last_bbox`) 기준으로 비교하면 confirm 시점
+  bbox보다 정확하다 — S8_fall_backwards 실측 기준 last_bbox 비교 시 IoU
+  0.68, foot 거리 정규화 0.069로 여유 있게 통과한다(confirm 시점 bbox
+  기준 0.2466/0.3763보다 훨씬 낫다).
+- Candidate Handoff와 동일한 재등장-취소 가정 오류(source_track_id
+  재등장 시 자기 상태가 살아있다는 가정이, COOLDOWN 예외 보존 기간이 지난
+  뒤에는 깨짐)가 여기서도 있어 함께 고쳤다(Candidate Handoff의 세 번째 항목과 동일한
+  버그).
+
+**추가로 발견한 별개 버그(S6_fall_backwards)**: `_advance_cooldown()`이
+`_advance_candidate()`의 회복 판정(`_is_recovered` + `recovery_duration_sec`
++ `recovery_confirm_sec` 지속 요구)과 달리, cooldown 만료 후 단일 프레임만
+"쓰러지지 않음"으로 보여도(모델이 한 프레임만 `"unknown"`을 반환한 경우
+포함) 즉시 NORMAL로 전이했다. 그 프레임의 실제 `aspect_ratio`는 1.087로
+`normal_aspect_ratio_threshold`(0.9)에도 못 미쳐 실제 회복이 아니었다 —
+곧바로 모델이 다시 fall을 반환하며 재확정돼 중복 Event가 생겼다.
+`_advance_cooldown()`도 동일한 `_is_recovered`/`recovery_duration_sec`
+로직을 쓰도록 통일했다.
+
+### 10.4 V2 캐시 재평가 결과 (`configs/fall_detection.json` 동결)
+
+| 지표 | 안정화 중간 기준 | 현재 동결 기준 |
+|---|---:|---:|
+| Development Recall | 83.3% (25/30) | 83.3% (25/30) |
+| Development timely Recall | 63.3% (19/30) | 66.7% (20/30) |
+| Development 중복 Event | 1건(S6_fall_backwards) | 0건 |
+| Subject 7~8 Recall | 100% (10/10) | 100% (10/10) |
+| Subject 7~8 timely Recall | 90% (9/10) | 90% (9/10) |
+| Subject 7~8 FAR | 2.92/min | 2.34/min |
+| Subject 7~8 중복 Event | 2건(S7_fall_right, S8_fall_backwards) | 0건 |
+
+Development timely Recall 상승(S5_fall_sitting: late frame103 →
+timely frame82, `candidate_entry_reason="handoff"`)은 Cooldown Handoff가
+아니라 Candidate Handoff의 재등장-취소 버그 수정이 원인이다 — Track이
+candidate 진행 중 한 번 소실됐다가 같은 track_id로 재등장했을 때, 예전엔
+tombstone이 잘못 취소돼 진행 상황이 사라지고 NORMAL부터 다시 쌓여야 했던
+것이 정상 복구됐다. Subject 7~8 FAR 개선(S7_sit_down 오탐 2건 중 1건의
+재확정 억제)은 Cooldown Handoff 자체의 효과다.
+
+### 10.5 잔존 오탐 4건과 규칙 기반 게이트를 보류한 이유
+
+Cooldown Handoff 이후 Subject 7~8에 남은 오탐은 전부 no_fall 영상 4개
+(S7_kneel, S7_pick_up_object, S7_sit_down, S8_sit_down)에서 각 1건씩,
+모두 `candidate_entry_reason="model"` · `confirm_path="model"`이다.
+temporal vote(K-of-N + max-gap) 확장과 약한 motion 게이트(aspect_ratio
+하한, 속도 하한)를 캐시 데이터로 직접 검증했으나 둘 다 채택하지 않았다.
+
+- 이미 `model_vote_window_sec`(0.5초) 기반 bounded temporal voting을
+  쓰고 있고, 4건 모두 `model="fall"` 연속 구간이 5~9프레임(0.25~0.45초)
+  으로 짧게 흩어진 패턴이 아니다 — 모델이 해당 동작(무릎 꿇기·줍기·앉기)
+  을 한동안 자신 있게 "fall"로 오분류한 것이라, temporal vote를 더
+  엄격하게 만들어도 걸러지지 않는다.
+- 진짜 model-only TP인 S8_fall_forward의 `aspect_ratio`(0.34~0.4)가
+  오탐인 S7_sit_down의 `aspect_ratio`(0.33~0.41)와 사실상 구분되지
+  않는다. 속도도 마찬가지로 겹친다(일부 정상 앉기 동작이 실제 낙상보다
+  순간 속도가 더 크다). 단순 aspect_ratio/속도 하한 게이트는 오탐 제거가
+  아니라 진짜 TP를 잃는 교환에 가깝다.
+- 최근 bbox/Pose 보조 근거(예: 최근 0.5초 Pose 값 0.2 이상)를 model→model
+  confirm에 추가로 요구하는 규칙을 캐시 기반 오프라인 분석으로 비교한 결과, Subject 7~8
+  FAR는 0/min까지 떨어지지만 Development의 `S4_fall_sitting`
+  TP(`aspect_ratio` 약 0.49, Pose 약 -0.31, 강한 동적 근거도 없음)를
+  함께 잃는다(Development Recall 83.3%→76.7%, timely Recall
+  66.7%→63.3%). 오탐 제거가 아니라 Precision-Recall 교환이다.
+
+즉 잔존 문제는 임계값이 부정확한 게 아니라, 보조 fine-tuned 모델이
+"앉기·무릎 꿇기·줍기"와 "낙상"을 bbox/Pose 수준의 정적·동적 특징만으로는
+의미적으로 구분하지 못하는 것이다. 규칙을 더 얹기보다 Subject 7~8의
+no_fall 오분류를 hard-negative로 명시해 재학습하거나,
+Phase 4의 경량 temporal classifier로 전환하는 쪽이 맞다 — 이 결정에 따라
+규칙 기반 게이트는 구현하지 않았다(기본 비활성 실험 옵션으로도 추가하지
+않기로 함, 불필요한 표면적을 늘리지 않기 위함).
+
+**중요한 방법론적 주의**: 이 진단 과정에서 S7·S8(Validation) 영상을 직접
+보고 규칙을 설계·검증했다 — 즉 이 시점부터 `validation/` split은 더 이상
+"보지 않은 최종 검증 데이터"가 아니라 **tuning/diagnostic 데이터**로
+전환됐다. Cooldown Handoff까지의 설정을 최종 동결한 뒤에는 Subject 9~10
+(holdout) 또는 별도 외부 데이터로 최종 평가해야 하며, Subject 7~8 수치를
+그대로 "최종 성능"으로 보고하면 안 된다.
