@@ -216,6 +216,10 @@ def main() -> None:
     force_all = args.force or manifest_changed
 
     cache_dir.mkdir(parents=True, exist_ok=True)
+    if force_all:
+        # 중간 실패 후 일부만 갱신된 캐시를 완전한 결과로 오인하지 않도록
+        # 전체 재생성을 시작하기 전에 기존 manifest를 무효화한다.
+        cache.manifest_path_for(cache_dir).unlink(missing_ok=True)
     cached_count = 0
     skipped_count = 0
     per_video_fps: dict = {}

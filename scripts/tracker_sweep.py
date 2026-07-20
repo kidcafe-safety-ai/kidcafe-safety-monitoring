@@ -83,7 +83,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _subject_number(video_id: str) -> Optional[int]:
-    """"S7_fall_backwards" -> 7. 접두사가 S<숫자>_ 형식이 아니면 None."""
+    """S7_fall_backwards -> 7. 접두사가 S<숫자>_ 형식이 아니면 None."""
     if not video_id.startswith("S"):
         return None
     digits = ""

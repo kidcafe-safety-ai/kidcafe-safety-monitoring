@@ -56,7 +56,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--annotations", required=True, help="annotation CSV 경로")
     parser.add_argument("--cache-dir", required=True, help="scripts/cache_fall_signals.py 출력")
-    parser.add_argument("--split", default="", help="결과 JSON의 split 필드로만 기록됨")
+    parser.add_argument(
+        "--split",
+        default="",
+        help="캐시 manifest의 split과 대조·holdout 가드에도 쓰인다(결과 JSON에도 기록됨)",
+    )
     parser.add_argument("--config", default="configs/fall_detection.json")
     parser.add_argument("--early-tolerance-sec", type=float, default=0.2)
     parser.add_argument("--timely-window-sec", type=float, default=2.0)
