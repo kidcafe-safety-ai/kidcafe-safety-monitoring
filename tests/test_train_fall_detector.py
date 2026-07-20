@@ -71,6 +71,26 @@ class TestTrainingConfigFromFile:
         with pytest.raises(ValueError, match="nofall"):
             train.TrainingConfig.from_file(str(path))
 
+    @pytest.mark.parametrize("fold", ["a", "b"])
+    def test_committed_hard_negative_fold_changes_only_data_and_run_name(self, fold):
+        repo_root = Path(__file__).resolve().parent.parent
+        baseline = train.TrainingConfig.from_file(
+            str(repo_root / "configs" / "fall_training.json")
+        )
+        candidate = train.TrainingConfig.from_file(
+            str(repo_root / "configs" / f"fall_training_hn_fold_{fold}.json")
+        )
+
+        baseline_values = vars(baseline).copy()
+        candidate_values = vars(candidate).copy()
+        assert candidate_values.pop("data") == (
+            f"configs/fall_training_dataset_hn_fold_{fold}.yaml"
+        )
+        assert candidate_values.pop("name") == f"fall_detector_hn_fold_{fold}"
+        baseline_values.pop("data")
+        baseline_values.pop("name")
+        assert candidate_values == baseline_values
+
 
 class TestCollectSplitManifest:
     def test_lists_png_files_per_split(self, tmp_path):

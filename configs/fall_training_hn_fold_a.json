@@ -1,0 +1,13 @@
+{
+  "model": "yolo26n.pt",
+  "task": "detect",
+  "data": "configs/fall_training_dataset_hn_fold_a.yaml",
+  "classes": ["nofall", "fall"],
+  "imgsz": 640,
+  "epochs": 50,
+  "patience": 10,
+  "seed": 42,
+  "device": "",
+  "project": "outputs/fall_training/runs",
+  "name": "fall_detector_hn_fold_a"
+}

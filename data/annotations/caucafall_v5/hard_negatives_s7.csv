@@ -1,0 +1,4 @@
+video_id,subject,activity,relative_dir,expected_class,reason
+S7_kneel,7,Kneel,Subject.7/Kneel,nofall,false_alarm
+S7_pick_up_object,7,Pick up object,Subject.7/Pick up object,nofall,false_alarm
+S7_sit_down,7,Sit down,Subject.7/Sit down,nofall,false_alarm

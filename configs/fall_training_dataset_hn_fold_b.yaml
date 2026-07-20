@@ -1,0 +1,10 @@
+# Hard-negative Fold B: 기존 Subject 1~5 train에 Subject 8의 Kneel,
+# Pick up object, Sit down nofall 프레임만 보강한다. Internal validation은
+# Subject 6 그대로 유지하고, Event-level 교차 평가는 Subject 7에서 수행한다.
+path: outputs/fall_training/dataset_hn_fold_b
+train: images/train
+val: images/val
+
+names:
+  0: nofall
+  1: fall
