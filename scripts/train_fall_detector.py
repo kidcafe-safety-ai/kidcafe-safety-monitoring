@@ -1,7 +1,6 @@
 """configs/fall_training.json 기준으로 yolo26n.pt를 fall/nofall 2-class
 
-detection으로 fine-tuning한다 (자세한 내용은 docs/fall_evaluation.md 참고,
-`feature/fall-detector` PR2 안에서 이어지는 세 번째 커밋 단위).
+detection으로 fine-tuning한다 (자세한 내용은 docs/fall_evaluation.md 참고).
 
 처음부터 학습하지 않고 pretrained yolo26n.pt에서 transfer learning만 수행한다.
 학습 자체는 GPU가 필요해 Colab에서 실행하는 것을 전제로 하지만, 이 스크립트는

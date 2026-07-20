@@ -84,7 +84,7 @@ def load_split_subjects(path: str) -> Dict[str, List[int]]:
     if holdout_hit:
         raise ValueError(
             f"{path}에 holdout Subject {sorted(holdout_hit)}가 development/validation에 "
-            "포함되어 있습니다. Subject 9~10은 PR4 전까지 절대 사용할 수 없습니다."
+            "포함되어 있습니다. Subject 9~10은 최종 평가 전까지 사용할 수 없습니다."
         )
 
     overlap = set(split_subjects["development"]) & set(split_subjects["validation"])
