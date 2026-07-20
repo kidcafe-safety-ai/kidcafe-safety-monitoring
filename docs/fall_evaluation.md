@@ -640,3 +640,30 @@ Phase 4의 경량 temporal classifier로 전환하는 쪽이 맞다 — 이 결�
 전환됐다. Cooldown Handoff까지의 설정을 최종 동결한 뒤에는 Subject 9~10
 (holdout) 또는 별도 외부 데이터로 최종 평가해야 하며, Subject 7~8 수치를
 그대로 "최종 성능"으로 보고하면 안 된다.
+
+### 10.6 Hard-negative 재학습 실험 계약
+
+잔존 오탐 4건을 임계값 규칙으로 억제하지 않고 보조 detector의 nofall
+학습 데이터로 보강한다. 첫 실험은 기존 `yolo26n.pt`에서 동일한 설정
+(`imgsz=640`, 최대 50 epoch, patience 10, seed 42)으로 다시 시작하며,
+기존 실험과 달라지는 독립변수는 hard-negative 데이터뿐이다.
+
+| 구분 | train 프레임(nofall/fall) | internal val | 교차 Event 평가 |
+|---|---:|---|---|
+| 기존 기준선 | 9,115 (6,431/2,684) | S6 2,181 (1,425/756) | S7+S8 |
+| Fold A | 9,666 (6,982/2,684) | 기존 S6 그대로 | S8 |
+| Fold B | 9,852 (7,168/2,684) | 기존 S6 그대로 | S7 |
+
+Fold A는 S7 정상행동 3종을, Fold B는 S8 정상행동 3종을 train에만 추가한다.
+각 Fold가 보지 않은 반대 Subject에서 다음 조건을 모두 만족할 때만
+hard-negative 보강을 채택한다.
+
+- fall Recall과 timely Recall이 해당 Subject 기준선보다 낮아지지 않을 것
+- nofall false Event 수가 해당 Subject 기준선(S8 1건, S7 3건)보다 감소할 것
+- 중복 Event가 0건을 유지할 것
+- Subject 6 frame-level internal validation 결과와 추론 속도를 함께 기록할 것
+
+Fold 교차 실험은 데이터 방향을 선택하기 위한 tuning 절차다. 채택 후 S7+S8의
+동일 정상행동을 합친 최종 보조 모델을 한 번 학습하고, 그 모델·낙상 설정을
+동결한 뒤 Subject 9~10 holdout에서 최초이자 최종 평가를 수행한다. 새 모델은
+가중치와 detection 결과가 달라지므로 기존 signal cache를 재사용하지 않는다.

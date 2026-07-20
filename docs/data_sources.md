@@ -56,6 +56,26 @@ Subject 7~8은 초기 Validation 이후 오류 분석과 규칙 검증에 사용
 진단·튜닝 데이터로 취급한다. Subject 9~10(holdout)은 설정 동결 후 최종 평가
 전까지 사용하지 않는다.
 
+### Hard-negative 재학습 Fold
+
+잔존 오탐인 무릎 꿇기·물건 집기·앉기를 보조 detector의 nofall 학습 데이터로
+보강한다. 폴더 전체를 임의로 합치지 않고 아래 manifest에 명시된 활동만 쓰며,
+모든 YOLO 객체 라벨이 class 0인지 데이터 준비 단계에서 전수 검증한다.
+
+| Fold | base train | hard-negative train 보강 | internal val | 교차 Event 평가 |
+|---|---|---|---|---|
+| A | Subject 1~5 | Subject 7 정상행동 3종, 551프레임 | Subject 6 | Subject 8 |
+| B | Subject 1~5 | Subject 8 정상행동 3종, 737프레임 | Subject 6 | Subject 7 |
+
+- Fold A manifest: `data/annotations/caucafall_v5/hard_negatives_s7.csv`
+- Fold B manifest: `data/annotations/caucafall_v5/hard_negatives_s8.csv`
+- Subject 7의 3종은 실제 오탐 영상이고, Subject 8은 `sit_down`이 실제 오탐,
+  `kneel`·`pick_up_object`가 교차 일반화를 위한 대칭 hard-negative다.
+- `Subject.8/Pick up object/res800090.png`의 라벨은 원본에서
+  `res800090a.txt`로 제공된다. 데이터 준비 스크립트가 이 정확한 1:1 파일명
+  불일치만 복구하고 dataset manifest에 기록한다.
+- Subject 9~10은 이 단계에서도 학습·모델 선택·임계값 조정에 사용하지 않는다.
+
 ### 체크섬
 
 ```text
