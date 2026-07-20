@@ -34,8 +34,10 @@ export interface SafetyEvent {
   track_id: number;
   zone_id: string;
 
+  created_at?: string;
   event_label?: string;
   severity?: Severity;
+  zone_name?: string;
   zone_type?: ZoneType;
 
   event_confidence?: number | null;

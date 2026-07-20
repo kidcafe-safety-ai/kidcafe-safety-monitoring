@@ -92,6 +92,13 @@ export function getEventDisplayMeta(eventType: EventType | string): EventDisplay
   };
 }
 
+export function getEventSeverity(
+  eventType: EventType | string,
+  fallback?: Severity,
+) {
+  return getEventDisplayMeta(eventType).severity ?? fallback ?? null;
+}
+
 export function formatEventCause(cause: EventCause | null | undefined) {
   if (cause?.type === "NEARBY_TRACK") {
     return `외부 접촉 의심 · Track #${cause.track_id}`;
