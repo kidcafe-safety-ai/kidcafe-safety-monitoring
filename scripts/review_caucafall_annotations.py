@@ -58,10 +58,22 @@ _DEFAULT_MARGIN_FRAMES = 15
 
 # evaluate_fall._REQUIRED_COLUMNS는 컬럼 존재 여부만 확인하는 set이라 순서가
 # 보장되지 않는다. CSV에 쓸 때는 순서가 고정된 목록이 필요하므로 별도로 둔다.
-_CSV_COLUMNS = [
+_CSV_COLUMNS_V1 = [
     "video_id",
     "label",
     "video_path",
+    "fall_start_frame",
+    "impact_frame",
+    "lying_start_frame",
+    "review_status",
+]
+# V2는 CAUCAFall 원본 class 0->1 전환을 dataset_fall_label_frame으로
+# 보존하고, fall_start_frame에는 사람이 검수한 실제 동작 시작점을 기록한다.
+_CSV_COLUMNS_V2 = [
+    "video_id",
+    "label",
+    "video_path",
+    "dataset_fall_label_frame",
     "fall_start_frame",
     "impact_frame",
     "lying_start_frame",
@@ -95,6 +107,18 @@ def parse_args() -> argparse.Namespace:
             "GUI를 열지 않고 no_fall 행 전체를 검사한다. 실제 프레임 범위의 class가 "
             "전부 0이면 자동으로 reviewed 처리하고, 1이 섞여 있으면 needs_review로 "
             "표시한다 (사람이 표본 확인은 별도로 해야 함)."
+        ),
+    )
+    parser.add_argument(
+        "--annotation-version",
+        default="auto",
+        choices=["auto", "v1", "v2"],
+        help=(
+            "auto(기본값): CSV 헤더에 dataset_fall_label_frame이 있으면 v2, 없으면 v1로 "
+            "판별한다. v1/v2를 명시하면 실제 헤더와 다를 때 즉시 오류로 막는다 — "
+            "v2 CSV를 실수로 v1 규칙(느슨한 reviewed 검증)으로 여는 걸 방지하기 위함이다. "
+            "v2: fall 행을 reviewed 처리하려면 dataset_fall_label_frame/fall_start_frame/"
+            "impact_frame/lying_start_frame 네 값이 모두 있어야 한다."
         ),
     )
     return parser.parse_args()
@@ -161,12 +185,16 @@ def _count_video_frames(video_path: Path) -> int:
     return count
 
 
-def save_rows(rows: List[_AnnotationRow], csv_path: Path) -> None:
+def save_rows(rows: List[_AnnotationRow], csv_path: Path, columns: List[str]) -> None:
     """임시 파일에 먼저 쓰고, 성공하면 원자적으로 원본 CSV를 교체한다.
 
     중간에 오류가 나거나 프로세스가 죽어도 원본 CSV(이전 검수 결과 포함)는
     훼손되지 않는다. review_status 값 자체와 행 구조(evaluate_fall.py의
     validate_annotations)를 저장 직전에 검증한다.
+
+    columns: 실제로 쓸 컬럼 목록(_CSV_COLUMNS_V1 또는 _CSV_COLUMNS_V2). v1 CSV에
+        dataset_fall_label_frame을 억지로 추가하지 않기 위해 호출자(ReviewSession)가
+        로드 시점에 감지한 컬럼 집합을 그대로 넘긴다.
     """
     for row in rows:
         if row.review_status not in _VALID_REVIEW_STATUSES:
@@ -174,24 +202,38 @@ def save_rows(rows: List[_AnnotationRow], csv_path: Path) -> None:
                 f"{row.video_id}: review_status='{row.review_status}'는 "
                 f"{sorted(_VALID_REVIEW_STATUSES)} 중 하나여야 합니다."
             )
-    validate_annotations(rows)
+    # 검수 도중 자동 저장은 구조 검증만 한다 — v2 fall 행은 세 시점을 다
+    # 채우기 전까지 pending으로 반복 저장되므로 fall_start_frame 필수 조건을
+    # (evaluate_fall.py 채점 경로와 달리) 여기서는 강제하지 않는다. 다만
+    # review_status="reviewed"인 행은 require_fall_start_frame=False와 무관하게
+    # validate_annotations() 안에서 여전히 fall_start_frame을 요구한다.
+    validate_annotations(rows, require_fall_start_frame=False)
+
+    # mark_reviewed()를 거치지 않고 review_status="reviewed"가 된 행(CSV를 손으로
+    # 고치거나, 이미 불완전하게 reviewed였던 v1 파일을 v2 컬럼으로 열었다가 다시
+    # 저장하는 경우 등)도 v2 CSV라면 네 필드를 전부 갖추도록 강제한다.
+    if columns == _CSV_COLUMNS_V2:
+        for row in rows:
+            if row.review_status == "reviewed":
+                _validate_v2_three_timestamps(row)
+
+    row_values = {
+        "video_id": lambda row: row.video_id,
+        "label": lambda row: row.label,
+        "video_path": lambda row: row.video_path,
+        "dataset_fall_label_frame": lambda row: _empty_or(row.dataset_fall_label_frame),
+        "fall_start_frame": lambda row: _empty_or(row.fall_start_frame),
+        "impact_frame": lambda row: _empty_or(row.impact_frame),
+        "lying_start_frame": lambda row: _empty_or(row.lying_start_frame),
+        "review_status": lambda row: row.review_status,
+    }
 
     tmp_path = csv_path.with_suffix(csv_path.suffix + ".tmp")
     with open(tmp_path, "w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=_CSV_COLUMNS, lineterminator="\n")
+        writer = csv.DictWriter(file, fieldnames=columns, lineterminator="\n")
         writer.writeheader()
         for row in rows:
-            writer.writerow(
-                {
-                    "video_id": row.video_id,
-                    "label": row.label,
-                    "video_path": row.video_path,
-                    "fall_start_frame": _empty_or(row.fall_start_frame),
-                    "impact_frame": _empty_or(row.impact_frame),
-                    "lying_start_frame": _empty_or(row.lying_start_frame),
-                    "review_status": row.review_status,
-                }
-            )
+            writer.writerow({column: row_values[column](row) for column in columns})
     tmp_path.replace(csv_path)  # POSIX에서 원자적 rename
 
 
@@ -217,6 +259,31 @@ def _validate_frame_order(row: _AnnotationRow) -> None:
             )
 
 
+def _validate_v2_three_timestamps(row: _AnnotationRow) -> None:
+    """V2 fall 행은 원본 라벨 프레임과 세 동작 시점이 있어야 검수를 확정한다.
+
+    v1은 fall_start_frame 하나만 있어도 reviewed였지만, v2는 dataset_fall_label_frame과
+    분리된 실제 onset/impact/lying 세 시점을 전부 확보하는 게 목적이므로, 하나라도
+    비어 있으면 아직 검수가 끝나지 않은 것으로 본다.
+    """
+    if row.label != "fall":
+        return
+    missing = [
+        name
+        for name, value in (
+            ("dataset_fall_label_frame", row.dataset_fall_label_frame),
+            ("fall_start_frame", row.fall_start_frame),
+            ("impact_frame", row.impact_frame),
+            ("lying_start_frame", row.lying_start_frame),
+        )
+        if value is None
+    ]
+    if missing:
+        raise ValueError(
+            f"{row.video_id}: v2 검수는 {missing}이(가) 모두 있어야 reviewed로 표시할 수 있습니다."
+        )
+
+
 class ReviewSession:
     """CSV 로드/저장, 현재 영상·프레임 탐색, review_status 전이를 관리한다.
 
@@ -230,10 +297,28 @@ class ReviewSession:
         margin: int = _DEFAULT_MARGIN_FRAMES,
         video_id: Optional[str] = None,
         label: Optional[str] = None,
+        annotation_version: str = "auto",
     ) -> None:
         self.csv_path = Path(csv_path)
         self.videos_dir = Path(videos_dir)
         self.margin = margin
+        # 저장할 컬럼 목록은 실제 CSV 헤더로 정한다 — v1 CSV를 열었는데
+        # dataset_fall_label_frame 컬럼을 억지로 만들어내지 않기 위함이다.
+        with open(self.csv_path, "r", encoding="utf-8", newline="") as file:
+            header = next(csv.reader(file), [])
+        detected_version = "v2" if "dataset_fall_label_frame" in header else "v1"
+        self.csv_columns = _CSV_COLUMNS_V2 if detected_version == "v2" else _CSV_COLUMNS_V1
+
+        # 명시한 버전과 실제 헤더가 다르면 다른 검수 규칙으로 저장되지 않도록
+        # 즉시 거부한다. 기본 auto는 헤더에서 버전을 판별한다.
+        if annotation_version != "auto" and annotation_version != detected_version:
+            raise ValueError(
+                f"{csv_path}: --annotation-version={annotation_version}로 지정했지만 "
+                f"실제 CSV 헤더는 {detected_version}입니다."
+            )
+        self.annotation_version = (
+            detected_version if annotation_version == "auto" else annotation_version
+        )
         # self.all_rows가 저장 대상의 유일한 진실 공급원이다. --label로 필터링된
         # self.rows는 all_rows와 같은 객체를 참조하므로(얕은 필터), 검수 중 변경한
         # 내용은 그대로 반영되면서도 save()가 제외된 행을 지워버리지 않는다.
@@ -298,7 +383,12 @@ class ReviewSession:
         return max(0, min(frame_number, count - 1))
 
     def default_start_frame(self) -> int:
+        # v2는 fall_start_frame이 검수 전까지 비어 있으므로, 원본 class 전환
+        # 프레임(dataset_fall_label_frame)을 대신 앵커로 쓴다 — 실제 동작 시작은
+        # 이 값보다 앞설 가능성이 높으므로 margin만큼 물러선 지점에서 검수를 시작한다.
         candidate = self.current.fall_start_frame
+        if candidate is None:
+            candidate = self.current.dataset_fall_label_frame
         if candidate is None:
             return 0
         return self.clamp_frame(candidate - self.margin)
@@ -363,8 +453,13 @@ class ReviewSession:
         self.current.lying_start_frame = self.clamp_frame(frame_number)
 
     def mark_reviewed(self) -> None:
-        """fall_start_frame<=impact_frame<=lying_start_frame(입력된 값만) 순서를 검증한 뒤 전이한다."""
+        """fall_start_frame<=impact_frame<=lying_start_frame(입력된 값만) 순서를 검증한 뒤 전이한다.
+
+        V2는 원본 라벨 프레임과 세 동작 시점이 모두 입력됐는지도 검증한다.
+        """
         _validate_frame_order(self.current)
+        if self.annotation_version == "v2":
+            _validate_v2_three_timestamps(self.current)
         self.current.review_status = "reviewed"
 
     def mark_needs_review(self) -> None:
@@ -433,7 +528,7 @@ class ReviewSession:
 
     def save(self) -> None:
         """--label/--video-id로 필터링돼 있어도 항상 전체 행(all_rows)을 저장한다."""
-        save_rows(self.all_rows, self.csv_path)
+        save_rows(self.all_rows, self.csv_path, self.csv_columns)
 
     def close(self) -> None:
         if self._avi_cap is not None:
@@ -465,6 +560,7 @@ def run_interactive(session: ReviewSession) -> None:  # pragma: no cover
                         f"fall_start={row.fall_start_frame}  impact={row.impact_frame}  "
                         f"lying={row.lying_start_frame}"
                     ),
+                    f"dataset_fall_label={row.dataset_fall_label_frame} (원본 class 0->1, 참고용)",
                     "Space play/pause  A/D 10f  S/I/L set  R reviewed  U needs_review  "
                     "N/P video  Q save&quit",
                 ]
@@ -550,6 +646,7 @@ def main() -> None:
         margin=args.margin,
         video_id=args.video_id,
         label=args.label,
+        annotation_version=args.annotation_version,
     )
 
     if args.auto_verify_no_fall:
