@@ -464,6 +464,33 @@ Phase 3에서 낙상 감지 PoC와 함께 낙상 직전 외부 접촉 원인 후
 
 독립 `COLLISION_SUSPECT` 이벤트를 생성하지 않는다. 낙상 확정(`FALL_CONFIRMED`) 시 낙상 시작 직전 0.5~1초의 Track 기록을 소급 조회하여, 근접 근거가 충분한 경우 `FALL_SUSPECT.cause`에 원인 후보 Track 정보를 기록한다. 근거 부족 시 `cause=null`을 유지한다.
 
+### Implementation Status
+
+PR2에서는 `FALL_SUSPECT` 감지와 `cause=null` 전송까지만 구현했다. PR3에서
+`src/safety/fall_cause_attributor.py`(`FallCauseAttributor`)로 non-null
+`cause` 생성을 구현했다 — `FallDetector._confirm_fall()`이 confirm 시점에
+`FALLING_CANDIDATE` 진입 시각(onset proxy)을 기준으로
+`FallCauseAttributor.attribute()`를 호출하고, 근거가 충분하면
+`EventCause(type="NEARBY_TRACK", ...)`를, 부족하면 `cause=None`을 그대로
+반환한다.
+
+`FallCauseAttributor`는 `FallDetector`가 낙상 판정에 쓰는
+`MultiTrackHistory`와 완전히 분리된 자체 이력을 갖는다 — 두 컴포넌트를
+합치면 attribution에 필요한 더 긴 lookback을 위해 낙상 판정용 이력 window를
+늘려야 하는데, 그러면 PR2에서 이미 튜닝·동결한 속도/변화율 계산과
+Development/Validation 수치가 조용히 바뀔 위험이 있었다. 이 분리 결정으로
+그 위험을 피했다(자세한 근거는 `src/safety/fall_cause_attributor.py` 모듈
+docstring 참고).
+
+`FALL_SUSPECT` 감지 자체(임계값·모델·기본 비활성 정책)는 PR3에서 전혀
+바꾸지 않았다 — attribution은 이미 확정된 낙상에 사후적으로 원인 후보만
+덧붙이는 순수 추가 기능이다. 정량 정확도 검증은 접촉 원인 정답 라벨이 있는
+데이터가 없어 PR3 범위에 포함하지 않았다(합성 multi-track 테스트로 계약을
+검증했고, MPFDD는 공개 샘플 내용을 검토해 hard-negative 후보로만 확인했다
+— 실제 hard-negative 실행·false_cause_rate 측정은 아직 하지 않았다,
+`docs/fall_evaluation.md` 참고). 실제 접촉 유발 영상 기반 정확도 평가는
+Phase 4로 이관한다.
+
 ### Alternatives
 
 - **독립 COLLISION_SUSPECT**: 충돌 자체를 실시간 감지하는 별도 알고리즘 필요. 현재 데이터셋(CAUCAFall)이 낙상 데이터이므로 충돌 감지 검증 불가. 오탐률 제어 어려움.

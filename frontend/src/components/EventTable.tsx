@@ -1,9 +1,5 @@
 import type { SafetyEvent } from "../types/event";
-import {
-  formatEventCause,
-  getEventDisplayMeta,
-  getEventSeverity,
-} from "../utils/eventDisplay";
+import { formatEventCause, getEventDisplayMeta } from "../utils/eventDisplay";
 
 interface EventTableProps {
   events: SafetyEvent[];
@@ -57,7 +53,6 @@ export default function EventTable({
                   event.event_type === "FALL_SUSPECT"
                     ? formatEventCause(event.cause)
                     : "-";
-                const severity = getEventSeverity(event.event_type, event.severity);
 
                 return (
                   <tr key={event.event_id}>
@@ -75,7 +70,7 @@ export default function EventTable({
                     <td>{causeText}</td>
                     <td>{event.frame_number}</td>
                     <td>{event.video_source}</td>
-                    <td>{severity ?? "-"}</td>
+                    <td>{meta.severity ?? event.severity ?? "-"}</td>
                   </tr>
                 );
               })}

@@ -24,6 +24,11 @@ class Track:
     bbox: List[float]  # [x1, y1, x2, y2] pixel 좌표
     foot_point: List[float]  # [cx, y2] pixel 좌표
     confidence: float  # 0.0 ~ 1.0
+    # Phase 3 낙상 pose 보완용 optional 필드. 기본 ByteTracker(yolo26n.pt)는 채우지
+    # 않고 None으로 둔다. PoseTracker(yolo26n-pose.pt) 사용 시에만 채워진다.
+    # COCO 17 keypoint 순서: 0=nose, 5/6=shoulders, 11/12=hips, 15/16=ankles 등.
+    keypoints: Optional[List[List[float]]] = None  # [[x, y], ...] 17개, pixel 좌표
+    keypoints_conf: Optional[List[float]] = None  # keypoint별 confidence, 17개
 
     def __post_init__(self):
         if not isinstance(self.track_id, int) or self.track_id < 0:
@@ -34,6 +39,10 @@ class Track:
             raise ValueError("foot_point must have 2 elements")
         if not (0 <= self.confidence <= 1.0):
             raise ValueError("confidence must be in [0, 1]")
+        if self.keypoints is not None and len(self.keypoints) != 17:
+            raise ValueError("keypoints must have 17 elements (COCO) or be None")
+        if self.keypoints_conf is not None and len(self.keypoints_conf) != 17:
+            raise ValueError("keypoints_conf must have 17 elements (COCO) or be None")
 
     @property
     def width(self) -> float:

@@ -23,7 +23,11 @@ from src.input.webcam_source import WebcamSource
 from src.integrations.async_event_dispatcher import AsyncEventDispatcher
 from src.integrations.live_frame_client import LiveFrameClient
 from src.integrations.live_frame_dispatcher import LiveFrameDispatcher
+from src.safety.auxiliary_fall_model import AuxiliaryFallModel
+from src.safety.fall_detector import FallDetectorConfig
+from src.safety.fall_pipeline import FallPipeline
 from src.tracking.bytetrack_wrapper import ByteTracker
+from src.tracking.pose_tracker import PoseTracker
 from src.visualization.video_overlay import VideoOverlayWriter
 
 
@@ -43,6 +47,12 @@ def run_pipeline(
     show: bool = False,
     conf: float = 0.5,
     api_url: Optional[str] = None,
+    fall_detection_enabled: bool = False,
+    fall_config_path: str = "configs/fall_detection.json",
+    fall_model_path: Optional[str] = None,
+    fall_model_conf: float = 0.5,
+    fall_model_device: str = "auto",
+    fall_model_iou_threshold: float = 0.3,
 ) -> None:
     """파일 영상 기반 파이프라인 (기존 인터페이스 유지).
 
@@ -60,6 +70,12 @@ def run_pipeline(
         show=show,
         conf=conf,
         api_url=api_url,
+        fall_detection_enabled=fall_detection_enabled,
+        fall_config_path=fall_config_path,
+        fall_model_path=fall_model_path,
+        fall_model_conf=fall_model_conf,
+        fall_model_device=fall_model_device,
+        fall_model_iou_threshold=fall_model_iou_threshold,
     )
 
 
@@ -74,11 +90,17 @@ def run_pipeline_from_source(
     show: bool = False,
     conf: float = 0.5,
     api_url: Optional[str] = None,
-    model_path: str = "yolo26n.pt",
+    model_path: Optional[str] = None,
     device: str = "auto",
     live_frame_enabled: bool = False,
     live_frame_fps: float = 1.5,
     live_frame_quality: int = 75,
+    fall_detection_enabled: bool = False,
+    fall_config_path: str = "configs/fall_detection.json",
+    fall_model_path: Optional[str] = None,
+    fall_model_conf: float = 0.5,
+    fall_model_device: str = "auto",
+    fall_model_iou_threshold: float = 0.3,
 ) -> None:
     """모든 입력 소스 타입을 처리하는 파이프라인 코어.
 
@@ -86,8 +108,19 @@ def run_pipeline_from_source(
         source: FileVideoSource / WebcamSource / RTSPSource 중 하나.
         api_url: 지정 시 AsyncEventDispatcher를 통해 FastAPI로 이벤트/상태를
             비차단 전송한다. None이면 전송 안 함.
+        model_path: 사람 탐지/추적 모델 경로. None이면 fall_detection_enabled에 맞는
+            기본값을 쓴다(False: yolo26n.pt+ByteTracker, True: yolo26n-pose.pt+
+            PoseTracker) — 낙상 감지를 껐을 때 불필요하게 더 무거운 pose 모델을
+            쓰지 않기 위함이다.
         live_frame_enabled: 지정 시 FastAPI PUT /live/frame으로 최신 frame을 전송한다.
             api_url이 필요하며, Event/CurrentStatus 전송과는 별도로 켜고 끌 수 있다.
+        fall_detection_enabled: FALL_SUSPECT 감지(FallPipeline)를 켤지 여부. 기본
+            False — Validation에서 오탐/중복 목표를 일부 충족하지 못했으므로
+            (Subject 7~8 결과는 docs/fall_evaluation.md 참고) 명시적으로 켜야만
+            동작한다. 켜면 tracker도 PoseTracker로 바뀐다 — pose confirm
+            경로가 Track.keypoints를 필요로 하기 때문이다.
+        fall_model_path: fine-tuned fall/nofall 보조 모델 경로. None이면 모델 없이
+            bbox+pose 규칙 기반 경로만 사용한다 (scripts/evaluate_fall.py와 동일 정책).
     """
     source.open()
     dispatcher: Optional[AsyncEventDispatcher] = None
@@ -136,10 +169,43 @@ def run_pipeline_from_source(
         else:
             target_frames = total_frames
 
-        tracker = ByteTracker(model_path=model_path, conf=conf, fps=fps, device=device)
+        if fall_detection_enabled:
+            tracker_name = "PoseTracker"
+            resolved_model_path = model_path or "yolo26n-pose.pt"
+            tracker = PoseTracker(
+                model_path=resolved_model_path, conf=conf, fps=fps, device=device
+            )
+        else:
+            tracker_name = "ByteTracker"
+            resolved_model_path = model_path or "yolo26n.pt"
+            tracker = ByteTracker(
+                model_path=resolved_model_path, conf=conf, fps=fps, device=device
+            )
         zones = load_zones(zones_path)
         checker = ZoneChecker(zones, frame_width, frame_height)
         event_manager = EventManager(zones=zones, fps=fps)
+
+        fall_pipeline: Optional[FallPipeline] = None
+        if fall_detection_enabled:
+            auxiliary_model = None
+            if fall_model_path:
+                auxiliary_model = AuxiliaryFallModel(
+                    model_path=fall_model_path,
+                    conf=fall_model_conf,
+                    device=fall_model_device,
+                )
+            fall_pipeline = FallPipeline(
+                fps=fps,
+                detector_config=FallDetectorConfig.from_file(fall_config_path),
+                auxiliary_model=auxiliary_model,
+                iou_threshold=fall_model_iou_threshold,
+                fall_config_path=fall_config_path,
+            )
+            LOGGER.info(
+                "Fall Detection 활성화: config=%s, model=%s",
+                fall_config_path,
+                fall_model_path or "없음(bbox+pose 규칙 기반만 사용)",
+            )
 
         writer = EventWriter(
             output_path=output_path,
@@ -155,7 +221,7 @@ def run_pipeline_from_source(
         )
 
         LOGGER.info("Loaded %s zones", len(zones))
-        LOGGER.info("Model: %s", model_path)
+        LOGGER.info("Tracker: %s, Model: %s", tracker_name, resolved_model_path)
 
         frame_number = 0
         total_events = 0
@@ -191,6 +257,10 @@ def run_pipeline_from_source(
                 video_source=source.source_id,
             )
             frame_events.extend(stale_events)
+
+            # 2-1. 낙상 감지 (옵션)
+            if fall_pipeline is not None:
+                frame_events.extend(fall_pipeline.process(frame, result))
 
             # 3. 로컬 저장
             if frame_events:
@@ -393,9 +463,36 @@ def main() -> None:
     # 모델
     parser.add_argument(
         "--model",
-        default="yolo26n.pt",
-        help="YOLO 모델 경로. 기본값: yolo26n.pt",
+        default=None,
+        help="사람 탐지/추적 YOLO 모델 경로. 미지정 시 --fall-detection-enabled 여부에 "
+        "따라 자동 선택된다(끄면 yolo26n.pt+ByteTracker, 켜면 yolo26n-pose.pt+PoseTracker).",
     )
+
+    # 낙상 감지 (FALL_SUSPECT, PR2)
+    parser.add_argument(
+        "--fall-detection-enabled",
+        action="store_true",
+        help="FallPipeline 기반 FALL_SUSPECT 감지를 켠다. 기본 비활성화 — "
+        "Validation에서 오탐/중복 목표를 일부 미충족(자세한 내용은 "
+        "docs/fall_evaluation.md 참고).",
+    )
+    parser.add_argument(
+        "--fall-config",
+        default="configs/fall_detection.json",
+        help="FallDetectorConfig JSON 경로.",
+    )
+    parser.add_argument(
+        "--fall-model-path",
+        default=None,
+        help="fine-tuned fall/nofall 보조 모델 경로. 미지정 시 bbox+pose 규칙 기반만 사용.",
+    )
+    parser.add_argument("--fall-model-conf", type=float, default=0.5)
+    parser.add_argument(
+        "--fall-model-device",
+        default="auto",
+        choices=["auto", "mps", "cuda", "cpu"],
+    )
+    parser.add_argument("--fall-model-iou-threshold", type=float, default=0.3)
 
     # API 연동
     parser.add_argument(
@@ -482,6 +579,12 @@ def main() -> None:
         live_frame_enabled=args.live_frame_enabled,
         live_frame_fps=args.live_frame_fps,
         live_frame_quality=args.live_frame_quality,
+        fall_detection_enabled=args.fall_detection_enabled,
+        fall_config_path=args.fall_config,
+        fall_model_path=args.fall_model_path,
+        fall_model_conf=args.fall_model_conf,
+        fall_model_device=args.fall_model_device,
+        fall_model_iou_threshold=args.fall_model_iou_threshold,
     )
 
 

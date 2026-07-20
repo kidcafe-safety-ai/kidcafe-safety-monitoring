@@ -1,0 +1,8 @@
+{
+  "dataset": "CAUCAFall V5",
+  "doi": "10.17632/7w7fccy7ky.5",
+  "note": "docs/data_sources.md Subject 분할과 반드시 일치해야 한다.",
+  "development": [1, 2, 3, 4, 5, 6],
+  "validation": [7, 8],
+  "holdout": [9, 10]
+}

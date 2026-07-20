@@ -2,8 +2,8 @@
 
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
-> **최종 수정**: 2026-07-16 (Phase 3 공간 안전정책 구현 반영)
-> **상태**: Phase 2.5 구현 완료 / Phase 3 Live Frame API 구현 / Phase 3 Event·Zone·EventCause 계약 구현 완료 / 공간 안전정책 구현 / FALL_SUSPECT 감지 로직 후속 구현
+> **최종 수정**: 2026-07-18 (Phase 3 FALL_SUSPECT opt-in PoC 구현 반영)
+> **상태**: Phase 2.5 구현 완료 / Phase 3 Live Frame API 구현 / Phase 3 Event·Zone·EventCause 계약 구현 완료 / 공간 안전정책 구현 / FALL_SUSPECT opt-in PoC 구현 완료 (`cause` 원인 후보 추정은 PR3)
 > **관련 문서**: [`dashboard_api.md`](dashboard_api.md), [`dashboard_analysis.md`](dashboard_analysis.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md), [`roadmap.md`](roadmap.md)
 
 이 문서는 Phase 1.5~2.5의 구현된 API, Phase 3 Live Frame API·Event/Zone 공용 계약, 그리고 Phase 3의 확정된 후속 계약(안전 감지 로직 등)을 구분해 정리한다.
@@ -50,13 +50,16 @@ API 계층에서는 별도 Pydantic schema로 매핑하며, 기존 Event datacla
 | --- | --- | --- |
 | `event_id` | `string` | 이벤트 UUID 또는 고유 ID |
 | `timestamp` | `string` | 영상 내 상대 시각, `HH:MM:SS.mmm` |
-| `event_type` | `"ENTER" | "DWELL" | "EXIT"` | 이벤트 종류 |
+| `event_type` | `EventType` | 이벤트 종류. 아래 Phase 3 활성 값 중 하나 |
 | `track_id` | `integer` | 사람 추적 ID |
 | `zone_id` | `string` | zone 식별자 |
 | `bbox` | `number[4]` | `[x1, y1, x2, y2]` pixel 좌표 |
 | `foot_point` | `number[2]` | `[cx, y2]` pixel 좌표 |
 | `frame_number` | `integer` | 이벤트 발생 프레임 번호 |
 | `video_source` | `string` | 입력 영상 경로 또는 소스 ID |
+
+Phase 3 활성 `EventType`은 `ENTER`, `DWELL`, `EXIT`, `ENTER_RESTRICTED`,
+`DANGER_ZONE_DWELL`, `FALL_SUSPECT`다. 기존 세 타입은 그대로 유지한다.
 
 ### Optional API/DB Fields
 
@@ -240,7 +243,7 @@ Phase 3에서도 `CurrentStatus.risk_level`은 `NORMAL | HIGH`를 유지한다.
 | --- | --- | --- | --- |
 | `limit` | `integer` | `50` | `1 <= limit <= 500` |
 | `offset` | `integer` | `0` | `offset >= 0` |
-| `event_type` | `string | null` | `null` | `ENTER`, `DWELL`, `EXIT`만 허용 |
+| `event_type` | `string | null` | `null` | Phase 3 활성 `EventType` 6종 중 하나 |
 | `zone_id` | `string | null` | `null` | zone ID 필터 |
 
 `total`은 필터 적용 후, `limit`/`offset` pagination 적용 전 전체 개수다.
@@ -590,7 +593,7 @@ WebSocket은 Phase 2.5와 Phase 3에서도 제외하며 Phase 4 이후 검토한
 
 ## Phase 3 계약
 
-> 상태: Live Frame API 구현 완료 / Event Schema v2·ZoneType·SQLite migration 구현 완료 / 공간 안전정책 구현 완료 / FALL_SUSPECT 감지 로직 후속 구현
+> 상태: Live Frame API 구현 완료 / Event Schema v2·ZoneType·SQLite migration 구현 완료 / 공간 안전정책 구현 완료 / FALL_SUSPECT opt-in PoC 구현 완료 (`cause` 원인 후보 추정은 PR3)
 > 기준선: v0.2.5-dashboard
 > 적용 시점: 아래 각 계약은 해당 구현 PR 머지 이후 적용됨
 
@@ -717,6 +720,8 @@ FALL_SUSPECT
 - `confidence`: optional (기존 DB 행은 null 허용)
 - `event_confidence`: optional, 0.0~1.0 또는 null
 - `cause`: optional, 전체 객체 또는 null (부분 객체 불허)
+- PR2의 `FALL_SUSPECT` 생성 경로는 `cause=null`을 기록한다. non-null 원인 후보
+  생성은 PR3의 외부 접촉 attribution 범위다.
 
 **EventCause 검증 범위** (상세 규칙은 `docs/interfaces.md`의 EventCause 검증 규칙 참조)
 
