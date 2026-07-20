@@ -526,6 +526,26 @@ button {
   background: #d1fadf;
 }
 
+.type-enter-restricted {
+  color: #b42318;
+  background: #fee4e2;
+}
+
+.type-danger-zone-dwell {
+  color: #93370d;
+  background: #ffead5;
+}
+
+.type-fall-suspect {
+  color: #5925dc;
+  background: #ebe9fe;
+}
+
+.type-unknown {
+  color: var(--text-muted);
+  background: var(--panel-bg);
+}
+
 .filter-card {
   display: flex;
   align-items: center;
@@ -540,6 +560,8 @@ button {
 
 .segmented-control {
   display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
   padding: 4px;
   border-radius: 8px;
   background: var(--panel-bg);
@@ -598,7 +620,7 @@ button {
 
 .bar-row {
   display: grid;
-  grid-template-columns: 58px 1fr 28px;
+  grid-template-columns: 112px 1fr 32px;
   align-items: center;
   gap: 12px;
 }
@@ -607,6 +629,7 @@ button {
   color: var(--nav-text);
   font-size: 13px;
   font-weight: 700;
+  line-height: 1.25;
 }
 
 .bar-track {
@@ -632,6 +655,22 @@ button {
 
 .bar-exit {
   background: #12b76a;
+}
+
+.bar-enter-restricted {
+  background: #f04438;
+}
+
+.bar-danger-zone-dwell {
+  background: #f97316;
+}
+
+.bar-fall-suspect {
+  background: #7c3aed;
+}
+
+.bar-unknown {
+  background: var(--text-soft);
 }
 
 .table-scroll {
@@ -686,6 +725,14 @@ button {
   color: var(--text-soft);
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.event-raw-type {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 table {
