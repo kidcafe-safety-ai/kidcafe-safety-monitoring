@@ -73,7 +73,7 @@ early tolerance는 0.2초로 고정했다.
 fine-tuned 2-class detector와 시간·상태 제어를 결합한 Tune 13은 Development
 목표(Recall 75% 이상, false alarm 0.2/분 이하, 평균 지연 2초 이하, 중복 Event
 0건)를 모두 만족했다. 이 수치는 Subject 1~6 개발 데이터에서 설정을 고른
-결과이므로, 운영 성능의 증명은 아니며 Subject 7~8 Validation 결과와 분리해
+결과이므로, 운영 성능의 증명은 아니며 Subject 7~8 초기 Validation 결과와 분리해
 해석한다.
 
 ## 5. 알려진 한계: 낙상 방향에 따른 미검출
@@ -401,7 +401,8 @@ progress 출력(frame 31/61/91/121)의 단순 평균은 기본 경로 12.5 FPS, 
 경로(`yolo26n-pose.pt` + PoseTracker + 보조 detector) 7.9 FPS로 기록됐다.
 짧은 파일의 4개 표본 기준 약 4.6 FPS(36.9%) 차이이며, 모델·tracker가 함께
 바뀌는 실제 opt-in 기능 전체의 비교다. 이 값은 장시간 성능 벤치마크나 IP 카메라
-성능을 대표하지 않으며, 장시간/IP 카메라 FPS·latency 평가는 후속 통합에서 측정한다.
+성능을 대표하지 않는다. 동일 능동 인원 영상을 3회 반복한 정식 통합 측정은
+11.2절에 기록하며, 장시간/IP 카메라 평가는 Phase 4로 이관한다.
 
 ## 9. `FALL_SUSPECT.cause` 외부 접촉 원인 후보 추정
 
@@ -460,15 +461,13 @@ confirm돼도 lookback 구간 이력이 이미 잘려나가지 않게 하기 위
 confirm 시 cause 연결까지 mock 없이 end-to-end로 검증)로 커버했다.
 
 CAUCAFall은 주로 단일 인원 낙상 데이터라 원인 후보 정확도를 증명하는
-데이터가 아니다. 로컬 `data/datasets/mpfdd`(공개 샘플 28개 영상, 전체
-MPFDD 220개 중 일부)도 여러 사람이 같은 장면에 있는 낙상 영상은 있지만
-접촉으로 낙상했다는 원인 라벨은 제공하지 않는다. 따라서
-`cause` 양성 정확도를 이 데이터로 주장하지 않는다. 현재 확인한 것은
-28개 공개 샘플의 파일명·설명을 검토해 hard-negative(원인 없는 다인 근접)
-후보 데이터로 쓸 수 있다는 것만 확인한 수준이다 — `false_cause_rate` 측정
-등 실제 hard-negative 실행은 아직 하지 않았다. 실제 접촉 원인 후보
-정확도(precision/recall, false attribution) 평가와 hard-negative 실행은
-Phase 4에서 접촉 유발 영상 또는 권한·라벨이 명확한 외부 데이터로 진행한다.
+데이터가 아니다. Phase 3에서는 합성 multi-track 시나리오로 후보 생성,
+자기 Track 제외, 근거 부족 시 `cause=null` 계약을 검증한다. 구현 당시
+MPFDD 공개 샘플의 파일명·설명을 검토했지만 원인 Track 라벨과 라이선스가
+명확하지 않아 실제 평가나 임계값 선택에는 사용하지 않았다. 실제 접촉 원인
+후보 정확도(precision/recall, false attribution)는 Phase 4에서 안전하게
+재연하고 정답 Track·접촉·낙상 시점을 라벨링한 영상 또는 권한과 원인 라벨이
+명확한 외부 데이터로 평가한다.
 
 ### 9.4 알려진 한계
 
@@ -611,10 +610,11 @@ temporal vote(K-of-N + max-gap) 확장과 약한 motion 게이트(aspect_ratio
 하한, 속도 하한)를 캐시 데이터로 직접 검증했으나 둘 다 채택하지 않았다.
 
 - 이미 `model_vote_window_sec`(0.5초) 기반 bounded temporal voting을
-  쓰고 있고, 4건 모두 `model="fall"` 연속 구간이 5~9프레임(0.25~0.45초)
-  으로 짧게 흩어진 패턴이 아니다 — 모델이 해당 동작(무릎 꿇기·줍기·앉기)
-  을 한동안 자신 있게 "fall"로 오분류한 것이라, temporal vote를 더
-  엄격하게 만들어도 걸러지지 않는다.
+  쓰고 있다. Event를 유발한 최초 연속 오분류 구간은 5~28프레임이고,
+  영상 전체의 최장 연속 오분류 구간은 5~85프레임이다. 짧게 흩어진
+  confidence 흔들림이 아니라 모델이 해당 동작(무릎 꿇기·줍기·앉기)을
+  지속적으로 `fall`로 오분류한 것이므로 temporal vote를 더 엄격하게
+  만들어도 근본적으로 걸러지지 않는다.
 - 진짜 model-only TP인 S8_fall_forward의 `aspect_ratio`(0.34~0.4)가
   오탐인 S7_sit_down의 `aspect_ratio`(0.33~0.41)와 사실상 구분되지
   않는다. 속도도 마찬가지로 겹친다(일부 정상 앉기 동작이 실제 낙상보다
@@ -658,3 +658,56 @@ Phase 3 종료 전 추가 실험으로 Subject 7·8의 무릎 꿇기·물건 집
 않고 기존 `fall_detector_v1.pt`를 유지한다. 연속된 활동 전체 프레임 대신
 실제 false Event 주변 구간만 선별하는 방식은 Phase 4 후보로 남긴다.
 Subject 9~10 holdout은 이 실험에서도 사용하지 않았다.
+
+## 11. Phase 3 통합 검증
+
+2026-07-22에 동결 모델과 `configs/fall_detection.json`을 그대로 사용해
+실행 경로, 계약 전파, 성능 및 API 장애 안정성을 확인했다. 상세 실행 조건과
+운영 결과는 `docs/realtime_test.md`의 같은 날짜 항목에 기록한다.
+
+### 11.1 계약과 회귀
+
+- CAUCAFall `S7_fall_backwards` 전체 252프레임에서 frame 83의
+  `FALL_SUSPECT` 1건이 JSONL, FastAPI, SQLite, Dashboard에 동일하게
+  전달됐다.
+- 단일 인원 낙상의 `cause=null`이 유지됐다.
+- 고정 `NEARBY_TRACK` fixture는 API, SQLite `cause_json`, Dashboard의
+  `외부 접촉 의심 · Track #11` 표시까지 일치했다. 이는 attribution 모델의
+  정확도 검증이 아니라 계약 전파 검증이다.
+- 실행 중 Live Frame은 JPEG 640×480으로 조회됐고, 종료 후 stale TTL이
+  지나면 계약대로 `204`를 반환했다.
+- Signal Cache 재생 결과는 Development Recall 83.3%, timely Recall 66.7%,
+  FAR 0.0/min, 중복 0건과 S7~8 진단 Recall 100%, timely Recall 90%,
+  FAR 2.34/min, 중복 0건으로 동결 기준과 일치했다.
+
+S7~8은 이미 반복 분석에 사용한 tuning/diagnostic split이며 최종 Validation이
+아니다. Subject 9~10 holdout은 이번 통합에서도 사용하지 않았다.
+
+### 11.2 성능 판정
+
+동일한 능동 인원 영상에서 각 조건을 warm-up 후 3회 실행하고, frame loop의
+최초 30프레임을 제외한 steady-state 중앙값을 비교했다.
+
+| 조건 | FPS | avg latency | p95 latency | max latency |
+| --- | ---: | ---: | ---: | ---: |
+| 낙상 OFF, API 정상 | 9.461 | 0.106초 | 0.177초 | 0.270초 |
+| 낙상 ON, API 정상 | 5.098 | 0.196초 | 0.303초 | 0.461초 |
+| 낙상 ON, API 장애 | 4.919 | 0.203초 | 0.345초 | 0.460초 |
+
+낙상 ON의 FPS 감소는 46.1%로 목표(20% 이내)를 충족하지 못했다. 현재 경로는
+PoseTracker와 보조 detector를 함께 사용하므로 기능을 opt-in·기본 비활성으로
+유지하고, 모델 호출과 추적 비용 최적화는 Phase 4로 이관한다.
+
+API 장애의 추가 FPS 감소는 낙상 ON 정상 대비 3.5%였다. 세 장애 실행 모두
+252프레임을 완료했고, 전송 실패 Event는 실행별 실패 JSONL에 보존됐다.
+따라서 비차단 전송과 실패 보존 게이트는 통과했다.
+
+`data/videos/test1.mp4`의 첫 600프레임 비교는 유효한 인원 경로가 없어 보조
+모델이 lazy load되지 않았으므로 no-person idle path 확인으로만 분류했다.
+낙상 기능 비용과 운영 판단은 위 능동 인원 결과를 기준으로 한다.
+
+### 11.3 최종 범위 판정
+
+Phase 3의 낙상 기능은 **정량 한계를 공개한 opt-in PoC**로 통합 게이트를
+통과했다. 실제 원인 후보 정확도, 외부 데이터 일반화, Subject 9~10 최종
+holdout, 장시간 IP 카메라 안정성, 능동 인원 FPS 최적화는 Phase 4 범위다.

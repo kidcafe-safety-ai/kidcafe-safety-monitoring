@@ -105,31 +105,28 @@ SHA-256: (다운로드 후 기입)
 
 ---
 
-## MPFDD (Multi-Person Falls Dataset)
+## 검토 후 미채택: MPFDD
 
-외부 접촉 원인 후보 추정(`FallCauseAttributor`)의 hard-negative 후보
-검토용으로 로컬에 클론했다. 원인 후보 양성 정확도 검증에는 쓰지 않는다
-(`docs/fall_evaluation.md`의 검증 데이터 정책, `docs/decisions.md` ADR-016 참고).
+Phase 3 원인 후보 구현 당시 공개 샘플 28개의 파일명과 설명을 검토했다.
+다인 근접 장면의 hard-negative 후보 가능성은 확인했지만, 접촉 원인 Track
+정답 라벨이 없고 저장소 라이선스도 명확하지 않아 학습·평가에는 사용하지
+않았다. `false_cause_rate`를 포함한 정량 실행도 수행하지 않았으며,
+7/22~7/28 통합 및 현재 후속 데이터 계획에서 제외한다.
 
 | 항목 | 내용 |
 |---|---|
-| 데이터셋명 | MPFDD (Multi-Person Falls Dataset) |
 | 공식 저장소 | https://github.com/Hnnuliulei123456/MPFDD |
-| 접근 방법 | 저장소 clone (`data/datasets/mpfdd`) |
-| 라이선스 | 저장소에 별도 LICENSE 파일이 없어 확인되지 않음 — 사용 전 원저자에게 확인 필요 |
-| 전체 규모(공식 README 기준) | 220개 영상(ADL 80 + fall 140), 실내/실외, 2~5인 시나리오 |
-| 로컬 보유분 | 공개 샘플 28개 영상(전체 220개 중 일부, Scene 1~4) |
-| 원인 라벨 | 없음 — "N인 낙상"은 낙상 시점에 여러 사람이 있었다는 뜻일 뿐, 접촉으로 낙상했다는 원인 라벨은 제공하지 않는다 |
-| 용도 | 원인 후보 hard-negative(다인 근접 + 원인 없는 독립 낙상) 후보 데이터 검토 |
-| 검토 상태 | 로컬 28개 파일명·README 내용 검토 완료(hard-negative 후보로 쓸 수 있음을 확인). `false_cause_rate` 등 실제 hard-negative 실행은 아직 하지 않음 |
+| 확인 범위 | 공개 샘플 28개 파일명·설명 |
+| 실제 사용 | 없음(학습·평가·임계값 선택 미사용) |
+| 미채택 사유 | 접촉 원인 라벨 부재, 라이선스 불명확 |
 
 ---
 
 ## 원인 후보 Mini Set (직접 촬영)
 
 Phase 4 외부 접촉 원인 후보 추정 정량 검증(precision/recall, false
-attribution)용 소규모 데이터셋. 현재 구현은 합성 multi-track 테스트와 MPFDD
-공개 샘플 검토까지만 수행했고, 이 Mini Set 자체는 아직 촬영·사용하지 않았다
+attribution)용 소규모 데이터셋. 현재 구현은 합성 multi-track 테스트로 계약을
+검증했으며, 이 Mini Set 자체는 아직 촬영·사용하지 않았다
 (`docs/decisions.md` ADR-016, `docs/fall_evaluation.md`의 검증 데이터 정책 참고).
 
 | 시나리오 | 최소 샘플 수 |
@@ -188,10 +185,14 @@ timely Recall 66.7%, false alarm 0회/분, 중복 Event 0건이다. Subject 7~8
 기능은 기본 비활성 opt-in PoC로 유지하며 이 수치를 최종 성능으로 보고하지 않는다.
 자세한 이력은 `docs/fall_evaluation.md`에 기록한다.
 
-동일 입력·동일 하드웨어에서 적용 전후 각각 3회 측정하는 FPS 기준은 아직 완료하지
-않았다. 짧은 파일 1회 비교에서는 opt-in 경로가 기본 경로보다 약 36.9% 낮았으며,
-장시간/IP 카메라 통합 측정에서 재확인한다.
+2026-07-22에 동일 능동 인원 영상과 하드웨어에서 각 조건을 warm-up 후 3회
+측정했다. 최초 30프레임을 제외한 steady-state 중앙값은 낙상 OFF 9.461 FPS,
+낙상 ON 5.098 FPS로 46.1% 감소해 목표(20% 이내)를 충족하지 못했다. API 장애의
+추가 감소는 3.5%였고 모든 실행이 끝까지 완료됐다. 자세한 조건은
+`docs/realtime_test.md`와 `docs/fall_evaluation.md`의 2026-07-22 통합 기록에
+남긴다.
 
-Subject 9~10 Holdout 평가는 설정 동결 전까지 보류한다. `FALL_SUSPECT.cause`의
-원인 후보 Track 정확도·false attribution은 아직 정량 검증하지 않았으며,
-Phase 4에서 위 Mini Set 또는 외부 데이터로 평가한다.
+Subject 9~10 Holdout은 설정 동결 후에도 이번 통합 범위에서는 실행하지 않았다.
+Phase 4 최종 평가에서 한 번만 사용한다. `FALL_SUSPECT.cause`의 원인 후보 Track
+정확도·false attribution도 아직 정량 검증하지 않았으며, Phase 4에서 위 Mini
+Set 또는 원인 라벨이 명확한 외부 데이터로 평가한다.

@@ -242,7 +242,7 @@ kidcafe-safety-monitoring/
 │   └── main.py              # 파이프라인 진입점
 ├── frontend/                # React Dashboard
 │   ├── src/
-│   │   ├── pages/           # MonitoringPage, EventsPage (API), AlertHistoryPage, ReportPage, ZoneSettingsPage (Mock)
+│   │   ├── pages/           # Monitoring/Events/AlertHistory (API), Report/ZoneSettings (Mock)
 │   │   ├── components/      # KpiCard, EventTable, EventChart, SystemSettingsModal 등
 │   │   ├── api/             # eventsApi.ts (VITE_API_MODE 기반 mock/API 전환)
 │   │   ├── mocks/           # mock 데이터
@@ -328,6 +328,7 @@ pytest --cov=src --cov-report=term-missing
 |------|--------|------|
 | `--zones` | `data/zones/sample.json` | Zone 정의 JSON |
 | `--api-url` | `None` | FastAPI 서버 URL. 지정 시 이벤트/상태를 전송 (예: `http://localhost:8000`) |
+| `--api-failed-events-output` | `outputs/api_failed_events.jsonl` | API 최종 전송 실패 Event JSONL 경로 |
 
 ### 출력
 
@@ -337,6 +338,7 @@ pytest --cov=src --cov-report=term-missing
 | `--csv-output` | `outputs/events.csv` | CSV 이벤트 로그 출력 경로 |
 | `--summary-output` | `outputs/summary.json` | KPI summary JSON 출력 경로 |
 | `--overlay-output` | `outputs/result.mp4` | 결과 영상 출력 |
+| `--metrics-output` | `None` | frame-loop FPS/latency JSON 출력. 미지정 시 생성하지 않음 |
 
 ### 실행 제어
 
@@ -345,6 +347,10 @@ pytest --cov=src --cov-report=term-missing
 | `--frames-limit` | `None` | 처음 N프레임만 처리 (테스트용) |
 | `--show` | `False` | 실시간 시각화 창 (`cv2.imshow`). 종료: `q` |
 | `--log-level` | `INFO` | 로그 레벨 (`DEBUG` / `INFO` / `WARNING` / `ERROR`) |
+
+`--metrics-output`은 모델 초기화와 종료 시 API queue flush를 제외한 프레임 루프를
+측정한다. 전체 프레임 지표와 최초 30프레임을 제외한 steady-state 지표를 함께
+기록하므로, 같은 입력·프레임 수·출력 설정으로 실행한 결과끼리 비교해야 한다.
 
 ---
 
@@ -460,9 +466,9 @@ Phase 2.5에서 실시간 운영 대시보드 v1 안정화와 Docker 재현 환�
 | 작은 객체 bbox 깜빡임 | 작은 객체 confidence 흔들림 | Phase 3: 후처리 보강 |
 | track_id 자주 변경 | ReID 없음 | Phase 4: OSNet 기반 ReID 도입 |
 | 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | Phase 4: StrongSORT 또는 ReID 보강 |
-| ENTER/EXIT 경계 흔들림 | zone 경계 foot_point 진동 | Phase 3: debounce / hysteresis 적용 |
-| 추론 FPS 최적화 여지 | CPU 환경 동기 처리 | Phase 3: FPS 재측정 및 최적화 |
-| 알림·리포트·설정 Backend 미연동 | Mock Prototype 상태 | 후속 Phase에서 API 계약 후 연동 |
+| ENTER/EXIT 경계 흔들림 | zone 경계 foot_point 진동 | Phase 3 temporal hysteresis 적용, 실제 카메라 재튜닝 후속 |
+| 낙상 opt-in 처리량 비용 | PoseTracker와 보조 detector를 함께 실행 | Phase 4: 모델 호출·추적 최적화 |
+| 알림 조치 상태·리포트·설정 저장 미연동 | 조치 API 미구현, 일부 화면 Mock | Phase 4에서 API·저장 연동 |
 > 상세 분석: [`docs/tracking_analysis.md`](docs/tracking_analysis.md)
 
 ---

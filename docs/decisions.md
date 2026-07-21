@@ -496,11 +496,12 @@ alias track_id 전체(`_TrackState.origin_track_ids`)를 `attribute()`의
 Attribution은 `FALL_SUSPECT` 감지 임계값·모델·기본 비활성 정책을 바꾸지
 않고, 이미 확정된 낙상에 사후적으로 원인 후보만
 덧붙이는 순수 추가 기능이다. 정량 정확도 검증은 접촉 원인 정답 라벨이 있는
-데이터가 없어 수행하지 않았다(합성 multi-track 테스트로 계약을 검증했고,
-MPFDD는 공개 샘플 내용을 검토해 hard-negative 후보로만 확인했다
-— 실제 hard-negative 실행·false_cause_rate 측정은 아직 하지 않았다,
-`docs/fall_evaluation.md` 참고). 실제 접촉 유발 영상 기반 정확도 평가는
-Phase 4로 이관한다.
+데이터가 없어 수행하지 않았다. 합성 multi-track 테스트로 생성·제외 계약을
+검증했다. 구현 당시 MPFDD 공개 샘플 28개의 파일명·설명을 검토해 다인 근접
+hard-negative 후보 가능성도 확인했지만, 원인 Track 라벨과 명확한 라이선스가
+없어 실제 실행·학습·평가에는 사용하지 않았다. 이 데이터는 현재 통합 및 후속
+평가 계획에서 미채택하며, 실제 접촉 유발 영상 기반 정확도 평가는 Phase 4로
+이관한다.
 
 ### Alternatives
 
@@ -702,9 +703,9 @@ bbox/Pose 보조 근거 요구 등)는 **구현하지 않는다** — 기본 비
 ### Reason
 
 - 이미 `model_vote_window_sec` 기반 bounded temporal voting을 쓰고
-  있고, 오탐 4건 모두 `model="fall"` 연속 구간이 5~9프레임(0.25~0.45초)
-  으로 짧게 흩어진 패턴이 아니다 — voting을 더 엄격하게 해도 걸러지지
-  않는다.
+  있다. Event를 유발한 최초 연속 오분류 구간은 5~28프레임이고, 영상 전체의
+  최장 연속 오분류 구간은 5~85프레임이다. 짧게 흩어진 패턴이 아니므로
+  voting을 더 엄격하게 해도 근본적으로 걸러지지 않는다.
 - 캐시 데이터로 직접 검증한 결과, 진짜 model-only TP(S8_fall_forward,
   `aspect_ratio` 0.34~0.4)와 오탐(S7_sit_down, `aspect_ratio`
   0.33~0.41)의 aspect_ratio·속도가 사실상 겹친다. 최근 bbox/Pose 보조
