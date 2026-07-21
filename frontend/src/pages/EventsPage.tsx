@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getEvents } from "../api/eventsApi";
 import EventChart from "../components/EventChart";
 import EventTable from "../components/EventTable";
+import EventTimelineChart from "../components/EventTimelineChart";
 import { usePolling } from "../hooks/usePolling";
 import type { EventType, SafetyEvent } from "../types/event";
+import { getEventDisplayMeta, KNOWN_EVENT_TYPES } from "../utils/eventDisplay";
 
 type EventFilter = "ALL" | EventType;
 
-const FILTERS: EventFilter[] = ["ALL", "ENTER", "DWELL", "EXIT"];
+const FILTERS: EventFilter[] = ["ALL", ...KNOWN_EVENT_TYPES];
 const PAGE_SIZE = 5;
 
 export default function EventsPage() {
@@ -69,7 +71,7 @@ export default function EventsPage() {
       <div className="page-heading">
         <div>
           <h1>이벤트 기록 / 통계</h1>
-          <p>Event Schema v1 기반 이벤트 조회와 타입별 통계</p>
+          <p>안전 이벤트 조회와 타입별 통계</p>
         </div>
       </div>
 
@@ -83,7 +85,7 @@ export default function EventsPage() {
               onClick={() => handleFilterChange(item)}
               type="button"
             >
-              {item === "ALL" ? "전체" : item}
+              {item === "ALL" ? "전체" : getEventDisplayMeta(item).label}
             </button>
           ))}
         </div>
@@ -107,6 +109,7 @@ export default function EventsPage() {
             onPrevious: goToPreviousPage,
           }}
         />
+        <EventTimelineChart events={filteredEvents} />
       </section>
     </main>
   );
