@@ -1,26 +1,8 @@
-"""frame + TrackingResult -> 보조 fall/nofall 모델 추론 -> Track IoU 매칭 ->
+"""낙상 보조 모델, Track 매칭, 상태머신과 원인 후보 추정을 한 경로로 묶는다.
 
-FallDetector.process() 순서를 하나로 묶는다.
-
-이 모듈이 없으면 `main.py`(실제 서비스 실행)와 `scripts/evaluate_fall.py`
-(오프라인 평가)가 "보조 모델 추론 → IoU 매칭 → FallDetector.process() 호출"
-순서를 각자 복사해야 한다. 그러면 실제 실행과 평가가 서로 다른 로직을 타게
-될 위험이 생기고(둘 중 하나만 고치는 실수), 매칭 관련 버그를 두 곳에서 각각
-고쳐야 한다. FallPipeline 하나로 두 호출자가 정확히 같은 로직을 공유한다.
-
-AuxiliaryFallModel을 아예 넘기지 않거나 enabled=False면 보조 모델 추론
-자체를 건너뛰고 FallDetector.process()에 model_evidence=None을 전달한다 —
-기존 bbox/pose 전용 동작과 완전히 하위 호환된다 (src/safety/fall_detector.py
-모듈 docstring 참고).
-
-PR3부터는 외부 접촉 원인 후보 추정(FallCauseAttributor)도 여기서 함께
-배선한다. FallDetector가 낙상 판정에 쓰는 이력과 attribution이 쓰는 이력은
-완전히 분리돼 있으므로(src/safety/fall_cause_attributor.py 모듈 docstring
-참고), 매 프레임 두 곳 모두에 TrackingResult를 갱신해야 한다.
-`fall_config_path`를 넘기면 그 파일의 "cause_attribution" 섹션으로
-FallCauseAttributorConfig를 로드하고, 넘기지 않으면 dataclass 기본값을
-쓴다 — 새 CLI 옵션을 추가하는 대신, 호출자가 이미 갖고 있는
-FallDetectorConfig 파일 경로를 그대로 재사용한다.
+실시간 실행과 오프라인 평가가 같은 처리 순서를 공유하도록 한다. 보조 모델이
+없거나 비활성화된 경우에는 bbox/Pose 경로만 사용한다. 원인 후보 추정은 낙상
+판정과 별도 이력을 사용하므로 매 프레임 함께 갱신한다.
 """
 
 from __future__ import annotations
@@ -37,19 +19,11 @@ from src.safety.fall_model_matching import FallModelEvidence, match_detections_t
 
 
 class FallPipeline:
-    """AuxiliaryFallModel(선택) + IoU 매칭 + FallDetector + FallCauseAttributor를
+    """영상별 상태를 관리하는 낙상 처리 파이프라인.
 
-    한 번에 묶는다.
-
-    영상(또는 스트림) 하나당 인스턴스 하나를 새로 만든다 — FallDetector가
-    Track 상태를 내부에 유지하므로 영상을 건너뛸 때마다 재생성해야 이전
-    영상의 상태가 섞이지 않는다 (evaluate_fall.py가 기존에 영상마다
-    FallDetector를 새로 만들던 것과 동일한 정책). FallCauseAttributor도
-    Track별 근접 이력을 내부에 유지하므로 같은 이유로 영상마다 재생성한다 —
-    다른 영상의 근접 이력이 섞이면 완전히 엉뚱한 원인 후보가 나온다. 반면
-    auxiliary_model은 무거운 모델 가중치를 담고 있으므로 호출자가 한 번만
-    만들어 여러 FallPipeline 인스턴스에서 재사용해야 한다 (ByteTracker/
-    PoseTracker와 동일한 재사용 정책).
+    영상 또는 스트림마다 새 인스턴스를 사용해 Track 이력이 섞이지 않게 한다.
+    모델 가중치를 가진 ``auxiliary_model``은 호출자가 여러 인스턴스에서
+    재사용할 수 있다.
     """
 
     def __init__(
@@ -115,14 +89,37 @@ class FallPipeline:
                 "합니다(history_window_sec와 동일한 이유)."
             )
 
-    def process(self, frame: np.ndarray, tracking_result: TrackingResult) -> List[Event]:
-        """한 프레임을 처리하고 FALL_SUSPECT Event 목록을 반환한다."""
+    def process(
+        self,
+        frame: np.ndarray,
+        tracking_result: TrackingResult,
+        diagnostics: Optional[List[dict]] = None,
+    ) -> List[Event]:
+        """한 프레임을 처리하고 FALL_SUSPECT Event 목록을 반환한다.
+
+        diagnostics: FallDetector.process()로 그대로 전달한다(평가 프로토콜 V2
+            진단 필드, Event schema는 건드리지 않는 side-channel).
+        """
         model_evidence = self._compute_model_evidence(frame, tracking_result)
+        return self.process_with_evidence(tracking_result, model_evidence, diagnostics)
+
+    def process_with_evidence(
+        self,
+        tracking_result: TrackingResult,
+        model_evidence: Optional[Dict[int, FallModelEvidence]],
+        diagnostics: Optional[List[dict]] = None,
+    ) -> List[Event]:
+        """미리 계산한 모델 근거로 실시간 실행과 동일한 상태머신을 실행한다.
+
+        Signal Cache 재생 시 영상 디코딩과 모델 추론 없이 IoU 매칭 임계값과
+        상태머신 설정을 반복 평가하는 진입점이다.
+        """
         self.cause_attributor.update(tracking_result)
         return self.detector.process(
             tracking_result,
             model_evidence=model_evidence,
             cause_attributor=self.cause_attributor,
+            diagnostics=diagnostics,
         )
 
     def _compute_model_evidence(

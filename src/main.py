@@ -468,7 +468,7 @@ def main() -> None:
         "따라 자동 선택된다(끄면 yolo26n.pt+ByteTracker, 켜면 yolo26n-pose.pt+PoseTracker).",
     )
 
-    # 낙상 감지 (FALL_SUSPECT, PR2)
+    # 낙상 감지 (FALL_SUSPECT)
     parser.add_argument(
         "--fall-detection-enabled",
         action="store_true",

@@ -352,6 +352,48 @@ class TestCooldownPreventsDuplicateEvents:
 
         assert len(events) == 2  # 회복 후 재낙상은 새 Event로 기록되어야 한다
 
+    def test_single_recovered_frame_after_cooldown_does_not_trigger_premature_normal(self):
+        """cooldown 만료 후 회복 조건을
+
+        만족하는 프레임이 "단 한 번"만 와도 그것만으로 NORMAL로 전이하면
+        안 된다 — 실측에서는 모델이 한 프레임만 "unknown"을 반환한 순간
+        (aspect_ratio는 여전히 낮아 실제 회복 기준에도 못 미쳤다) 즉시
+        NORMAL로 전이했고, 곧바로 fall 근거가 재개되며 재확정돼 중복
+        Event가 생겼다. `_advance_candidate`의 recovery 판정과 동일하게
+        recovery_confirm_sec 이상 연속돼야 실제로 NORMAL로 전이해야 한다.
+        """
+        fps = 10.0
+        # y 범위는 _LYING_BBOX와 동일하게 유지해(center_vertical_velocity가
+        # 0에 가깝도록) aspect_ratio만 정상 범위로 떨어뜨린 한 프레임을
+        # 만든다 — 속도 게이트가 아니라 지속시간 게이트를 정확히 검증하기
+        # 위함이다.
+        narrow_same_y = (43.0, 50.0, 57.0, 70.0)  # aspect 0.7 < normal_aspect_ratio_threshold
+
+        detector = FallDetector(fps=fps, config=_fast_config(cooldown_sec=0.3))
+
+        events = []
+        events += _run(detector, [_STANDING_BBOX] * 5)
+        events += detector.process(_result(5, _LYING_BBOX))
+        for frame_number in range(6, 11):
+            events += detector.process(_result(frame_number, _LYING_BBOX))
+        assert len(events) == 1
+
+        # cooldown 만료(0.3초) 이후에도 계속 누워 있다가...
+        for frame_number in range(11, 16):
+            events += detector.process(_result(frame_number, _LYING_BBOX))
+        assert detector._states[("cam1", 1)].state == "COOLDOWN"
+
+        # ...단 한 프레임만 회복 조건을 만족한 뒤 곧바로 다시 눕는다.
+        events += detector.process(_result(16, narrow_same_y))
+        assert detector._states[("cam1", 1)].state == "COOLDOWN"  # 아직 NORMAL 아님
+        events += detector.process(_result(17, _LYING_BBOX))
+        assert detector._states[("cam1", 1)].state == "COOLDOWN"
+
+        for frame_number in range(18, 25):
+            events += detector.process(_result(frame_number, _LYING_BBOX))
+
+        assert len(events) == 1  # 중복 Event가 생기면 안 된다
+
 
 class TestMultiTrackIndependence:
     def test_two_tracks_in_same_video_source_are_independent(self):

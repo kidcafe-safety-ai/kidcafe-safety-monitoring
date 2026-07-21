@@ -119,6 +119,56 @@ class TestFallPipelineWithAuxiliaryModel:
         assert stub.infer_calls == 2
 
 
+class TestProcessWithEvidence:
+    """Signal Cache 재생 경로가 쓰는 frame-독립 진입점.
+
+    process()는 frame에서 model_evidence를 계산한 뒤 이 메서드를 호출하는
+    얇은 wrapper가 됐다 — 여기서는 그 model_evidence를 캐시에서 미리
+    IoU 매칭해 직접 넘겨도 process()와 동일하게 동작하는지 확인한다.
+    """
+
+    def test_process_with_evidence_matches_process_result_for_same_evidence(self):
+        """process(frame, ...)와 process_with_evidence(..., 동일 model_evidence)가
+
+        같은 이벤트를 내야 한다 — process()가 내부적으로 이 메서드를
+        재사용한다는 걸 행동으로 검증한다.
+        """
+        from src.safety.fall_model_matching import FallModelEvidence
+
+        stub = _StubAuxiliaryModel(
+            detections_by_call=[[FallDetection(bbox=list(_BBOX), label="fall", confidence=0.9)]]
+        )
+        pipeline_a = FallPipeline(fps=10.0, auxiliary_model=stub, iou_threshold=0.3)
+        pipeline_b = FallPipeline(fps=10.0, iou_threshold=0.3)
+
+        tracking_result = _tracking_result(0, _BBOX)
+        events_a = pipeline_a.process(_FRAME, tracking_result)
+        events_b = pipeline_b.process_with_evidence(
+            tracking_result,
+            {1: FallModelEvidence(track_id=1, label="fall", confidence=0.9, iou=1.0)},
+        )
+
+        assert [e.event_type for e in events_a] == [e.event_type for e in events_b]
+
+    def test_process_with_evidence_none_disables_model_path(self):
+        pipeline = FallPipeline(fps=10.0)
+        events = pipeline.process_with_evidence(_tracking_result(0, _BBOX), None)
+        assert events == []  # 동적 근거 없는 첫 프레임 + model 비활성 -> candidate조차 진입 안 함
+
+    def test_process_with_evidence_updates_cause_attributor(self):
+        """process()와 마찬가지로 매 호출마다 cause_attributor.update()가 불려야
+
+        원인 후보 추정이 캐시 재생 경로에서도 그대로 동작한다.
+        """
+        pipeline = FallPipeline(fps=10.0)
+        tracking_result = _tracking_result(0, _BBOX)
+
+        pipeline.process_with_evidence(tracking_result, None)
+
+        history = pipeline.cause_attributor._history.get((tracking_result.video_source, 1))
+        assert len(history) == 1
+
+
 class TestFallPipelineEndToEndConfirmation:
     """AuxiliaryFallModel이 지속적으로 fall을 반환하면 실제로 FALL_SUSPECT까지
 

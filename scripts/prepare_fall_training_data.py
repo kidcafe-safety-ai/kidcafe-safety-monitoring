@@ -139,7 +139,7 @@ def guard_holdout(train_subjects: List[int], val_subjects: List[int], allow_hold
     hit = used & _HOLDOUT_SUBJECTS
     if hit and not allow_holdout:
         raise ConfigError(
-            f"Subject {sorted(hit)}는 holdout입니다. PR4 최종 평가 전까지 사용할 수 "
+            f"Subject {sorted(hit)}는 holdout입니다. 최종 평가 전까지 사용할 수 "
             "없습니다 (--allow-holdout으로 명시적으로 우회 가능)."
         )
 

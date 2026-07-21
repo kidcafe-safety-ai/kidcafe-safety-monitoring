@@ -133,9 +133,10 @@ shasum -a 256 outputs/fall_training/models/fall_detector_v1.pt
 # 5985d5a24db8b69bf0d231644a4c7a71f6a1143724ed7df2be6d669373c83da7
 ```
 
-Subject 7~8 Validation에서 Recall 70.0%, false alarm 2.92/min, 중복 Event 1건으로
-운영 목표를 충족하지 못했으므로, 현재는 검증 결과를 남긴 **선택적 PoC**다. 실제
-키즈카페/IP 카메라 hard-negative 검증과 오탐 개선 전에는 기본 활성화하지 않는다.
+Annotation V2와 Track handoff 안정화 이후 Subject 7~8 진단 결과는 Recall 100%,
+timely Recall 90%, false alarm 2.34/min, 중복 Event 0건이다. 오탐 목표를 충족하지
+못했고 이 split을 진단에 사용했으므로, 현재는 **선택적 PoC**다. 실제 키즈카페/IP
+카메라 hard-negative 검증과 Subject 9~10 holdout 평가 전에는 기본 활성화하지 않는다.
 
 > 기본 Ultralytics YOLO 모델 파일(`*.pt`)은 Git에 포함하지 않는다. 최초 실행 시 자동 다운로드되며, 다운로드된 `.pt` 파일은 `.gitignore`에 의해 추적되지 않는다. fine-tuned 낙상 보조 모델은 위 공유 위치에서 별도로 받아야 한다.
 > Phase 2 기본 모델은 `yolo26n.pt`이며, `yolov8n.pt`는 MVP baseline/fallback으로 유지한다.
@@ -401,8 +402,8 @@ pytest --cov=src --cov-report=term-missing
 | USB C920 E2E 테스트 (Windows) | Done — Phase 2.5 |
 | React Live View (영상 영역) | Done — Phase 3 (latest-frame polling) |
 | WebSocket 실시간 push | Phase 4 이후 필요성 기반 재검토 |
-| FALL_SUSPECT 낙상 PoC | Done — Phase 3 (opt-in, Validation 운영 목표 미달) |
-| FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 | Done — Phase 3 PR3 (근접·접근 근거 기반 PoC, 정량 정확도 미검증) |
+| FALL_SUSPECT 낙상 PoC | Done — Phase 3 (opt-in, 오탐 운영 목표 미달) |
+| FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 | Done — Phase 3 (근접·접근 근거 기반 PoC, 정량 정확도 미검증) |
 | ReID / StrongSORT / BoT-SORT | Phase 4 |
 
 Phase 2.5에서 실시간 운영 대시보드 v1 안정화와 Docker 재현 환경 구축을 완료했다.

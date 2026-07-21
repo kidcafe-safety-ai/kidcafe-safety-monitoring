@@ -15,7 +15,7 @@ data/datasets/
 ├─ caucafall/v5/
 │  ├─ development/   # Subject 1~6
 │  ├─ validation/    # Subject 7~8
-│  └─ holdout/       # Subject 9~10 (PR4 최종 평가 전까지 미사용)
+│  └─ holdout/       # Subject 9~10 (최종 평가 전까지 미사용)
 ├─ gmdcsa24/v2.1/
 ├─ ur_fall/                  # 선택
 └─ fall_cause_mini_set/
@@ -49,10 +49,12 @@ data/datasets/
 | 분할 | Subject |
 |---|---|
 | 개발·튜닝 | Subject 1~6 |
-| 검증 | Subject 7~8 |
-| 내부 평가 (holdout) | Subject 9~10 |
+| 진단·튜닝 (`validation/` 디렉터리) | Subject 7~8 |
+| 최종 내부 평가 (holdout) | Subject 9~10 |
 
-Subject 9~10(holdout)은 PR4 최종 평가 전까지 사용하지 않는다.
+Subject 7~8은 초기 Validation 이후 오류 분석과 규칙 검증에 사용되어 현재는
+진단·튜닝 데이터로 취급한다. Subject 9~10(holdout)은 설정 동결 후 최종 평가
+전까지 사용하지 않는다.
 
 ### 체크섬
 
@@ -105,9 +107,9 @@ SHA-256: (다운로드 후 기입)
 
 ## MPFDD (Multi-Person Falls Dataset)
 
-PR3 외부 접촉 원인 후보 추정(`FallCauseAttributor`)의 hard-negative 후보
+외부 접촉 원인 후보 추정(`FallCauseAttributor`)의 hard-negative 후보
 검토용으로 로컬에 클론했다. 원인 후보 양성 정확도 검증에는 쓰지 않는다
-(`docs/fall_evaluation.md` §9.3, `docs/decisions.md` ADR-016 참고).
+(`docs/fall_evaluation.md`의 검증 데이터 정책, `docs/decisions.md` ADR-016 참고).
 
 | 항목 | 내용 |
 |---|---|
@@ -126,9 +128,9 @@ PR3 외부 접촉 원인 후보 추정(`FallCauseAttributor`)의 hard-negative �
 ## 원인 후보 Mini Set (직접 촬영)
 
 Phase 4 외부 접촉 원인 후보 추정 정량 검증(precision/recall, false
-attribution)용 소규모 데이터셋. PR3에서는 합성 multi-track 테스트와 MPFDD
-공개 샘플 검토만 수행했고, 이 Mini Set 자체는 아직 촬영·사용하지 않았다
-(`docs/decisions.md` ADR-016, `docs/fall_evaluation.md` §9.3 참고).
+attribution)용 소규모 데이터셋. 현재 구현은 합성 multi-track 테스트와 MPFDD
+공개 샘플 검토까지만 수행했고, 이 Mini Set 자체는 아직 촬영·사용하지 않았다
+(`docs/decisions.md` ADR-016, `docs/fall_evaluation.md`의 검증 데이터 정책 참고).
 
 | 시나리오 | 최소 샘플 수 |
 |---|---|
@@ -170,7 +172,7 @@ attribution)용 소규모 데이터셋. PR3에서는 합성 multi-track 테스�
 ## Phase 3 평가 기준과 확인 상태
 
 ```text
-PR2 Subject 7~8 Validation Recall ≥ 75%
+Subject 7~8 timely Recall ≥ 75%
 False alarm ≤ 0.2회/분
 평균 감지 지연 ≤ 2초
 낙상 1회당 이벤트 1회
@@ -179,14 +181,17 @@ False alarm ≤ 0.2회/분
 API 장애 중 파이프라인 비정상 종료 없음
 ```
 
-PR2 동결 Validation 결과는 Recall 70.0%, false alarm 2.92회/분, 평균 감지 지연
-0.40초, 중복 Event 영상 1건이다. 따라서 지연 목표만 충족했으며, 기능은 기본
-비활성 opt-in PoC로 유지한다. 자세한 결과는 `docs/fall_evaluation.md`에 기록한다.
+Annotation V2와 Track handoff 안정화 이후 Development 결과는 Recall 83.3%,
+timely Recall 66.7%, false alarm 0회/분, 중복 Event 0건이다. Subject 7~8
+진단 결과는 Recall 100%, timely Recall 90%, false alarm 2.34회/분, 중복 Event
+0건이다. 오탐 목표를 충족하지 못했고 Subject 7~8을 오류 분석에 사용했으므로,
+기능은 기본 비활성 opt-in PoC로 유지하며 이 수치를 최종 성능으로 보고하지 않는다.
+자세한 이력은 `docs/fall_evaluation.md`에 기록한다.
 
 동일 입력·동일 하드웨어에서 적용 전후 각각 3회 측정하는 FPS 기준은 아직 완료하지
 않았다. 짧은 파일 1회 비교에서는 opt-in 경로가 기본 경로보다 약 36.9% 낮았으며,
 장시간/IP 카메라 통합 측정에서 재확인한다.
 
-Subject 9~10 Holdout 평가는 PR4까지 보류한다. `FALL_SUSPECT.cause`의 원인 후보
-Track 정확도·false attribution 기준은 PR3에서 계약(휴리스틱 설계)만 구현했고,
-정량 검증은 Phase 4에서 위 Mini Set 또는 외부 데이터로 적용한다.
+Subject 9~10 Holdout 평가는 설정 동결 전까지 보류한다. `FALL_SUSPECT.cause`의
+원인 후보 Track 정확도·false attribution은 아직 정량 검증하지 않았으며,
+Phase 4에서 위 Mini Set 또는 외부 데이터로 평가한다.

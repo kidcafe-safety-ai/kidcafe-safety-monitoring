@@ -7,6 +7,8 @@ tests/test_fall_pipeline_module.py에서 확인한다.
 
 from __future__ import annotations
 
+from typing import List
+
 import pytest
 
 from src.common.types import Track, TrackingResult
@@ -508,3 +510,161 @@ class TestSingleCandidateObservationNotReused:
 
         assert cause is not None
         assert cause.track_id == 2
+
+
+class TestVictimTrackIdAliases:
+    """Candidate Handoff(src/safety/fall_detector.py 모듈 docstring)로 피해자의
+
+    track_id가 승계 전후로 바뀐 경우를 다룬다. 이 클래스는 FallDetector와
+    완전히 분리된 자체 이력을 Track별로 관리하므로, handoff로 바뀐 새
+    track_id만 넘기면 handoff 이전 시각의 victim 샘플을 찾지 못해 lookback
+    구간이 그 이전 시각까지 걸쳐 있을 때 근거가 있어도 잘못 cause=None이
+    될 수 있다.
+    """
+
+    def test_lookback_samples_before_handoff_are_found_via_alias(self):
+        fps = 10.0
+        attributor = FallCauseAttributor(fps=fps, config=_fast_config())
+
+        # 피해자: id=1로 t=0.0~0.9(lookback 구간)까지 관측된 뒤 handoff로
+        # id=2가 된다. id=2 자체의 샘플은 아직 하나도 기록되지 않았다
+        # (confirm이 handoff 직후 곧바로 일어난 경우를 모사).
+        frame_tracks = {}
+        for frame_number in range(0, 10):
+            frame_tracks.setdefault(frame_number, []).append(_track(1, 500.0))
+        # 후보(id=3)가 같은 구간 동안 700 -> 520으로 접근.
+        t = 0.0
+        while t <= 0.9 + 1e-9:
+            candidate_x = 700.0 - (700.0 - 520.0) * (t / 0.9)
+            frame_tracks.setdefault(round(t * fps), []).append(_track(3, candidate_x))
+            t += 0.1
+        _feed_frames_in_order(attributor, frame_tracks)
+
+        cause = attributor.attribute(
+            _VIDEO_SOURCE,
+            victim_track_id=2,
+            fall_start_sec=1.0,
+            victim_track_id_aliases=frozenset({1}),
+        )
+
+        assert cause is not None
+        assert cause.track_id == 3
+
+    def test_without_alias_same_scenario_returns_none(self):
+        """대조군: alias를 넘기지 않으면 handoff 이전 victim 샘플을 아예
+
+        못 찾아(id=2 자체 이력은 비어 있으므로) 근거가 있어도 cause=None이다
+        — 위 테스트가 실제로 alias 병합에 의존함을 보여준다.
+        """
+        fps = 10.0
+        attributor = FallCauseAttributor(fps=fps, config=_fast_config())
+
+        frame_tracks = {}
+        for frame_number in range(0, 10):
+            frame_tracks.setdefault(frame_number, []).append(_track(1, 500.0))
+        t = 0.0
+        while t <= 0.9 + 1e-9:
+            candidate_x = 700.0 - (700.0 - 520.0) * (t / 0.9)
+            frame_tracks.setdefault(round(t * fps), []).append(_track(3, candidate_x))
+            t += 0.1
+        _feed_frames_in_order(attributor, frame_tracks)
+
+        cause = attributor.attribute(_VIDEO_SOURCE, victim_track_id=2, fall_start_sec=1.0)
+
+        assert cause is None
+
+    def test_candidate_track_id_equal_to_alias_is_never_attributed(self, monkeypatch):
+        """alias track_id 자신은 후보 목록에서도 제외돼야 한다 — 그러지
+
+        않으면 피해자가 자기 자신의 예전 track_id를 낙상 원인으로
+        지목하는 자기 참조가 생길 수 있다.
+
+        alias(id=1)만으로는 victim/candidate 이력이 동일해 closing_speed=0으로
+        자연스럽게 걸러지므로 제외 로직이 실제로 없어져도
+        이 상황만으로는 테스트가 계속 통과할 수 있다 — `_score_candidate`를
+        spy해 alias track_id로는 아예 호출되지 않는지 직접 확인하고, 진짜
+        접근 후보(id=3)를 함께 둬서 제외 로직이 실제로 실행 경로를
+        타는지도 같이 검증한다.
+        """
+        fps = 10.0
+        attributor = FallCauseAttributor(fps=fps, config=_fast_config())
+
+        scored_candidate_ids: List[int] = []
+        original_score_candidate = attributor._score_candidate
+
+        def _spy_score_candidate(candidate_track_id, *args, **kwargs):
+            scored_candidate_ids.append(candidate_track_id)
+            return original_score_candidate(candidate_track_id, *args, **kwargs)
+
+        monkeypatch.setattr(attributor, "_score_candidate", _spy_score_candidate)
+
+        frame_tracks = {}
+        for frame_number in range(0, 10):
+            frame_tracks.setdefault(frame_number, []).append(_track(1, 500.0))
+        # 진짜 후보(id=3)가 같은 구간 동안 700 -> 520으로 접근.
+        t = 0.0
+        while t <= 0.9 + 1e-9:
+            candidate_x = 700.0 - (700.0 - 520.0) * (t / 0.9)
+            frame_tracks.setdefault(round(t * fps), []).append(_track(3, candidate_x))
+            t += 0.1
+        _feed_frames_in_order(attributor, frame_tracks)
+
+        cause = attributor.attribute(
+            _VIDEO_SOURCE,
+            victim_track_id=2,
+            fall_start_sec=1.0,
+            victim_track_id_aliases=frozenset({1}),
+        )
+
+        assert cause is not None
+        assert cause.track_id == 3
+        assert 1 not in scored_candidate_ids  # alias는 후보로 채점조차 되면 안 된다
+        assert 2 not in scored_candidate_ids  # 현재 victim_track_id 자신도 마찬가지
+        assert scored_candidate_ids == [3]
+
+    def test_multi_hop_alias_chain_merges_and_excludes_all(self, monkeypatch):
+        """1 -> 2 -> 3 다단 Candidate Handoff로 victim_track_id_aliases
+
+        가 {1, 2}인 경우에도 두 alias 이력이 모두 병합되고, 둘 다 후보에서
+        제외돼야 한다.
+        """
+        fps = 10.0
+        attributor = FallCauseAttributor(fps=fps, config=_fast_config())
+
+        scored_candidate_ids: List[int] = []
+        original_score_candidate = attributor._score_candidate
+
+        def _spy_score_candidate(candidate_track_id, *args, **kwargs):
+            scored_candidate_ids.append(candidate_track_id)
+            return original_score_candidate(candidate_track_id, *args, **kwargs)
+
+        monkeypatch.setattr(attributor, "_score_candidate", _spy_score_candidate)
+
+        frame_tracks = {}
+        # 피해자: id=1(t=0.0~0.4), id=2(t=0.5~0.9)로 두 번 승계된 뒤 현재는
+        # id=3. lookback 구간(t=0.0~1.0)이 두 alias에 걸쳐 있다.
+        for frame_number in range(0, 5):
+            frame_tracks.setdefault(frame_number, []).append(_track(1, 500.0))
+        for frame_number in range(5, 10):
+            frame_tracks.setdefault(frame_number, []).append(_track(2, 500.0))
+        # 진짜 후보(id=4)가 같은 구간 동안 700 -> 520으로 접근.
+        t = 0.0
+        while t <= 0.9 + 1e-9:
+            candidate_x = 700.0 - (700.0 - 520.0) * (t / 0.9)
+            frame_tracks.setdefault(round(t * fps), []).append(_track(4, candidate_x))
+            t += 0.1
+        _feed_frames_in_order(attributor, frame_tracks)
+
+        cause = attributor.attribute(
+            _VIDEO_SOURCE,
+            victim_track_id=3,
+            fall_start_sec=1.0,
+            victim_track_id_aliases=frozenset({1, 2}),
+        )
+
+        assert cause is not None
+        assert cause.track_id == 4
+        assert 1 not in scored_candidate_ids
+        assert 2 not in scored_candidate_ids
+        assert 3 not in scored_candidate_ids
+        assert scored_candidate_ids == [4]

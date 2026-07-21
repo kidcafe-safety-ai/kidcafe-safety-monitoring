@@ -823,3 +823,238 @@ class TestFiltering:
 
         with pytest.raises(ValueError):
             rev.ReviewSession(csv_path, tmp_path / "videos", video_id="does_not_exist")
+
+
+_COLUMNS_V2 = [
+    "video_id",
+    "label",
+    "video_path",
+    "dataset_fall_label_frame",
+    "fall_start_frame",
+    "impact_frame",
+    "lying_start_frame",
+    "review_status",
+]
+
+
+def _write_annotations_csv_v2(path: Path, rows: list) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=_COLUMNS_V2)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
+def _fall_row_v2(**overrides) -> dict:
+    defaults = {
+        "video_id": "S1_fall_backwards",
+        "label": "fall",
+        "video_path": "Subject.1/Fall backwards/FallBackwards.avi",
+        "dataset_fall_label_frame": "5",
+        "fall_start_frame": "",
+        "impact_frame": "",
+        "lying_start_frame": "",
+        "review_status": "pending",
+    }
+    defaults.update(overrides)
+    return defaults
+
+
+class TestAnnotationVersionV2:
+    """V2의 dataset_fall_label_frame 보존과 세 시점 필수 검수를 확인한다."""
+
+    def test_v1_csv_is_still_saved_without_dataset_fall_label_frame_column(self, tmp_path):
+        """v1 CSV를 열면(헤더에 dataset_fall_label_frame이 없으면) 저장 시에도 컬럼을 추가하지 않는다."""
+        _make_activity_folder(
+            tmp_path / "videos", "Subject.1", "Fall backwards", 3, ["0", "0", "1"]
+        )
+        csv_path = tmp_path / "annotations.csv"
+        _write_annotations_csv(csv_path, [_fall_row()])
+        session = rev.ReviewSession(csv_path, tmp_path / "videos")
+
+        session.mark_needs_review()
+        session.save()
+
+        header = csv_path.read_text(encoding="utf-8").splitlines()[0]
+        assert "dataset_fall_label_frame" not in header
+
+    def test_v2_csv_round_trips_dataset_fall_label_frame_column(self, tmp_path):
+        _make_activity_folder(
+            tmp_path / "videos", "Subject.1", "Fall backwards", 10, ["0"] * 5 + ["1"] * 5
+        )
+        csv_path = tmp_path / "annotations_v2.csv"
+        _write_annotations_csv_v2(csv_path, [_fall_row_v2()])
+        session = rev.ReviewSession(csv_path, tmp_path / "videos")
+
+        assert session.current.dataset_fall_label_frame == 5
+        session.mark_needs_review()
+        session.save()
+
+        content = csv_path.read_text(encoding="utf-8")
+        assert content.splitlines()[0] == ",".join(_COLUMNS_V2)
+        assert ",5," in content  # dataset_fall_label_frame이 그대로 보존됨
+
+    def test_default_start_frame_falls_back_to_dataset_fall_label_frame(self, tmp_path):
+        """v2는 fall_start_frame이 처음엔 비어 있으므로 dataset_fall_label_frame을 앵커로 쓴다."""
+        _make_activity_folder(
+            tmp_path / "videos", "Subject.1", "Fall backwards", 30, ["0"] * 20 + ["1"] * 10
+        )
+        csv_path = tmp_path / "annotations_v2.csv"
+        _write_annotations_csv_v2(
+            csv_path, [_fall_row_v2(dataset_fall_label_frame="20")]
+        )
+        session = rev.ReviewSession(csv_path, tmp_path / "videos", margin=15)
+
+        assert session.default_start_frame() == 5  # 20 - 15
+
+    def test_v2_mark_reviewed_requires_all_three_timestamps(self, tmp_path):
+        _make_activity_folder(
+            tmp_path / "videos", "Subject.1", "Fall backwards", 10, ["0"] * 5 + ["1"] * 5
+        )
+        csv_path = tmp_path / "annotations_v2.csv"
+        _write_annotations_csv_v2(csv_path, [_fall_row_v2()])
+        session = rev.ReviewSession(
+            csv_path, tmp_path / "videos", annotation_version="v2"
+        )
+
+        session.set_fall_start_frame(4)
+        with pytest.raises(ValueError, match="impact_frame"):
+            session.mark_reviewed()
+        assert session.current.review_status == "pending"
+
+        session.set_impact_frame(5)
+        session.set_lying_start_frame(6)
+        session.mark_reviewed()  # 세 값이 모두 있으면 통과
+        assert session.current.review_status == "reviewed"
+
+    def test_v2_strict_check_does_not_apply_to_no_fall_rows(self, tmp_path):
+        _make_activity_folder(tmp_path / "videos", "Subject.1", "Walk", 3, ["0", "0", "0"])
+        csv_path = tmp_path / "annotations_v2.csv"
+        _write_annotations_csv_v2(
+            csv_path,
+            [
+                _fall_row_v2(
+                    video_id="S1_walk",
+                    label="no_fall",
+                    video_path="Subject.1/Walk/Walk.avi",
+                    dataset_fall_label_frame="",
+                )
+            ],
+        )
+        session = rev.ReviewSession(
+            csv_path, tmp_path / "videos", annotation_version="v2"
+        )
+
+        session.mark_reviewed()  # no_fall 행은 시점 필드가 필요 없다
+        assert session.current.review_status == "reviewed"
+
+    def test_v1_csv_default_auto_still_skips_strict_check(self, tmp_path):
+        """진짜 v1 CSV(헤더에 dataset_fall_label_frame 없음)는 auto 기본값에서도 v1처럼 동작한다."""
+        _make_activity_folder(
+            tmp_path / "videos", "Subject.1", "Fall backwards", 10, ["0"] * 5 + ["1"] * 5
+        )
+        csv_path = tmp_path / "annotations.csv"
+        _write_annotations_csv(csv_path, [_fall_row(fall_start_frame="5")])
+        session = rev.ReviewSession(csv_path, tmp_path / "videos")  # annotation_version=auto
+
+        session.mark_reviewed()  # impact/lying 없이도 통과(v1 동작 유지)
+        assert session.current.review_status == "reviewed"
+
+    def test_v2_csv_enforces_strict_check_even_without_explicit_flag(self, tmp_path):
+        """--annotation-version을 안 넘겨도(auto), v2 CSV를 열면 자동으로 엄격 검증이 켜진다.
+
+        자동 판별이 없으면 V2 CSV를 기본 V1 규칙으로 열어 세 시점 없이
+        reviewed로 저장할 수 있다.
+        """
+        _make_activity_folder(
+            tmp_path / "videos", "Subject.1", "Fall backwards", 10, ["0"] * 5 + ["1"] * 5
+        )
+        csv_path = tmp_path / "annotations_v2.csv"
+        _write_annotations_csv_v2(csv_path, [_fall_row_v2(fall_start_frame="5")])
+        session = rev.ReviewSession(csv_path, tmp_path / "videos")  # annotation_version=auto
+
+        with pytest.raises(ValueError, match="impact_frame"):
+            session.mark_reviewed()
+        assert session.current.review_status == "pending"
+
+    def test_v2_strict_check_also_requires_dataset_fall_label_frame(self, tmp_path):
+        _make_activity_folder(
+            tmp_path / "videos", "Subject.1", "Fall backwards", 10, ["0"] * 5 + ["1"] * 5
+        )
+        csv_path = tmp_path / "annotations_v2.csv"
+        _write_annotations_csv_v2(
+            csv_path,
+            [
+                _fall_row_v2(
+                    dataset_fall_label_frame="",
+                    fall_start_frame="4",
+                    impact_frame="5",
+                    lying_start_frame="6",
+                )
+            ],
+        )
+        session = rev.ReviewSession(csv_path, tmp_path / "videos", annotation_version="v2")
+
+        with pytest.raises(ValueError, match="dataset_fall_label_frame"):
+            session.mark_reviewed()
+
+    def test_explicit_v2_on_v1_csv_raises(self, tmp_path):
+        _make_activity_folder(
+            tmp_path / "videos", "Subject.1", "Fall backwards", 3, ["0", "0", "1"]
+        )
+        csv_path = tmp_path / "annotations.csv"
+        _write_annotations_csv(csv_path, [_fall_row()])
+
+        with pytest.raises(ValueError, match="v2"):
+            rev.ReviewSession(csv_path, tmp_path / "videos", annotation_version="v2")
+
+    def test_explicit_v1_on_v2_csv_raises(self, tmp_path):
+        _make_activity_folder(
+            tmp_path / "videos", "Subject.1", "Fall backwards", 10, ["0"] * 5 + ["1"] * 5
+        )
+        csv_path = tmp_path / "annotations_v2.csv"
+        _write_annotations_csv_v2(csv_path, [_fall_row_v2()])
+
+        with pytest.raises(ValueError, match="v1"):
+            rev.ReviewSession(csv_path, tmp_path / "videos", annotation_version="v1")
+
+    def test_save_rejects_reviewed_row_missing_timestamps_even_without_mark_reviewed(
+        self, tmp_path
+    ):
+        """CSV를 손으로 고쳐(또는 손상된 기존 파일을 그대로 열어) review_status만
+
+        reviewed로 바꿔놓고 mark_reviewed()를 거치지 않아도, save()가 v2 CSV의
+        모든 reviewed fall 행에 세 시점+dataset_fall_label_frame을 요구해야 한다.
+        """
+        _make_activity_folder(
+            tmp_path / "videos", "Subject.1", "Fall backwards", 10, ["0"] * 5 + ["1"] * 5
+        )
+        csv_path = tmp_path / "annotations_v2.csv"
+        _write_annotations_csv_v2(csv_path, [_fall_row_v2(review_status="reviewed")])
+        session = rev.ReviewSession(csv_path, tmp_path / "videos")
+
+        with pytest.raises(ValueError, match="fall_start_frame"):
+            session.save()
+
+    def test_save_rejects_reviewed_row_missing_only_dataset_fall_label_frame(self, tmp_path):
+        _make_activity_folder(
+            tmp_path / "videos", "Subject.1", "Fall backwards", 10, ["0"] * 5 + ["1"] * 5
+        )
+        csv_path = tmp_path / "annotations_v2.csv"
+        _write_annotations_csv_v2(
+            csv_path,
+            [
+                _fall_row_v2(
+                    dataset_fall_label_frame="",
+                    fall_start_frame="4",
+                    impact_frame="5",
+                    lying_start_frame="6",
+                    review_status="reviewed",
+                )
+            ],
+        )
+        session = rev.ReviewSession(csv_path, tmp_path / "videos")
+
+        with pytest.raises(ValueError, match="dataset_fall_label_frame"):
+            session.save()

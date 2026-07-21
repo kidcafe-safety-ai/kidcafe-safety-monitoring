@@ -13,6 +13,9 @@ from pathlib import Path
 
 import pytest
 
+from src.common.types import Track, TrackingResult
+from src.safety.fall_detector import FallDetectorConfig
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import evaluate_fall as ef  # noqa: E402
 
@@ -123,6 +126,319 @@ class TestScoreFallVideo:
         assert qualifying == 0
 
 
+class TestScoreFallVideoTimely:
+    """V2 주 지표는 [onset-tolerance, onset+timely_window_sec] 구간만 TP로 센다."""
+
+    def test_no_events_is_not_timely_detected(self):
+        result = ef.score_fall_video_timely([], fall_start_frame=10, impact_frame=12, fps=10.0)
+        assert result.timely_detected is False
+        assert result.onset_latency_sec is None
+        assert result.late_detection is False
+        assert result.duplicate_event is False
+
+    def test_event_within_window_is_timely_detected(self):
+        # window = [10, 10 + 2*10] = [10, 30]
+        result = ef.score_fall_video_timely(
+            [15], fall_start_frame=10, impact_frame=12, fps=10.0, timely_window_sec=2.0
+        )
+        assert result.timely_detected is True
+        assert result.onset_latency_sec == pytest.approx(0.5)  # (15-10)/10
+        assert result.lead_to_impact_sec == pytest.approx((12 - 15) / 10.0)
+        assert result.late_detection is False
+        assert result.duplicate_event is False
+
+    def test_event_after_window_is_late_detection_not_timely(self):
+        """기존 score_fall_video()라면 detected=True였을 늦은 Event가, 여기서는
+
+        timely_detected=False + late_detection=True로 별도 기록돼야 한다.
+        """
+        result = ef.score_fall_video_timely(
+            [35], fall_start_frame=10, impact_frame=12, fps=10.0, timely_window_sec=2.0
+        )
+        assert result.timely_detected is False
+        assert result.late_detection is True
+        assert result.onset_latency_sec is None
+
+    def test_event_before_tolerance_is_early_false_alarm_not_timely(self):
+        result = ef.score_fall_video_timely(
+            [2], fall_start_frame=10, impact_frame=12, fps=10.0, early_tolerance_sec=0.0
+        )
+        assert result.timely_detected is False
+        assert result.early_false_alarms == 1
+        assert result.late_detection is False  # 이른 오탐은 late가 아니다
+
+    def test_two_events_within_window_is_duplicate(self):
+        result = ef.score_fall_video_timely(
+            [12, 18], fall_start_frame=10, impact_frame=12, fps=10.0, timely_window_sec=2.0
+        )
+        assert result.timely_detected is True
+        assert result.duplicate_event is True
+        assert result.timely_event_count == 2
+        assert result.onset_latency_sec == pytest.approx((12 - 10) / 10.0)  # 첫 Event 기준
+
+    def test_timely_event_plus_later_reconfirm_is_still_duplicate(self):
+        """구간 안 1개 + 구간 밖 늦은 재확정 1개도 "낙상 1회당 Event 1회" 위반이므로
+
+        duplicate_event=True여야 한다.
+        late_detection은 timely_detected가 이미 True라 False로 유지된다.
+        """
+        result = ef.score_fall_video_timely(
+            [12, 40], fall_start_frame=10, impact_frame=12, fps=10.0, timely_window_sec=2.0
+        )
+        assert result.timely_detected is True
+        assert result.duplicate_event is True
+        assert result.late_detection is False  # 이미 timely_detected라 late가 아니다
+
+    def test_only_late_event_is_late_detection_not_duplicate(self):
+        """구간 밖 늦은 Event 1개뿐이면 duplicate가 아니라 late_detection만 True다."""
+        result = ef.score_fall_video_timely(
+            [35], fall_start_frame=10, impact_frame=12, fps=10.0, timely_window_sec=2.0
+        )
+        assert result.timely_detected is False
+        assert result.late_detection is True
+        assert result.duplicate_event is False
+
+    def test_two_late_events_are_both_late_detection_and_duplicate(self):
+        """timely 구간 안에는 아무것도 없고 구간 밖에 늦은 Event가 2개면,
+
+        late_detection=True(감지는 결국 늦게라도 함)이면서 동시에
+        duplicate_event=True(낙상 1회당 Event 1회 위반)여야 한다.
+        """
+        result = ef.score_fall_video_timely(
+            [35, 45], fall_start_frame=10, impact_frame=12, fps=10.0, timely_window_sec=2.0
+        )
+        assert result.timely_detected is False
+        assert result.late_detection is True
+        assert result.duplicate_event is True
+
+    def test_lead_to_impact_none_when_impact_frame_missing(self):
+        result = ef.score_fall_video_timely(
+            [15], fall_start_frame=10, impact_frame=None, fps=10.0
+        )
+        assert result.timely_detected is True
+        assert result.lead_to_impact_sec is None
+
+    def test_window_bounds_are_exposed(self):
+        result = ef.score_fall_video_timely(
+            [15], fall_start_frame=10, impact_frame=12, fps=10.0,
+            early_tolerance_sec=0.2, timely_window_sec=2.0,
+        )
+        # tolerance_frames = round(0.2*10) = 2, window_frames = round(2.0*10) = 20
+        assert result.window_start_frame == 8
+        assert result.window_end_frame == 30
+
+    def test_rejects_non_positive_timely_window_sec(self):
+        with pytest.raises(ValueError, match="timely_window_sec"):
+            ef.score_fall_video_timely(
+                [15], fall_start_frame=10, impact_frame=12, fps=10.0, timely_window_sec=0.0
+            )
+
+    def test_rejects_negative_early_tolerance_sec(self):
+        with pytest.raises(ValueError, match="early_tolerance_sec"):
+            ef.score_fall_video_timely(
+                [15], fall_start_frame=10, impact_frame=12, fps=10.0, early_tolerance_sec=-0.1
+            )
+
+    def test_rejects_non_positive_fps(self):
+        with pytest.raises(ValueError, match="fps"):
+            ef.score_fall_video_timely([15], fall_start_frame=10, impact_frame=12, fps=0.0)
+
+
+class TestSummarizeWindowDiagnostics:
+    def _track(self, track_id, with_pose=False, keypoints_conf=None):
+        from src.common.types import Track
+
+        if with_pose and keypoints_conf is None:
+            keypoints_conf = [0.9] * 17
+        return Track(
+            track_id=track_id,
+            bbox=[0.0, 0.0, 10.0, 10.0],
+            foot_point=[5.0, 10.0],
+            confidence=0.9,
+            keypoints=[[5.0, 1.0]] * 17 if with_pose else None,
+            keypoints_conf=keypoints_conf,
+        )
+
+    def test_frames_outside_window_are_ignored(self):
+        tracks_by_frame = [(0, [self._track(1)]), (100, [])]
+        result = ef.summarize_window_diagnostics(
+            tracks_by_frame, window_start_frame=5, window_end_frame=10
+        )
+        assert result["track_coverage"] is None
+        assert result["no_track_frame_count"] is None
+
+    def test_full_coverage_no_track_loss(self):
+        tracks_by_frame = [(f, [self._track(1)]) for f in range(5, 11)]
+        result = ef.summarize_window_diagnostics(
+            tracks_by_frame, window_start_frame=5, window_end_frame=10
+        )
+        assert result["track_coverage"] == pytest.approx(1.0)
+        assert result["no_track_frame_count"] == 0
+        assert result["id_switch_count"] == 0
+
+    def test_missing_tracks_reduce_coverage(self):
+        tracks_by_frame = [(f, [self._track(1)] if f != 7 else []) for f in range(5, 11)]
+        result = ef.summarize_window_diagnostics(
+            tracks_by_frame, window_start_frame=5, window_end_frame=10
+        )
+        # 6프레임 중 1프레임(frame 7) no-track -> coverage = 5/6
+        assert result["track_coverage"] == pytest.approx(5 / 6)
+        assert result["no_track_frame_count"] == 1
+
+    def test_id_switch_counts_distinct_track_ids_minus_one(self):
+        tracks_by_frame = [
+            (5, [self._track(1)]),
+            (6, [self._track(1)]),
+            (7, [self._track(2)]),  # ID switch
+            (8, [self._track(2)]),
+        ]
+        result = ef.summarize_window_diagnostics(
+            tracks_by_frame, window_start_frame=5, window_end_frame=8
+        )
+        assert result["id_switch_count"] == 1
+
+    def test_pose_valid_ratio_counts_frames_with_any_keypoints(self):
+        tracks_by_frame = [
+            (5, [self._track(1, with_pose=True)]),
+            (6, [self._track(1, with_pose=False)]),
+        ]
+        result = ef.summarize_window_diagnostics(
+            tracks_by_frame, window_start_frame=5, window_end_frame=6
+        )
+        assert result["pose_valid_frame_ratio"] == pytest.approx(0.5)
+
+    def test_low_confidence_hip_keypoints_are_not_pose_valid(self):
+        """keypoints 배열 자체는 있어도 엉덩이 confidence가 낮으면 실제
+
+        FallDetector의 pose confirm 경로는 이 프레임을 못 쓴다(pose_features.py
+        PoseFeatureExtractor 참고). 배열 존재 여부만으로는 이걸 못 잡는다.
+        """
+        low_hip_conf = [0.9] * 17
+        low_hip_conf[11] = 0.1  # LEFT_HIP
+        low_hip_conf[12] = 0.1  # RIGHT_HIP
+        tracks_by_frame = [(5, [self._track(1, with_pose=True, keypoints_conf=low_hip_conf)])]
+
+        result = ef.summarize_window_diagnostics(
+            tracks_by_frame, window_start_frame=5, window_end_frame=5, pose_min_keypoint_conf=0.3
+        )
+
+        assert result["pose_valid_frame_ratio"] == pytest.approx(0.0)
+
+    def test_pose_min_keypoint_conf_threshold_is_configurable(self):
+        """pose_min_keypoint_conf를 낮추면(예: 0.05) 같은 keypoint도 유효로 잡혀야 한다."""
+        low_hip_conf = [0.9] * 17
+        low_hip_conf[11] = 0.1
+        low_hip_conf[12] = 0.1
+        tracks_by_frame = [(5, [self._track(1, with_pose=True, keypoints_conf=low_hip_conf)])]
+
+        result = ef.summarize_window_diagnostics(
+            tracks_by_frame, window_start_frame=5, window_end_frame=5, pose_min_keypoint_conf=0.05
+        )
+
+        assert result["pose_valid_frame_ratio"] == pytest.approx(1.0)
+
+
+class TestSummarizeModelWindowDiagnostics:
+    def _evidence(self, label, track_id=1):
+        from src.safety.fall_model_matching import FallModelEvidence
+
+        return {
+            track_id: FallModelEvidence(track_id=track_id, label=label, confidence=0.9, iou=0.9)
+        }
+
+    def test_frames_outside_window_are_ignored(self):
+        model_evidence_by_frame = [(0, self._evidence("fall")), (100, self._evidence("fall"))]
+        result = ef.summarize_model_window_diagnostics(
+            model_evidence_by_frame, window_start_frame=5, window_end_frame=10, fps=10.0
+        )
+        assert result["model_observed_frame_count"] is None
+        assert result["model_fall_observed_ratio"] is None
+
+    def test_model_never_used_returns_all_none(self):
+        """구간 안 모든 프레임이 model_evidence=None(보조 모델을 아예 안 씀)이면
+
+        관측/fall 카운트를 0으로 채우지 않고 전부 None이어야 한다 — "모델
+        비활성"과 "모델은 켜졌는데 전부 unknown(매칭 실패)"을 구분해야
+        한다. 0/0은 후자와 구분되지 않는다.
+        """
+        model_evidence_by_frame = [(f, None) for f in range(5, 11)]
+        result = ef.summarize_model_window_diagnostics(
+            model_evidence_by_frame, window_start_frame=5, window_end_frame=10, fps=10.0
+        )
+        assert result["model_observed_frame_count"] is None
+        assert result["model_fall_frame_count"] is None
+        assert result["model_fall_observed_ratio"] is None
+        assert result["max_consecutive_model_fall_frames"] is None
+        assert result["max_consecutive_model_fall_sec"] is None
+
+    def test_model_active_but_all_unknown_returns_zero_not_none(self):
+        """모델은 켜져 있지만(model_evidence 딕셔너리가 매 프레임 존재) 전부
+
+        매칭 실패(unknown)면, "모델을 아예 안 씀"과 구분되게 관측/fall은
+        0으로, ratio는 분모가 0이라 None으로 남아야 한다.
+        """
+        model_evidence_by_frame = [(f, self._evidence("unknown")) for f in range(5, 11)]
+        result = ef.summarize_model_window_diagnostics(
+            model_evidence_by_frame, window_start_frame=5, window_end_frame=10, fps=10.0
+        )
+        assert result["model_observed_frame_count"] == 0
+        assert result["model_fall_frame_count"] == 0
+        assert result["model_fall_observed_ratio"] is None
+        assert result["max_consecutive_model_fall_frames"] == 0
+
+    def test_all_fall_frames(self):
+        model_evidence_by_frame = [(f, self._evidence("fall")) for f in range(5, 11)]
+        result = ef.summarize_model_window_diagnostics(
+            model_evidence_by_frame, window_start_frame=5, window_end_frame=10, fps=10.0
+        )
+        assert result["model_observed_frame_count"] == 6
+        assert result["model_fall_frame_count"] == 6
+        assert result["model_fall_observed_ratio"] == pytest.approx(1.0)
+        assert result["max_consecutive_model_fall_frames"] == 6
+        assert result["max_consecutive_model_fall_sec"] == pytest.approx(0.6)
+
+    def test_nofall_frames_count_as_observed_not_fall(self):
+        model_evidence_by_frame = [(f, self._evidence("nofall")) for f in range(5, 11)]
+        result = ef.summarize_model_window_diagnostics(
+            model_evidence_by_frame, window_start_frame=5, window_end_frame=10, fps=10.0
+        )
+        assert result["model_observed_frame_count"] == 6
+        assert result["model_fall_frame_count"] == 0
+        assert result["model_fall_observed_ratio"] == pytest.approx(0.0)
+
+    def test_unknown_label_frames_are_not_observed(self):
+        model_evidence_by_frame = [(f, self._evidence("unknown")) for f in range(5, 11)]
+        result = ef.summarize_model_window_diagnostics(
+            model_evidence_by_frame, window_start_frame=5, window_end_frame=10, fps=10.0
+        )
+        assert result["model_observed_frame_count"] == 0
+        assert result["model_fall_observed_ratio"] is None
+
+    def test_max_consecutive_fall_run_breaks_on_gap(self):
+        """fall,fall,nofall,fall,fall,fall -> 최장 연속은 3(마지막 구간)이어야 한다."""
+        labels = ["fall", "fall", "nofall", "fall", "fall", "fall"]
+        model_evidence_by_frame = [
+            (5 + i, self._evidence(label)) for i, label in enumerate(labels)
+        ]
+        result = ef.summarize_model_window_diagnostics(
+            model_evidence_by_frame, window_start_frame=5, window_end_frame=10, fps=10.0
+        )
+        assert result["max_consecutive_model_fall_frames"] == 3
+        assert result["max_consecutive_model_fall_sec"] == pytest.approx(0.3)
+        assert result["model_fall_frame_count"] == 5
+        assert result["model_fall_observed_ratio"] == pytest.approx(5 / 6)
+
+    def test_multiple_tracks_any_fall_counts_frame_as_fall(self):
+        """한 프레임에 여러 Track이 있고 그중 하나라도 fall이면 그 프레임은 fall이다."""
+        model_evidence_by_frame = [
+            (5, {1: self._evidence("nofall")[1], 2: self._evidence("fall", track_id=2)[2]}),
+        ]
+        result = ef.summarize_model_window_diagnostics(
+            model_evidence_by_frame, window_start_frame=5, window_end_frame=5, fps=10.0
+        )
+        assert result["model_fall_frame_count"] == 1
+
+
 class TestValidateAnnotations:
     def test_valid_rows_pass(self):
         ef.validate_annotations(
@@ -166,6 +482,36 @@ class TestValidateAnnotations:
         ef.validate_annotations(
             [_row(fall_start_frame=10, impact_frame=None, lying_start_frame=20)]
         )
+
+    def test_pending_fall_row_without_fall_start_frame_rejected_by_default(self):
+        """--include-unreviewed로 pending 행까지 채점에 넘겨도, score_fall_video()의
+
+        `None - int` TypeError로 죽기 전에 여기서 명확한 오류로 막아야 한다
+        (v2 annotation은 검수 전까지 fall_start_frame이 비어 있을 수 있음).
+        """
+        with pytest.raises(ValueError, match="fall_start_frame"):
+            ef.validate_annotations(
+                [_row(label="fall", fall_start_frame=None, review_status="pending")]
+            )
+
+    def test_require_fall_start_frame_false_allows_pending_fall_row_without_frame(self):
+        """review_caucafall_annotations.py의 자동 저장 전용 경로: 구조만 검증한다."""
+        ef.validate_annotations(
+            [_row(label="fall", fall_start_frame=None, review_status="pending")],
+            require_fall_start_frame=False,
+        )
+
+    def test_require_fall_start_frame_false_still_rejects_reviewed_row_without_frame(self):
+        """require_fall_start_frame=False는 pending/needs_review 전용 예외이지,
+
+        review_status=reviewed까지 봐주면 안 된다 — CSV를 손으로 고치거나 손상된
+        기존 행을 그대로 다시 저장해서 불완전한 reviewed가 남는 걸 막아야 한다.
+        """
+        with pytest.raises(ValueError, match="fall_start_frame"):
+            ef.validate_annotations(
+                [_row(label="fall", fall_start_frame=None, review_status="reviewed")],
+                require_fall_start_frame=False,
+            )
 
 
 class TestLoadAnnotationsRequiredColumns:
@@ -436,3 +782,198 @@ class TestSummarize:
         assert summary["recall_meets_target_75pct"] is False
         assert summary["false_alarm_meets_target_0.2"] is False
         assert summary["latency_meets_target_2sec"] is False
+
+    def test_evaluation_invalid_forces_timely_recall_target_flag_false(self):
+        """오류 영상이 있으면 timely_recall이 우연히 100%여도 목표 달성 플래그는 False여야 한다."""
+        results = [
+            ef._VideoResult(
+                video_id="ok", label="fall", event_count=1, timely_detected=True
+            ),
+            ef._VideoResult(video_id="err1", label="fall", event_count=0, error="파일 없음"),
+        ]
+        summary = ef._summarize(results)
+
+        assert summary["timely_recall"] == pytest.approx(1.0)  # 분모 자체는 1개(성공한 것만)
+        assert summary["timely_recall_meets_target_75pct"] is False
+
+    def test_timely_recall_counts_only_timely_detected(self):
+        results = [
+            ef._VideoResult(video_id="v1", label="fall", event_count=1, timely_detected=True),
+            ef._VideoResult(video_id="v2", label="fall", event_count=1, timely_detected=False),
+        ]
+        summary = ef._summarize(results)
+        assert summary["timely_recall"] == pytest.approx(0.5)
+
+    def test_timely_recall_meets_target_uses_75pct_threshold(self):
+        results = [
+            ef._VideoResult(video_id=f"v{i}", label="fall", event_count=1, timely_detected=True)
+            for i in range(3)
+        ] + [ef._VideoResult(video_id="v4", label="fall", event_count=0, timely_detected=False)]
+        summary = ef._summarize(results)
+        assert summary["timely_recall"] == pytest.approx(0.75)
+        assert summary["timely_recall_meets_target_75pct"] is True
+
+    def test_avg_onset_latency_and_lead_to_impact_ignore_non_timely_videos(self):
+        results = [
+            ef._VideoResult(
+                video_id="v1",
+                label="fall",
+                event_count=1,
+                timely_detected=True,
+                onset_latency_sec=0.5,
+                lead_to_impact_sec=0.2,
+            ),
+            ef._VideoResult(
+                video_id="v2",
+                label="fall",
+                event_count=1,
+                timely_detected=True,
+                onset_latency_sec=1.5,
+                lead_to_impact_sec=-0.4,
+            ),
+            # timely_detected=False인데 late_detection으로 latency 필드가 채워질 리
+            # 없지만, 혹시 채워져 있어도 평균에 섞이면 안 된다는 걸 명시적으로 검증한다.
+            ef._VideoResult(video_id="v3", label="fall", event_count=1, timely_detected=False),
+        ]
+        summary = ef._summarize(results)
+        assert summary["avg_onset_latency_sec"] == pytest.approx((0.5 + 1.5) / 2)
+        assert summary["avg_lead_to_impact_sec"] == pytest.approx((0.2 - 0.4) / 2)
+
+    def test_late_detections_and_duplicate_events_are_counted(self):
+        results = [
+            ef._VideoResult(
+                video_id="v1", label="fall", event_count=1, timely_detected=False,
+                late_detection=True,
+            ),
+            ef._VideoResult(
+                video_id="v2", label="fall", event_count=2, timely_detected=True,
+                duplicate_event=True,
+            ),
+            ef._VideoResult(video_id="v3", label="fall", event_count=1, timely_detected=True),
+        ]
+        summary = ef._summarize(results)
+        assert summary["late_detections"] == 1
+        assert summary["duplicate_events"] == 1
+
+    def test_timely_recall_is_none_when_no_fall_videos(self):
+        results = [ef._VideoResult(video_id="v1", label="no_fall", event_count=0)]
+        summary = ef._summarize(results)
+        assert summary["timely_recall"] is None
+        assert summary["timely_recall_meets_target_75pct"] is False
+
+
+_STANDING_BBOX = [40.0, 0.0, 60.0, 60.0]  # tests/test_fall_detector.py와 동일
+_LYING_BBOX = [10.0, 50.0, 90.0, 70.0]
+
+
+def _tracking_result(frame_number, bbox, video_source="cam1", track_id=1):
+    return TrackingResult(
+        frame_number=frame_number,
+        timestamp="00:00:00.000",
+        video_source=video_source,
+        tracks=[
+            Track(
+                track_id=track_id,
+                bbox=list(bbox),
+                foot_point=[(bbox[0] + bbox[2]) / 2.0, bbox[3]],
+                confidence=0.9,
+            )
+        ],
+    )
+
+
+def _frame_source(frames):
+    """(frame_number, bbox) 목록 -> score_video_from_frame_source()가 받는
+
+    (frame_number, TrackingResult, raw_detections) 튜플 반복자. 보조 모델은
+    쓰지 않으므로 raw_detections는 항상 None.
+    """
+    for frame_number, bbox in frames:
+        yield frame_number, _tracking_result(frame_number, bbox), None
+
+
+class TestScoreVideoEventDiagnostics:
+    """score_video_from_frame_source()가 label·timely 구간과 무관하게
+
+    confirm된 모든 Event의 진단(event_diagnostics)을 남기는지 검증한다.
+    대표 timely Event 필드만으로는 no_fall 오탐이나 late_detection의
+    confirm 경로를 알 수 없다.
+    """
+
+    def _fast_config(self):
+        return FallDetectorConfig(cooldown_sec=1.0)
+
+    def _standing_then_lying_frames(self, num_standing=5, num_lying=10):
+        frames = [(i, _STANDING_BBOX) for i in range(num_standing)]
+        frames += [
+            (num_standing + i, _LYING_BBOX) for i in range(num_lying)
+        ]
+        return frames
+
+    def test_no_fall_false_alarm_gets_event_diagnostics(self):
+        """no_fall 행: confirm_path/candidate_entry_reason(대표 필드)은 기존과
+
+        같이 계속 None이지만, event_diagnostics에는 실제 오탐의 진단이 남아야
+        한다.
+        """
+        fps = 10.0
+        row = _row(label="no_fall", fall_start_frame=None, impact_frame=None)
+
+        result = ef.score_video_from_frame_source(
+            row,
+            _frame_source(self._standing_then_lying_frames()),
+            fps,
+            self._fast_config(),
+        )
+
+        assert result.event_count >= 1
+        assert result.confirm_path is None
+        assert result.candidate_entry_reason is None
+        assert len(result.event_diagnostics) == result.event_count
+        first = result.event_diagnostics[0]
+        assert first["frame_number"] == result.event_frames[0]
+        assert first["track_id"] == 1  # 중복 Event가 같은 Track인지 다른 Track인지 구분용
+        assert first["confirm_path"] is not None
+        assert first["candidate_entry_reason"] is not None
+
+    def test_late_detection_gets_event_diagnostics_even_without_timely_match(self):
+        """fall 행: timely 구간을 벗어난(late_detection) Event는 대표
+
+        confirm_path/candidate_entry_reason에는 안 잡히지만, event_diagnostics
+        에는 여전히 남아야 한다.
+        """
+        fps = 10.0
+        # timely 구간을 [0.0, 0.1]초로 극히 좁혀서, 실제 confirm(약 t=1.0초)이
+        # 확실히 그 밖에 오도록 만든다.
+        row = _row(label="fall", fall_start_frame=0, impact_frame=None)
+
+        result = ef.score_video_from_frame_source(
+            row,
+            _frame_source(self._standing_then_lying_frames()),
+            fps,
+            self._fast_config(),
+            early_tolerance_sec=0.0,
+            timely_window_sec=0.1,
+        )
+
+        assert result.timely_detected is False
+        assert result.late_detection is True
+        assert result.confirm_path is None  # 대표 필드는 timely 구간 안만 본다
+        assert result.candidate_entry_reason is None
+        assert len(result.event_diagnostics) == result.event_count
+        assert result.event_diagnostics[0]["confirm_path"] is not None
+        assert result.event_diagnostics[0]["candidate_entry_reason"] is not None
+
+    def test_video_result_to_dict_includes_event_diagnostics(self):
+        fps = 10.0
+        row = _row(label="no_fall", fall_start_frame=None, impact_frame=None)
+
+        result = ef.score_video_from_frame_source(
+            row,
+            _frame_source(self._standing_then_lying_frames()),
+            fps,
+            self._fast_config(),
+        )
+
+        as_dict = ef.video_result_to_dict(result)
+        assert as_dict["event_diagnostics"] == result.event_diagnostics

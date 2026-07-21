@@ -1,104 +1,20 @@
-"""FALL_SUSPECT 상태머신 및 감지기.
+"""Track별 ``FALL_SUSPECT`` 상태머신.
 
-계약: docs/interfaces.md FALL_SUSPECT·EventCause 계약
-(상태 흐름 NORMAL → FALLING_CANDIDATE → (FALL_CONFIRMED) → COOLDOWN → NORMAL,
-FALL_CONFIRMED는 지속 상태가 아니라 momentary transition).
+상태 흐름은 ``NORMAL -> FALLING_CANDIDATE -> COOLDOWN -> NORMAL``이다.
+Candidate 진입은 bbox 동적 변화 또는 보조 모델 근거를 사용하고, 확정은
+bbox 수평 자세, Pose, 보조 모델의 bounded temporal voting 중 하나로 한다.
+회복은 지정된 시간 동안 지속되어야 하며, cooldown 중에는 같은 낙상을 다시
+확정하지 않는다.
 
-Track별로 독립된 상태머신을 유지하며, confirm 전이 시에만 Track당 1개의
-FALL_SUSPECT Event를 생성한다. cause는 이 클래스가 직접 만들지 않는다 —
-process()에 cause_attributor(FallCauseAttributor)를 넘기면 confirm 시점에
-그 인스턴스의 attribute()를 호출해 cause를 채우고, 넘기지 않으면(기본값
-None) 항상 None이다(ADR-016, src/safety/fall_cause_attributor.py 모듈
-docstring 참고). 외부 접촉 원인 후보 추정 로직 자체는 이 파일의 책임이
-아니다 — 근접 이력 관리·점수 계산은 전부 FallCauseAttributor가 소유한다.
+ReID가 없는 tracker의 ID 변경은 위치 기반 tombstone으로 보완한다.
+``FALLING_CANDIDATE`` 상태는 Candidate Handoff로 진행 상황을 승계하고,
+``COOLDOWN`` 상태는 cooldown inheritance와 Cooldown Handoff로 재확정을
+억제한다. 승계 우선순위는 cooldown inheritance, Cooldown Handoff,
+Candidate Handoff 순서다.
 
-각 메커니즘의 설계 배경·튜닝 실험·Subject별 실측 수치는 코드가 아니라
-docs/fall_evaluation.md에 둔다(문서 구조가 바뀌어도 이 파일이 깨지지 않도록
-번호 참조 없이 "docs/fall_evaluation.md 참고"로만 가리킨다). 아래는 각
-메커니즘이 무엇을 하는지에 대한 요약이다.
-
-candidate 진입과 confirm은 서로 다른 근거를 쓴다: candidate 진입은 하강
-속도 또는 높이 수축률 중 하나(동적 근거)만으로 충분하고, confirm은
-candidate 진입 이후 수평 자세(aspect_ratio)가 fall_confirm_sec 이상
-지속돼야 한다 — 두 조건을 분리한 이유와 대체 신호 검토·폐기 과정은
-docs/fall_evaluation.md 참고.
-
-Pose 보완: PoseTracker(yolo26n-pose.pt)가 Track.keypoints를 채워주면 confirm에
-pose 기반 경로(머리-엉덩이 상대 높이, `PoseFeatures.head_hip_diff_norm`)를
-수평 자세 경로와 OR로 추가한다. keypoints가 없는 Track(ByteTracker 사용
-시)은 pose 경로가 항상 None을 반환해 자동으로 비활성화되므로 기존 bbox
-전용 동작과 완전히 하위 호환된다. recovery 판정은 pose가 "쓰러진 자세"로
-보는 동안에는 성립하지 않으며, 단일 프레임이 아니라 recovery_confirm_sec
-이상 지속돼야 실제로 NORMAL로 되돌린다(검출 jitter로 candidate가 바로
-초기화되지 않도록). pose 신호가 일시적으로 없는 프레임에서는
-pose_duration_sec을 0으로 초기화하지 않고 유지하며,
-fall_candidate_timeout_sec가 candidate 전체의 상한을 건다.
-
-fine-tuned fall/nofall 모델 보완: 보조 모델 자체는 이 클래스가 소유하지
-않는다 — 자체 추적을 하지 않는 detector이므로 Track ID를 IoU로 매칭하는
-전처리(src/safety/fall_model_matching.py)가 process() 호출 전에 별도로
-필요하고, 그 결과인 FallModelEvidence를 Track별로 process()에 선택적으로
-전달한다. evidence를 아예 전달하지 않으면(model_evidence=None) 이 경로는
-완전히 비활성화되어 기존 bbox/pose 전용 동작과 하위 호환된다.
-
-model confirm 경로는 bounded temporal voting을 쓴다: 최근
-model_vote_window_sec(기본 0.5초) 동안의 판단만 보관하고, 그 구간 안에서
-label="fall"로 관측된 시간의 합이 model_confirm_sec(기본 0.2초) 이상이면
-confirm 조건을 만족한다(`_TrackState.model_fall_evidence`,
-`_accumulate_model_duration`). 단순 연속 지속시간 누적 대신 이 방식을 쓴
-이유(간헐적 오검출로 인한 Event Recall 저하)는 docs/fall_evaluation.md
-참고. 규칙:
-    - label="fall": 이번 스텝의 시간을 근거 목록에 추가한다.
-    - label="nofall"/"unknown": 근거를 추가하지 않지만 이미 쌓인 근거를
-      즉시 삭제하지도 않는다.
-    - model_vote_window_sec보다 오래된 근거는 매 스텝 자동으로 제거된다.
-    - model_evidence 자체가 None(모델 완전 비활성화)이면 근거 목록을
-      즉시 비운다 — "이 경로를 완전히 비활성화한다"는 계약이기 때문이다.
-
-recovery 판정은 model_duration_sec을 먼저 갱신한 뒤 계산한다(순서를
-반대로 하면 윈도우 안에 남아있는 근거가 무시된 채 candidate가 리셋된다).
-cooldown 판정도 pose와 동일하게 model이 "fall"로 보는 동안에는 조기
-재진입 방지 대상에 포함시킨다.
-
-cooldown 중 Track 소실 시에도 COOLDOWN 상태를 유지한다 — `_forget_lost_tracks()`가
-COOLDOWN 상태의 Track은 MultiTrackHistory의 grace period가 지나 사라져도
-`_states`에서 지우지 않는다(지우면 짧은 소실 뒤 재검출 시 cooldown 기억이
-사라져 같은 낙상을 다시 candidate로 잡는다). 이 보존은 cooldown_until_sec
-까지만이다 — 그 시각이 지난 뒤에도 계속 소실 상태면 `_forget_lost_tracks()`가
-함께 지운다(실시간 스트림에서 상태가 낙상마다 무기한 누적되는 것을 막기
-위함). cooldown 만료 전에 Track이 다시 나타나면 `_advance_cooldown()`이
-정상적으로 NORMAL로 되돌린다.
-
-model 기반 candidate 진입: ByteTrack/PoseTracker는 ReID가 없어 낙상 순간
-Track을 놓치고 재검출 시 새 track_id를 부여하는 경우가 흔하다 — 재검출된
-새 Track은 이미 쓰러져 정지한 상태로 시작하므로 candidate 진입에 필요한
-bbox 동적 근거가 애초에 발생하지 않는다(실측 사례는 docs/fall_evaluation.md
-참고). 이를 해결하기 위해 candidate 진입 조건에 모델 경로를 OR로 추가한다:
-윈도우 내 누적 label="fall" 시간이 model_candidate_entry_sec(기본 0.1초,
-model_confirm_sec보다 반드시 작아야 함 — __post_init__에서 검증) 이상이면
-bbox 동적 근거 없이도 candidate에 진입한다. 정식 ReID(Track 재연결)는
-Phase 4로 미룬다.
-
-모델 근거 수집 자체는 상태와 무관하게 매 프레임 갱신한다(`_advance_state`
-최상단, `_accumulate_model_duration`) — NORMAL 상태에서도 쌓여야
-model-assisted 진입 판정을 할 수 있기 때문이다. candidate 진입 시 더 이상
-model_fall_evidence를 비우지 않는다 — NORMAL에서 쌓인 근거가 candidate
-진입 이후 confirm 판정에도 그대로 이어져야 하기 때문이다(단일 프레임만으로
-confirm되지 않도록 model_confirm_sec > model_candidate_entry_sec 관계로
-최소 한 스텝 이상의 추가 근거를 강제한다).
-
-공간 기반 cooldown 승계: model-assisted candidate 진입이 Recall을 끌어올리며
-드러난 또 다른 ReID 부재 문제(낙상 confirm 후 같은 사람이 새 track_id로
-재검출되면 원래 track의 cooldown을 전혀 모른 채 스스로 candidate→confirm까지
-진행해 같은 물리적 낙상이 두 번 확정됨, 실측 사례는 docs/fall_evaluation.md
-참고)에 대한 대응이다. 정식 ReID(외형 특징 기반)는 Phase 4로 미루고, 여기서는
-순수 위치(IoU) 기반의 경량 승계만 추가한다: Track이 confirm될 때 그 bbox와
-cooldown_until_sec을 `_cooldown_tombstones`(video_source별)에 남긴다. 새
-`_TrackState`가 생성되는 시점에, 같은 video_source의 만료되지 않은 tombstone
-중 현재 bbox와 IoU가 cooldown_inherit_iou_threshold 이상인 것이 있으면 새
-Track은 NORMAL이 아니라 그 tombstone의 남은 cooldown을 물려받은 COOLDOWN
-상태로 시작한다(`_try_inherit_cooldown`). 다른 위치의 Track은 영향받지
-않는다. 만료된 tombstone은 매 프레임 정리된다.
+원인 후보 추정은 ``FallCauseAttributor``에 위임한다. 승계 전 Track ID는
+victim alias로 전달해 lookback 이력을 유지한다. 세부 임계값과 평가 근거는
+``docs/fall_evaluation.md``에 기록한다.
 """
 
 from __future__ import annotations
@@ -106,7 +22,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Dict, FrozenSet, List, Optional, Set
 
 from src.common.types import Event, EventCause, Track, TrackingResult
 from src.safety.fall_cause_attributor import FallCauseAttributor
@@ -168,6 +84,20 @@ class FallDetectorConfig:
     # 재검출로 보고 남은 cooldown을 물려준다.
     cooldown_inherit_iou_threshold: float = 0.3
 
+    # Candidate Handoff는 candidate 중 ID가 바뀌어도 진행 시간을 보존한다.
+    # Tombstone은 TTL과 candidate timeout 중 먼저 도달하는 시점에 만료한다.
+    candidate_handoff_ttl_sec: float = 1.0
+    candidate_handoff_iou_threshold: float = 0.3
+    # IoU와 정규화된 foot_point 거리 조건을 모두 만족해야 한다.
+    candidate_handoff_max_foot_distance_norm: float = 0.5
+
+    # Cooldown Handoff는 소실 직전 위치를 사용해 재검출된 Track에 cooldown을
+    # 승계한다. 만료 시각은 기존 cooldown과 마지막 관측 기준 TTL 중 늦은 값이다.
+    cooldown_handoff_ttl_sec: float = 3.5
+    # 더 긴 재획득 간격을 허용하므로 짧은 cooldown inheritance보다 낮게 둔다.
+    cooldown_handoff_iou_threshold: float = 0.2
+    cooldown_handoff_max_foot_distance_norm: float = 0.5
+
     event_confidence_weights: Dict[str, float] = field(
         default_factory=lambda: {
             "posture": 0.35,
@@ -211,6 +141,18 @@ class FallDetectorConfig:
             )
         if not (0.0 < self.cooldown_inherit_iou_threshold <= 1.0):
             raise ValueError("cooldown_inherit_iou_threshold는 0보다 크고 1 이하여야 합니다.")
+        if self.candidate_handoff_ttl_sec <= 0:
+            raise ValueError("candidate_handoff_ttl_sec는 0보다 커야 합니다.")
+        if not (0.0 < self.candidate_handoff_iou_threshold <= 1.0):
+            raise ValueError("candidate_handoff_iou_threshold는 0보다 크고 1 이하여야 합니다.")
+        if self.candidate_handoff_max_foot_distance_norm <= 0:
+            raise ValueError("candidate_handoff_max_foot_distance_norm는 0보다 커야 합니다.")
+        if self.cooldown_handoff_ttl_sec <= 0:
+            raise ValueError("cooldown_handoff_ttl_sec는 0보다 커야 합니다.")
+        if not (0.0 < self.cooldown_handoff_iou_threshold <= 1.0):
+            raise ValueError("cooldown_handoff_iou_threshold는 0보다 크고 1 이하여야 합니다.")
+        if self.cooldown_handoff_max_foot_distance_norm <= 0:
+            raise ValueError("cooldown_handoff_max_foot_distance_norm는 0보다 커야 합니다.")
         if self.history_window_sec <= 0:
             raise ValueError("history_window_sec는 0보다 커야 합니다.")
         if self.fall_center_velocity_threshold <= 0 or self.fall_foot_velocity_threshold <= 0:
@@ -266,6 +208,16 @@ class _TrackState:
     # 속도가 0에 가까우므로, confirm 순간의 특징이 아니라 이 값을 event_confidence에 사용한다.
     max_descent_score: float = 0.0
     cooldown_until_sec: Optional[float] = None
+    # 오프라인 평가 진단용이며 Event schema에는 포함하지 않는다.
+    candidate_entry_reason: Optional[str] = None
+    # Handoff tombstone을 즉시 만들 수 있도록 마지막 관측 위치를 보존한다.
+    last_bbox: Optional[List[float]] = None
+    last_foot_point: Optional[List[float]] = None
+    last_seen_sec: Optional[float] = None
+    # 이 candidate가 (다단 포함) 승계받아온 모든 원본 track_id. 한 번도
+    # 승계받지 않았으면 빈 집합 — Event.track_id는 항상 현재 track_id를
+    # 쓰고, 이 값은 cause attribution의 victim alias 집합에만 사용한다.
+    origin_track_ids: FrozenSet[int] = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)
@@ -274,6 +226,61 @@ class _CooldownTombstone:
 
     bbox: List[float]
     cooldown_until_sec: float
+
+
+@dataclass(frozen=True)
+class _CandidateTombstone:
+    """FALLING_CANDIDATE 상태에서 사라진 Track이 남기는 흔적 (Candidate Handoff,
+
+    모듈 docstring 참고). cooldown_inherit과 달리 confirm 전 진행 상황
+    (candidate_since_sec, max_descent_score)을 물려준다 — horizontal/pose/
+    model duration은 승계하지 않는다(새 Track에서 정적 근거를 다시 쌓아야
+    즉시 확정을 막을 수 있다).
+    """
+
+    # 이 tombstone을 만든 바로 그 소실 시점의 track_id. alias 체인 중 이
+    # id만 자신의 _TrackState가 아직 self._states에 살아있다(다른 alias는
+    # 이미 이전 승계 때 지워졌다) — 재등장 취소는 이 id에 대해서만 성립한다
+    # (아래 origin_track_ids 필드 설명 참고).
+    source_track_id: int
+    # alias 체인 전체(source_track_id 포함). 승계 시 새 Track의
+    # origin_track_ids를 만들 때(자기 자신 제외)와, 지워야 할 옛 _TrackState
+    # 목록을 정할 때(승계받은 현재 Track 제외) 모두 이 값을 쓴다.
+    origin_track_ids: FrozenSet[int]
+    bbox: List[float]
+    foot_point: List[float]
+    candidate_since_sec: float
+    max_descent_score: float
+    last_seen_sec: float
+    expires_at_sec: float
+
+
+@dataclass(frozen=True)
+class _CooldownHandoffTombstone:
+    """COOLDOWN 상태에서 사라진 Track이 남기는 흔적 (Cooldown Handoff,
+
+    FallDetectorConfig.cooldown_handoff_ttl_sec 주석 참고). 기존
+    _CooldownTombstone(confirm 시점 등록, cooldown_until_sec 기준 만료)과
+    별개다 — 이건 소실 시점(last_seen_sec) 기준 TTL로 만료돼, cooldown이
+    이미 지났어도 최근 소실이면 여전히 승계할 수 있다. _CandidateTombstone과
+    동일한 source_track_id/origin_track_ids 패턴을 그대로 쓴다.
+    """
+
+    source_track_id: int
+    origin_track_ids: FrozenSet[int]
+    bbox: List[float]
+    foot_point: List[float]
+    # cooldown_until_sec은 그대로 물려준다 — 이미 지난 값이어도 상관없다.
+    # _advance_cooldown()이 그 값과 now_sec을 비교해 still_fallen이면 계속
+    # COOLDOWN을 유지하고, 아니면 그 자리에서 바로 회복 판정을 한다(실제
+    # 근거 기반 재확인이지, tombstone이 회복을 보장하지는 않는다).
+    cooldown_until_sec: float
+    last_seen_sec: float
+    expires_at_sec: float
+
+
+def _euclidean(a: List[float], b: List[float]) -> float:
+    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
 
 
 class FallDetector:
@@ -295,12 +302,19 @@ class FallDetector:
         # video_source -> 최근 confirm된 Track들의 흔적 (공간 기반 cooldown 승계,
         # 모듈 docstring 참고).
         self._cooldown_tombstones: Dict[str, List[_CooldownTombstone]] = {}
+        # video_source -> 소실된 FALLING_CANDIDATE Track들의 흔적 (Candidate
+        # Handoff, 모듈 docstring 참고).
+        self._candidate_tombstones: Dict[str, List[_CandidateTombstone]] = {}
+        # video_source -> 소실된 COOLDOWN Track들의 흔적 (Cooldown Handoff,
+        # FallDetectorConfig.cooldown_handoff_ttl_sec 주석 참고).
+        self._cooldown_handoff_tombstones: Dict[str, List[_CooldownHandoffTombstone]] = {}
 
     def process(
         self,
         tracking_result: TrackingResult,
         model_evidence: Optional[Dict[int, FallModelEvidence]] = None,
         cause_attributor: Optional[FallCauseAttributor] = None,
+        diagnostics: Optional[List[dict]] = None,
     ) -> List[Event]:
         """한 프레임의 TrackingResult를 반영하고, FALL_CONFIRMED 전이가 있으면 Event를 반환한다.
 
@@ -311,12 +325,28 @@ class FallDetector:
             이 클래스의 책임이 아니다 (src/safety/fall_model_matching.py).
         cause_attributor: 지정하면 confirm 시 FallCauseAttributor.attribute()를
             호출해 EventCause를 채운다. None이면(기본값, 기존 호출과 하위 호환)
-            cause는 항상 None이다 — PR2 동작과 완전히 동일하다.
+            cause는 항상 None이다.
+        diagnostics: 지정하면 confirm이 발생할 때마다 candidate 진입 이유
+            (dynamic/model/handoff)와 confirm 경로(bbox/pose/model)를 담은 dict를
+            append한다.
+            Event dataclass 자체는 건드리지 않는다 — evaluate_fall.py 같은
+            오프라인 분석 전용 side-channel이다. None이면(기본값) 완전히
+            비활성화되어 기존 호출과 하위 호환된다.
         """
         self._history.update(tracking_result)
         now_sec = tracking_result.frame_number / self.fps
         video_source = tracking_result.video_source
         timestamp = tracking_result.timestamp
+
+        # 이번 프레임에 실제로 관측된 track_id 집합. Candidate Handoff는 이
+        # 값을 메인 루프보다 먼저 확정해서 처리해야 한다 — "Track이 처음
+        # 비활성화된 프레임"에 바로 tombstone을 남겨야 같은 프레임에 나타난
+        # 새 Track이 즉시 승계할 수 있다(모듈 docstring). MultiTrackHistory의
+        # grace period 기반 _forget_lost_tracks()는 이 시점엔 아직 그 Track을
+        # active로 취급하므로 너무 늦다.
+        current_active_ids = {track.track_id for track in tracking_result.tracks}
+        self._update_candidate_tombstones(video_source, current_active_ids, now_sec)
+        self._update_cooldown_handoff_tombstones(video_source, current_active_ids, now_sec)
 
         events: List[Event] = []
         for track in tracking_result.tracks:
@@ -345,6 +375,7 @@ class FallDetector:
                 video_source,
                 timestamp,
                 cause_attributor,
+                diagnostics,
             )
             if event is not None:
                 events.append(event)
@@ -449,6 +480,280 @@ class FallDetector:
                 state.cooldown_until_sec = tombstone.cooldown_until_sec
                 return
 
+    def _update_cooldown_handoff_tombstones(
+        self, video_source: str, current_active_ids: Set[int], now_sec: float
+    ) -> None:
+        """재등장·만료·신규 소실 순서로 cooldown tombstone을 갱신한다.
+
+        source Track의 상태가 남아 있으면 tombstone을 취소한다. 상태가 이미
+        정리됐다면 같은 ID가 재등장해도 handoff로 복원할 수 있도록 유지한다.
+        """
+        tombstones = self._cooldown_handoff_tombstones.get(video_source, [])
+
+        reappeared_source_ids = {
+            t.source_track_id
+            for t in tombstones
+            if t.source_track_id in current_active_ids
+            and (video_source, t.source_track_id) in self._states
+        }
+        if reappeared_source_ids:
+            tombstones = [
+                t for t in tombstones if t.source_track_id not in reappeared_source_ids
+            ]
+
+        tombstones = [t for t in tombstones if t.expires_at_sec > now_sec]
+
+        already_tombstoned_ids = {
+            track_id for t in tombstones for track_id in t.origin_track_ids
+        }
+        for key, state in self._states.items():
+            if key[0] != video_source or key[1] in current_active_ids:
+                continue
+            if state.state != _STATE_COOLDOWN:
+                continue
+            if key[1] in already_tombstoned_ids:
+                continue
+            new_tombstone = self._build_cooldown_handoff_tombstone(key[1], state, now_sec)
+            if new_tombstone is not None:
+                tombstones.append(new_tombstone)
+
+        if tombstones:
+            self._cooldown_handoff_tombstones[video_source] = tombstones
+        else:
+            self._cooldown_handoff_tombstones.pop(video_source, None)
+
+    def _build_cooldown_handoff_tombstone(
+        self, track_id: int, state: _TrackState, now_sec: float
+    ) -> Optional[_CooldownHandoffTombstone]:
+        """방금 비활성화된 COOLDOWN 상태에서 tombstone을 만든다.
+
+        _build_candidate_tombstone과 동일하게 last_bbox/last_foot_point/
+        last_seen_sec/cooldown_until_sec 중 하나라도 없으면(방어적으로)
+        tombstone을 만들지 않는다.
+        """
+        if (
+            state.last_bbox is None
+            or state.last_foot_point is None
+            or state.last_seen_sec is None
+            or state.cooldown_until_sec is None
+        ):
+            return None
+
+        # 원래 cooldown이 남아 있는 동안 tombstone이 먼저 만료되지 않게 한다.
+        expires_at_sec = max(
+            state.cooldown_until_sec,
+            state.last_seen_sec + self.config.cooldown_handoff_ttl_sec,
+        )
+        if expires_at_sec <= now_sec:
+            return None
+
+        return _CooldownHandoffTombstone(
+            source_track_id=track_id,
+            origin_track_ids=state.origin_track_ids | {track_id},
+            bbox=list(state.last_bbox),
+            foot_point=list(state.last_foot_point),
+            cooldown_until_sec=state.cooldown_until_sec,
+            last_seen_sec=state.last_seen_sec,
+            expires_at_sec=expires_at_sec,
+        )
+
+    def _try_cooldown_handoff(
+        self, state: _TrackState, track: Track, video_source: str, now_sec: float
+    ) -> bool:
+        """_try_inherit_cooldown이 실패했을 때만 호출한다(기존 짧은 재획득
+
+        경로가 여전히 우선). IoU와 정규화된 foot_point 거리를 candidate_handoff와
+        동일하게 AND로 결합한다(cooldown_handoff_iou_threshold 주석 —
+        시행착오로 OR을 시도했다가 서 있는 다른 Track까지 foot 거리만으로
+        잘못 승계되는 오탐이 재현돼 AND로 되돌렸다). IoU가 가장 큰 tombstone을
+        고른다.
+        """
+        tombstones = self._cooldown_handoff_tombstones.get(video_source)
+        if not tombstones:
+            return False
+
+        iou_threshold = self.config.cooldown_handoff_iou_threshold
+        max_foot_distance = self.config.cooldown_handoff_max_foot_distance_norm
+        track_height = track.bbox[3] - track.bbox[1]
+
+        best_tombstone: Optional[_CooldownHandoffTombstone] = None
+        best_iou = -1.0
+        for tombstone in tombstones:
+            iou = compute_iou(track.bbox, tombstone.bbox)
+            if iou < iou_threshold:
+                continue
+            foot_distance_norm = _euclidean(track.foot_point, tombstone.foot_point) / (
+                track_height if track_height > 0 else 1.0
+            )
+            if foot_distance_norm > max_foot_distance:
+                continue
+            if iou > best_iou:
+                best_tombstone = tombstone
+                best_iou = iou
+
+        if best_tombstone is None:
+            return False
+
+        state.state = _STATE_COOLDOWN
+        state.cooldown_until_sec = best_tombstone.cooldown_until_sec
+        state.origin_track_ids = best_tombstone.origin_track_ids - {track.track_id}
+
+        remaining = [t for t in tombstones if t is not best_tombstone]
+        if remaining:
+            self._cooldown_handoff_tombstones[video_source] = remaining
+        else:
+            self._cooldown_handoff_tombstones.pop(video_source, None)
+
+        for origin_id in best_tombstone.origin_track_ids:
+            if origin_id == track.track_id:
+                continue
+            self._states.pop((video_source, origin_id), None)
+        return True
+
+    def _update_candidate_tombstones(
+        self, video_source: str, current_active_ids: Set[int], now_sec: float
+    ) -> None:
+        """재등장·만료·신규 소실 순서로 candidate tombstone을 갱신한다.
+
+        source Track의 상태가 남아 있을 때만 재등장으로 취소한다. 이미 정리된
+        source 또는 과거 alias는 정상 handoff 대상으로 유지한다.
+        """
+        tombstones = self._candidate_tombstones.get(video_source, [])
+
+        reappeared_source_ids = {
+            tombstone.source_track_id
+            for tombstone in tombstones
+            if tombstone.source_track_id in current_active_ids
+            and (video_source, tombstone.source_track_id) in self._states
+        }
+        if reappeared_source_ids:
+            tombstones = [
+                t for t in tombstones if t.source_track_id not in reappeared_source_ids
+            ]
+
+        tombstones = [t for t in tombstones if t.expires_at_sec > now_sec]
+
+        already_tombstoned_ids = {
+            track_id for tombstone in tombstones for track_id in tombstone.origin_track_ids
+        }
+        for key, state in self._states.items():
+            if key[0] != video_source or key[1] in current_active_ids:
+                continue
+            if state.state != _STATE_FALLING_CANDIDATE:
+                continue
+            if key[1] in already_tombstoned_ids:
+                continue
+            new_tombstone = self._build_candidate_tombstone(key[1], state, now_sec)
+            if new_tombstone is not None:
+                tombstones.append(new_tombstone)
+
+        if tombstones:
+            self._candidate_tombstones[video_source] = tombstones
+        else:
+            self._candidate_tombstones.pop(video_source, None)
+
+    def _build_candidate_tombstone(
+        self, track_id: int, state: _TrackState, now_sec: float
+    ) -> Optional[_CandidateTombstone]:
+        """방금 비활성화된 FALLING_CANDIDATE 상태에서 tombstone을 만든다.
+
+        last_bbox/last_foot_point/last_seen_sec/candidate_since_sec 중 하나라도
+        없으면(이론상 FALLING_CANDIDATE는 최소 한 번은 관측돼야 도달하므로
+        발생하지 않아야 하지만, 방어적으로) tombstone을 만들지 않는다 —
+        불완전한 tombstone으로 엉뚱한 매칭을 만드는 것보다 승계를 포기하는
+        편이 안전하다.
+        """
+        if (
+            state.last_bbox is None
+            or state.last_foot_point is None
+            or state.last_seen_sec is None
+            or state.candidate_since_sec is None
+        ):
+            return None
+
+        cfg = self.config
+        # TTL과 candidate timeout 중 먼저 도달하는 시점에 만료한다 — candidate
+        # 전체 상한(fall_candidate_timeout_sec)을 넘겨서까지 승계를 허용하면
+        # 이미 타임아웃됐어야 할 candidate가 다른 Track에서 부활하는 셈이다.
+        ttl_expiry = state.last_seen_sec + cfg.candidate_handoff_ttl_sec
+        candidate_expiry = state.candidate_since_sec + cfg.fall_candidate_timeout_sec
+        expires_at_sec = min(ttl_expiry, candidate_expiry)
+        if expires_at_sec <= now_sec:
+            return None
+
+        return _CandidateTombstone(
+            source_track_id=track_id,
+            origin_track_ids=state.origin_track_ids | {track_id},
+            bbox=list(state.last_bbox),
+            foot_point=list(state.last_foot_point),
+            candidate_since_sec=state.candidate_since_sec,
+            max_descent_score=state.max_descent_score,
+            last_seen_sec=state.last_seen_sec,
+            expires_at_sec=expires_at_sec,
+        )
+
+    def _try_candidate_handoff(
+        self, state: _TrackState, track: Track, video_source: str, now_sec: float
+    ) -> bool:
+        """새로 생성된 _TrackState가 최근 소실된 FALLING_CANDIDATE Track과
+
+        공간적으로 겹치면, NORMAL 대신 그 candidate 진행 상황(candidate_since_sec,
+        max_descent_score)을 물려받는다(모듈 docstring). 호출자(`_advance_state`)가
+        `_try_inherit_cooldown`을 먼저 시도해 실패했을 때만 불러야 한다 —
+        cooldown 승계가 candidate 승계보다 항상 우선한다.
+
+        horizontal/pose/model duration은 의도적으로 승계하지 않는다 — 새
+        Track에서 정적 근거를 처음부터 다시 쌓아야, 근거 없이 즉시
+        confirm되는 것을 막을 수 있다(모듈 docstring).
+        """
+        tombstones = self._candidate_tombstones.get(video_source)
+        if not tombstones:
+            return False
+
+        iou_threshold = self.config.candidate_handoff_iou_threshold
+        max_foot_distance = self.config.candidate_handoff_max_foot_distance_norm
+        track_height = track.bbox[3] - track.bbox[1]
+
+        best_tombstone: Optional[_CandidateTombstone] = None
+        best_iou = -1.0
+        for tombstone in tombstones:
+            iou = compute_iou(track.bbox, tombstone.bbox)
+            if iou < iou_threshold:
+                continue
+            foot_distance_norm = _euclidean(track.foot_point, tombstone.foot_point) / (
+                track_height if track_height > 0 else 1.0
+            )
+            if foot_distance_norm > max_foot_distance:
+                continue
+            if iou > best_iou:
+                best_tombstone = tombstone
+                best_iou = iou
+
+        if best_tombstone is None:
+            return False
+
+        # alias가 이전 ID로 돌아와도 현재 Track 자신은 origin에서 제외한다.
+        state.state = _STATE_FALLING_CANDIDATE
+        state.candidate_since_sec = best_tombstone.candidate_since_sec
+        state.max_descent_score = best_tombstone.max_descent_score
+        state.origin_track_ids = best_tombstone.origin_track_ids - {track.track_id}
+        state.candidate_entry_reason = "handoff"
+
+        # Tombstone 하나는 한 Track만 소비할 수 있다.
+        remaining = [t for t in tombstones if t is not best_tombstone]
+        if remaining:
+            self._candidate_tombstones[video_source] = remaining
+        else:
+            self._candidate_tombstones.pop(video_source, None)
+
+        # 소비된 tombstone이 다시 생성되지 않도록 원본 상태를 정리한다.
+        # 현재 Track은 alias 복귀일 수 있으므로 삭제 대상에서 제외한다.
+        for origin_id in best_tombstone.origin_track_ids:
+            if origin_id == track.track_id:
+                continue
+            self._states.pop((video_source, origin_id), None)
+        return True
+
     def _visible_step_dt(self, state: _TrackState, now_sec: float) -> float:
         """이번 process() 호출과 이 Track이 마지막으로 관측된 시각 사이의 '유효' 경과 시간.
 
@@ -477,6 +782,7 @@ class FallDetector:
         video_source: str,
         timestamp: str,
         cause_attributor: Optional[FallCauseAttributor],
+        diagnostics: Optional[List[dict]] = None,
     ) -> Optional[Event]:
         is_new_track = key not in self._states
         state = self._states.setdefault(key, _TrackState())
@@ -485,6 +791,16 @@ class FallDetector:
             # 같은 사람이 곧바로 새 candidate/confirm을 만들지 않도록, 이
             # video_source의 최근 confirm 위치와 겹치는지 먼저 확인한다.
             self._try_inherit_cooldown(state, track, video_source, now_sec)
+            if state.state == _STATE_NORMAL:
+                # 기존 cooldown 승계가 실패했을 때만 Cooldown Handoff를
+                # 시도한다(FallDetectorConfig.cooldown_handoff_ttl_sec 주석
+                # 참고) — 짧은 재획득은 기존 경로가 그대로 처리하고, 이건
+                # 그 경로가 놓치는 두 경우(소실 중 cooldown 만료, IoU 미달
+                # 대신 foot 거리로 매칭)만 추가로 덮는다.
+                self._try_cooldown_handoff(state, track, video_source, now_sec)
+            if state.state == _STATE_NORMAL:
+                # 이미 확정된 낙상의 cooldown 승계가 candidate 승계보다 우선한다.
+                self._try_candidate_handoff(state, track, video_source, now_sec)
 
         # step_dt 계산과 모델 근거 갱신은 상태와 무관하게 매 프레임 한 번만
         # 수행한다(모듈 docstring, model 기반 candidate 진입 참고) — NORMAL
@@ -495,6 +811,11 @@ class FallDetector:
         step_dt = self._visible_step_dt(state, now_sec)
         self._accumulate_model_duration(state, model_evidence, step_dt, now_sec)
         state.last_processed_sec = now_sec
+        # Candidate Handoff(모듈 docstring)용 — 이 Track이 사라지는 바로 그
+        # 순간의 위치를 알아야 다음 프레임에 바로 tombstone을 만들 수 있다.
+        state.last_bbox = list(track.bbox)
+        state.last_foot_point = list(track.foot_point)
+        state.last_seen_sec = now_sec
 
         if state.state == _STATE_NORMAL:
             self._try_enter_candidate(state, features, now_sec)
@@ -512,10 +833,13 @@ class FallDetector:
                 video_source,
                 timestamp,
                 cause_attributor,
+                diagnostics,
             )
 
         if state.state == _STATE_COOLDOWN:
-            self._advance_cooldown(state, features, pose_features, model_evidence, now_sec)
+            self._advance_cooldown(
+                state, features, pose_features, model_evidence, step_dt, now_sec
+            )
             return None
 
         return None
@@ -528,13 +852,18 @@ class FallDetector:
             return
         # bbox 동적 근거(기존 경로) OR model 기반 근거(모듈 docstring, ReID
         # 없이 재획득된 "이미 쓰러진" 새 Track 대응) 중 하나만 있어도 진입한다.
-        if not self._dynamic_evidence(features) and not self._model_candidate_ready(state):
+        is_dynamic = self._dynamic_evidence(features)
+        if not is_dynamic and not self._model_candidate_ready(state):
             return
         state.state = _STATE_FALLING_CANDIDATE
         state.candidate_since_sec = now_sec
         state.horizontal_duration_sec = 0.0
         state.pose_duration_sec = 0.0
         state.recovery_duration_sec = 0.0
+        # 진단 전용(평가 프로토콜 V2) — Event schema에는 넣지 않는다. dynamic
+        # 근거가 있으면 그게 우선 사유고, 없는데도 여기 도달했다면
+        # _model_candidate_ready()만으로 들어온 것이므로 "model"이다.
+        state.candidate_entry_reason = "dynamic" if is_dynamic else "model"
         # model_fall_evidence/model_duration_sec은 초기화하지 않는다 — NORMAL
         # 상태에서 이미 쌓인 근거가 candidate 진입 이후 confirm 판정에도 그대로
         # 이어져야 한다 (모듈 docstring). single-frame confirm은
@@ -556,6 +885,7 @@ class FallDetector:
         video_source: str,
         timestamp: str,
         cause_attributor: Optional[FallCauseAttributor],
+        diagnostics: Optional[List[dict]] = None,
     ) -> Optional[Event]:
         cfg = self.config
         # model_duration_sec은 _advance_state에서 이미 갱신됐다(recovery 판단보다
@@ -587,11 +917,19 @@ class FallDetector:
         # 하기 위함이다 (모듈 docstring 참고). candidate 전체는 fall_candidate_timeout_sec가
         # 상한을 건다.
 
-        if (
-            state.horizontal_duration_sec >= cfg.fall_confirm_sec
-            or state.pose_duration_sec >= cfg.fall_confirm_sec
-            or state.model_duration_sec >= cfg.model_confirm_sec
-        ):
+        # 우선순위는 위 if 조건과 같은 순서(bbox -> pose -> model)로 둔다 — 여러
+        # 경로가 동시에 임계값을 넘겨도 진단 필드에는 하나만 남겨야 하므로,
+        # 실제 판정에 쓰인 조건과 동일한 순서로 어느 경로가 confirm시켰는지
+        # 결정한다. 이 값은 진단 전용이며 Event에는 포함되지 않는다.
+        confirm_path: Optional[str] = None
+        if state.horizontal_duration_sec >= cfg.fall_confirm_sec:
+            confirm_path = "bbox"
+        elif state.pose_duration_sec >= cfg.fall_confirm_sec:
+            confirm_path = "pose"
+        elif state.model_duration_sec >= cfg.model_confirm_sec:
+            confirm_path = "model"
+
+        if confirm_path is not None:
             return self._confirm_fall(
                 state,
                 features,
@@ -601,6 +939,8 @@ class FallDetector:
                 video_source,
                 timestamp,
                 cause_attributor,
+                diagnostics,
+                confirm_path,
             )
 
         if (
@@ -653,27 +993,42 @@ class FallDetector:
         features: FallFeatures,
         pose_features: Optional[PoseFeatures],
         model_evidence: Optional[FallModelEvidence],
+        step_dt: float,
         now_sec: float,
     ) -> None:
-        # cooldown 만료 후에도 누워 있으면 재감지하지 않고, 회복 자세 확인 후 NORMAL로 전이한다.
-        # bbox(is_horizontal_posture)만 보면 깊이 방향 낙상에서 pose는 여전히
-        # 쓰러진 자세인데도 조기에 NORMAL로 전이해 같은 낙상을 다시 candidate로
-        # 잡아 중복 Event를 만드는 문제가 있었다(S4_fall_forward 실측). recovery
-        # 판정(_is_recovered)과 동일하게 pose·모델이 쓰러진 자세/fall로 보는 동안에는
-        # 회복으로 보지 않는다.
-        still_fallen = (
-            features.is_horizontal_posture
-            or (pose_features is not None and pose_features.is_fallen_pose)
-            or (model_evidence is not None and model_evidence.label == "fall")
-        )
-        if now_sec >= (state.cooldown_until_sec or 0.0) and not still_fallen:
-            state.state = _STATE_NORMAL
-            state.cooldown_until_sec = None
-            # cooldown 중에도 모델 근거는 계속 쌓인다(모듈 docstring, 상태 무관
-            # 수집). NORMAL로 막 전이한 시점에 cooldown 막바지의 잔여 근거로
-            # 곧바로 model-assisted candidate 진입이 일어나지 않도록 비운다.
-            state.model_fall_evidence = []
-            state.model_duration_sec = 0.0
+        # Cooldown 만료 후에도 쓰러진 근거가 남으면 유지한다. Candidate와
+        # 동일한 회복 debounce를 사용해 단일 unknown 프레임의 재확정을 막는다.
+        cfg = self.config
+        if now_sec < (state.cooldown_until_sec or 0.0):
+            state.recovery_duration_sec = 0.0
+            return
+
+        # model_duration_sec은 _advance_state에서 이미 갱신됐다(모듈 docstring,
+        # _advance_candidate와 동일한 이유).
+        model_active = state.model_duration_sec > 0.0
+        if not self._is_recovered(features, pose_features, model_active):
+            state.recovery_duration_sec = 0.0
+            return
+
+        state.recovery_duration_sec += step_dt
+        if state.recovery_duration_sec < cfg.recovery_confirm_sec:
+            return
+
+        state.state = _STATE_NORMAL
+        state.cooldown_until_sec = None
+        state.recovery_duration_sec = 0.0
+        # cooldown 중에도 모델 근거는 계속 쌓인다(모듈 docstring, 상태 무관
+        # 수집). NORMAL로 막 전이한 시점에 cooldown 막바지의 잔여 근거로
+        # 곧바로 model-assisted candidate 진입이 일어나지 않도록 비운다.
+        state.model_fall_evidence = []
+        state.model_duration_sec = 0.0
+        # Cooldown Handoff로 승계받았다면 origin_track_ids가 남아있을 수
+        # 있다 — 여기서 비우지 않으면, 이 Track이 이후 완전히 새로운
+        # 낙상으로 confirm될 때 이전 낙상의 alias가 cause attribution
+        # victim_track_id_aliases에 잘못 섞여 들어간다(_confirm_fall은
+        # 원래 candidate 진입부터 시작하는 경로만 가정하고 이 필드를
+        # 리셋하므로, 여기서도 같은 불변식을 지켜야 한다).
+        state.origin_track_ids = frozenset()
 
     def _reset_to_normal(self, state: _TrackState) -> None:
         state.state = _STATE_NORMAL
@@ -685,6 +1040,8 @@ class FallDetector:
         state.model_duration_sec = 0.0
         state.last_processed_sec = None
         state.max_descent_score = 0.0
+        state.candidate_entry_reason = None
+        state.origin_track_ids = frozenset()
 
     def _confirm_fall(
         self,
@@ -696,6 +1053,8 @@ class FallDetector:
         video_source: str,
         timestamp: str,
         cause_attributor: Optional[FallCauseAttributor],
+        diagnostics: Optional[List[dict]] = None,
+        confirm_path: Optional[str] = None,
     ) -> Event:
         event_confidence = self._compute_event_confidence(features, state)
         # fall_start_sec(onset proxy)은 FALLING_CANDIDATE 진입 시각이다. 아래
@@ -703,6 +1062,22 @@ class FallDetector:
         # 넘기기 전에 반드시 로컬 변수로 먼저 꺼내둔다 — 순서를 바꾸면 항상
         # None이 들어가 cause가 절대 채워지지 않는다 (모듈 docstring 참고).
         fall_start_sec = state.candidate_since_sec
+        candidate_entry_reason = state.candidate_entry_reason
+        # cleanup에서 state.origin_track_ids를 비우므로(아래), attribution에
+        # 넘기기 전에 먼저 로컬 변수로 꺼내둔다 — fall_start_sec과 같은 이유
+        # 승계 이전 이력까지 attribution에 전달하기 위해 먼저 보존한다.
+        origin_track_ids = state.origin_track_ids
+
+        if diagnostics is not None:
+            diagnostics.append(
+                {
+                    "video_source": video_source,
+                    "track_id": track.track_id,
+                    "frame_number": frame_number,
+                    "confirm_path": confirm_path,
+                    "candidate_entry_reason": candidate_entry_reason,
+                }
+            )
 
         state.state = _STATE_COOLDOWN
         state.cooldown_until_sec = now_sec + self.config.cooldown_sec
@@ -714,6 +1089,8 @@ class FallDetector:
         state.model_duration_sec = 0.0
         state.last_processed_sec = None
         state.max_descent_score = 0.0
+        state.candidate_entry_reason = None
+        state.origin_track_ids = frozenset()
 
         self._cooldown_tombstones.setdefault(video_source, []).append(
             _CooldownTombstone(bbox=list(track.bbox), cooldown_until_sec=state.cooldown_until_sec)
@@ -730,6 +1107,7 @@ class FallDetector:
                     video_source=video_source,
                     victim_track_id=track.track_id,
                     fall_start_sec=fall_start_sec,
+                    victim_track_id_aliases=origin_track_ids,
                 )
             except Exception:
                 LOGGER.exception(
