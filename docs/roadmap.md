@@ -304,7 +304,13 @@ C(정현수): Live UI·신규 이벤트/cause·AlertHistory·화면 성능
 > Dashboard / Live Frame 전파와 API 장애 중 비차단 실패 보존을 확인했다.
 > Signal Cache 회귀 지표는 유지됐고, 능동 인원 영상에서 낙상 ON의 FPS 감소가
 > 46.1%로 목표(20% 이내)를 넘었다. 기능은 opt-in·기본 비활성으로 유지하며
-> 실제 원인 후보 정확도, 최종 holdout, 성능 최적화는 Phase 4로 이관한다.
+> 실제 원인 후보 정확도와 최종 holdout은 Phase 4로 이관한다.
+
+> A runtime 최적화 상태 (2026-07-22): 별도 opt-in Pose NORMAL gate와 보조
+> 모델 interval `3` 프로파일은 Development·S7~8 회귀 기준을 유지했다.
+> M1/MPS 단일 파일 OFF/ON 각 3회 중앙값 기준 FPS 하락률 7.3%로 목표를
+> 통과했고, S7~8 진단 FAR는 2.34→1.75/min으로 감소했다. API 포함 반복 측정,
+> 다른 장치, 운영 FAR 개선은 Phase 4 후속으로 남긴다.
 
 ### 우선순위
 

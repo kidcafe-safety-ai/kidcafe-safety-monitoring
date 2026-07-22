@@ -711,3 +711,67 @@ API 장애의 추가 FPS 감소는 낙상 ON 정상 대비 3.5%였다. 세 장�
 Phase 3의 낙상 기능은 **정량 한계를 공개한 opt-in PoC**로 통합 게이트를
 통과했다. 실제 원인 후보 정확도, 외부 데이터 일반화, Subject 9~10 최종
 holdout, 장시간 IP 카메라 안정성, 능동 인원 FPS 최적화는 Phase 4 범위다.
+
+## 12. Pose NORMAL 기반 runtime 최적화
+
+통합 PR 이후 남은 일정에서 모델이나 `FallDetector` 임계값을 바꾸지 않고
+보조 detector 호출 비용을 줄이는 opt-in 경로를 검증했다. 모든 active Track이
+충분히 관측된 유효 Pose이며 직립·비하강 상태일 때만 RGB 보조 detector를
+생략한다. Track 하나라도 신규·Pose 미확인·하강·비정상 자세이면 즉시 원래
+보조 경로로 복귀하고, fallback 안에서는 마지막 Track별 evidence를 최대
+`interval-1` frame만 유지한다.
+
+이 방식은 ADR-020에서 기각한 Event 확정용 Pose 규칙과 다르다. Event 임계값을
+강화하지 않지만, 안전한 정상 frame의 모델 evidence를 `nofall`로 대체하므로
+결과 변화 가능성은 전체 Signal Cache로 다시 측정했다.
+
+### 12.1 전체 캐시 회귀
+
+모델과 Track 캐시는 그대로 두고 Pose NORMAL gate와 interval `3`만 적용했다.
+
+| 지표 | Development 기준 | Development 최적화 | S7~8 기준 | S7~8 최적화 |
+| --- | ---: | ---: | ---: | ---: |
+| Recall | 83.3% | 83.3% | 100% | 100% |
+| timely Recall | 66.7% | 66.7% | 90% | 90% |
+| False alarm/min | 0.0 | 0.0 | 2.34 | 1.75 |
+| 평균 onset latency | 1.006초 | 1.098초 | 0.906초 | 1.006초 |
+| 중복 Event 영상 | 0 | 0 | 0 | 0 |
+
+Development에서는 active Track frame의 20.8%, S7~8에서는 24.4%에서만 보조
+detector evidence를 새로 사용했다. gate 자체의 평균 계산 시간은 frame당
+0.01ms 미만이었다. S7~8 FAR는 약 25% 감소했지만 운영 목표 0.2/min은 여전히
+충족하지 못한다. S7~8은 tuning/diagnostic split이며 최종 Validation이 아니다.
+Subject 9~10 holdout은 열람하거나 평가하지 않았다.
+
+### 12.2 M1/MPS 단일 파일 측정
+
+`S7_fall_backwards` 252프레임을 API·Live Frame 없이 실행하고 최초 30프레임을
+제외한 steady-state를 비교했다. `--infer-device mps`와
+`--fall-model-device mps`를 명시했다. 먼저 아래 단일 실행으로 interval 후보를
+선택했다.
+
+| 프로파일 | FPS | avg latency | p95 latency | max latency | Event frame |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 낙상 OFF | 14.571 | 0.0686초 | 0.0889초 | 0.1307초 | - |
+| 낙상 ON, 매 frame 보조 모델 | 7.663 | 0.1305초 | 0.2468초 | 0.4586초 | 83 |
+| Pose gate + interval 2 | 12.498 | 0.0800초 | 0.1197초 | 0.1543초 | 87 |
+| **Pose gate + interval 3** | **13.568** | **0.0737초** | **0.1178초** | **0.1581초** | **87** |
+| Pose gate + interval 4 | 13.755 | 0.0727초 | 0.1150초 | 0.1900초 | 87 |
+
+Interval `4`의 interval `3` 대비 추가 이득은 약 1.4%로 실행 편차 수준이고,
+전체 캐시 평균 지연과 evidence 최신성은 interval `3`이 더 보수적이다.
+Interval `2`는 같은 frame에 Event를 만들면서 더 느렸다. 따라서 검증
+프로파일은 interval `3`으로 고정했다.
+
+선택한 프로파일은 실행 순서 영향을 줄이기 위해 OFF/ON 순서를 교차해 각각
+3회 다시 측정했다.
+
+| 조건 | steady-state FPS 중앙값 | OFF 대비 하락률 | Event 재현 |
+| --- | ---: | ---: | --- |
+| 낙상 OFF | 14.5712 | - | 3회 모두 0건 |
+| Pose gate + interval 3 | 13.511 | 7.3% | 3회 모두 frame 87에서 1건 |
+
+절대 목표 11.66 FPS와 상대 하락률 20% 이내를 모두 충족했다. 다만 API·Live
+Frame을 제외한 단일 파일 측정이므로 장시간 실행, 다른 하드웨어와 전체 E2E에서
+재검증해야 한다. 최적화 프로파일을 채택해도 낙상 기능과 두 최적화 옵션은
+기본 비활성이다.

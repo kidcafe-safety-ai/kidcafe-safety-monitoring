@@ -113,6 +113,17 @@ python -m src.main \
   --fall-model-path outputs/fall_training/models/fall_detector_v1.pt \
   --api-url http://localhost:8000 \
   --live-frame-enabled
+
+# M1/MPS에서 검증한 선택적 runtime 최적화 프로파일
+python -m src.main \
+  --source-type file \
+  --source data/videos/test.mp4 \
+  --infer-device mps \
+  --fall-detection-enabled \
+  --fall-model-path outputs/fall_training/models/fall_detector_v1.pt \
+  --fall-model-device mps \
+  --fall-model-interval-frames 3 \
+  --fall-pose-normal-gate-enabled
 ```
 
 | 옵션 | 설명 |
@@ -122,6 +133,8 @@ python -m src.main \
 | `--fall-config` | 낙상 상태머신 설정 파일. 기본값은 `configs/fall_detection.json`이다. |
 | `--fall-model-conf` / `--fall-model-iou-threshold` | 보조 detector confidence와 Track 매칭 IoU 임계값이다. 기본값은 각각 `0.5`, `0.3`이다. |
 | `--fall-model-device` | 보조 detector 실행 장치. `auto`, `mps`, `cuda`, `cpu` 중 하나이며 기본값은 `auto`다. |
+| `--fall-model-interval-frames` | 보조 detector 실행 간격이다. 기본값 `1`은 매 frame 실행이며, Pose NORMAL gate와 함께 검증한 최적화 값은 `3`이다. |
+| `--fall-pose-normal-gate-enabled` | 모든 active Track이 안정적인 직립 Pose일 때 보조 detector 추론을 생략한다. 불확실하거나 하강·비정상 자세인 Track이 하나라도 있으면 즉시 보조 경로를 사용한다. 기본 비활성이다. |
 
 `fall_detector_v1.pt`는 Git에 포함하지 않으며, 로컬 보관 위치는
 `outputs/fall_training/models/fall_detector_v1.pt`다. 팀 공유본은 Google Drive
@@ -137,6 +150,14 @@ Annotation V2와 Track handoff 안정화 이후 Subject 7~8 진단 결과는 Rec
 timely Recall 90%, false alarm 2.34/min, 중복 Event 0건이다. 오탐 목표를 충족하지
 못했고 이 split을 진단에 사용했으므로, 현재는 **선택적 PoC**다. 실제 키즈카페/IP
 카메라 hard-negative 검증과 Subject 9~10 holdout 평가 전에는 기본 활성화하지 않는다.
+
+Pose NORMAL gate와 보조 detector interval `3`을 함께 사용한 opt-in 프로파일은
+Development Recall 83.3%·timely Recall 66.7%·false alarm 0/min을 유지했고,
+Subject 7~8 진단의 false alarm을 2.34→1.75/min으로 줄였다. M1/MPS 동일 파일을
+OFF/ON 각각 3회 측정한 steady-state 중앙값은 낙상 OFF 14.571 FPS, 최적화 ON
+13.511 FPS로 하락률 7.3%를 기록했다. tuning split·단일 파일 결과이므로 다른
+하드웨어나 실제 카메라 성능을 보장하지 않으며, 기능과 최적화 옵션은 모두
+기본 비활성으로 유지한다.
 
 > 기본 Ultralytics YOLO 모델 파일(`*.pt`)은 Git에 포함하지 않는다. 최초 실행 시 자동 다운로드되며, 다운로드된 `.pt` 파일은 `.gitignore`에 의해 추적되지 않는다. fine-tuned 낙상 보조 모델은 위 공유 위치에서 별도로 받아야 한다.
 > Phase 2 기본 모델은 `yolo26n.pt`이며, `yolov8n.pt`는 MVP baseline/fallback으로 유지한다.
@@ -408,7 +429,7 @@ pytest --cov=src --cov-report=term-missing
 | USB C920 E2E 테스트 (Windows) | Done — Phase 2.5 |
 | React Live View (영상 영역) | Done — Phase 3 (latest-frame polling) |
 | WebSocket 실시간 push | Phase 4 이후 필요성 기반 재검토 |
-| FALL_SUSPECT 낙상 PoC | Done — Phase 3 (opt-in, 오탐 운영 목표 미달) |
+| FALL_SUSPECT 낙상 PoC | Done — Phase 3 (opt-in, runtime 최적화 완료, 오탐 운영 목표 미달) |
 | FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 | Done — Phase 3 (근접·접근 근거 기반 PoC, 정량 정확도 미검증) |
 | ReID / StrongSORT / BoT-SORT | Phase 4 |
 
@@ -440,6 +461,9 @@ Phase 2.5에서 실시간 운영 대시보드 v1 안정화와 Docker 재현 환�
 | ADR-016 | FALL_SUSPECT.cause 기반 외부 접촉 원인 후보 기록 | 독립 COLLISION_SUSPECT는 오탐 제어 어려움, 낙상 확정 후 소급 조회가 실용적 |
 | ADR-017 | AsyncEventDispatcher 기반 비차단 전송 | API 장애 시 추론 FPS 저하 방지, EventApiClient는 감싸는 구조로 유지 |
 | ADR-018 | Phase 3 인증/인가 경계만 정의, 구현은 Phase 4 이관 | 계약 확정이 우선, 인증은 배포 단계 관심사 |
+| ADR-019 | 공간 안전정책 temporal hysteresis | 경계 진동을 즉시 Event로 확정하지 않고 시간 기반 상태를 사용 |
+| ADR-020 | Track ID 안정화 후 임계값 게이트 추가 중단 | 확인된 Recall 손실을 피하고 다음 정확도 개선을 데이터·모델 문제로 분리 |
+| ADR-021 | opt-in Pose NORMAL 추론 스케줄링 | 불확실 구간은 원래 경로를 유지하면서 안정적 정상 구간의 보조 모델 비용 절감 |
 
 ---
 
@@ -467,7 +491,7 @@ Phase 2.5에서 실시간 운영 대시보드 v1 안정화와 Docker 재현 환�
 | track_id 자주 변경 | ReID 없음 | Phase 4: OSNet 기반 ReID 도입 |
 | 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | Phase 4: StrongSORT 또는 ReID 보강 |
 | ENTER/EXIT 경계 흔들림 | zone 경계 foot_point 진동 | Phase 3 temporal hysteresis 적용, 실제 카메라 재튜닝 후속 |
-| 낙상 opt-in 처리량 비용 | PoseTracker와 보조 detector를 함께 실행 | Phase 4: 모델 호출·추적 최적화 |
+| 낙상 opt-in 처리량 비용 | PoseTracker와 보조 detector를 함께 실행 | Pose NORMAL gate+interval 3으로 MPS 파일 경로 개선, 다른 장치·API E2E 재검증은 Phase 4 |
 | 알림 조치 상태·리포트·설정 저장 미연동 | 조치 API 미구현, 일부 화면 Mock | Phase 4에서 API·저장 연동 |
 > 상세 분석: [`docs/tracking_analysis.md`](docs/tracking_analysis.md)
 

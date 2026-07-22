@@ -1184,3 +1184,54 @@ loading 경로가 실행되지 않았다. 따라서 이 결과는 no-person idle
 - API 장애 중 비차단 처리와 실패 Event 보존 통과
 - 동결 낙상 지표 회귀 없음
 - 능동 인원 경로 FPS 목표 미달: 코드 블로커가 아닌 opt-in PoC 한계로 기록
+
+---
+
+## 2026-07-22 — FALL_SUSPECT MPS runtime 최적화
+
+### 범위
+
+통합 검증 이후 보조 detector 비용만 줄이는 별도 opt-in 프로파일을 측정했다.
+모델·상태머신·Event/API 계약은 바꾸지 않았다. 안정적인 직립 Pose에서는 보조
+detector를 생략하고, 불확실·하강·비정상 자세이면 즉시 fallback한 뒤 최대
+3-frame 간격으로 실행한다.
+
+### 회귀 결과
+
+| 지표 | Development S1~6 | S7~8 tuning/diagnostic |
+| --- | ---: | ---: |
+| Recall | 83.3% | 100% |
+| timely Recall | 66.7% | 90% |
+| False alarm/min | 0.0 | 1.75 |
+| 중복 Event 영상 | 0 | 0 |
+
+기존 S7~8 FAR 2.34/min 대비 약 25% 감소했지만 운영 목표 0.2/min은 미달이다.
+Subject 9~10 holdout은 사용하지 않았다.
+
+### MPS 측정
+
+`S7_fall_backwards`, 720×480, 252프레임을 API·Live Frame 없이 실행했다.
+`infer-device`와 보조 모델 장치는 모두 MPS이며 최초 30프레임을 제외했다.
+아래 값은 interval 후보 선택을 위한 각 1회 실행 결과다.
+
+| 프로파일 | FPS | avg latency | p95 latency | max latency | Event frame |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 낙상 OFF | 14.571 | 0.0686초 | 0.0889초 | 0.1307초 | - |
+| 낙상 ON, 매 frame | 7.663 | 0.1305초 | 0.2468초 | 0.4586초 | 83 |
+| Pose gate + interval 2 | 12.498 | 0.0800초 | 0.1197초 | 0.1543초 | 87 |
+| **Pose gate + interval 3** | **13.568** | **0.0737초** | **0.1178초** | **0.1581초** | **87** |
+| Pose gate + interval 4 | 13.755 | 0.0727초 | 0.1150초 | 0.1900초 | 87 |
+
+Interval `4`의 추가 이득은 실행 편차 수준이라 evidence를 더 자주 갱신하는
+interval `3`을 채택했다. 선택 후 OFF/ON 순서를 교차해 각각 3회 재측정했다.
+
+| 조건 | steady-state FPS 중앙값 | OFF 대비 하락률 | Event 재현 |
+| --- | ---: | ---: | --- |
+| 낙상 OFF | 14.5712 | - | 3회 모두 0건 |
+| Pose gate + interval 3 | 13.511 | 7.3% | 3회 모두 frame 87에서 1건 |
+
+절대 목표 11.66 FPS와 상대 하락률 20% 이내를 모두 통과했다.
+
+이 측정은 앞 절의 CPU 기반 API E2E 3회 중앙값을 대체하지 않는다. MPS 로컬
+파일 경로의 반복 최적화 검증이며, API·Live Frame 포함 반복 측정과 다른 장치는
+Phase 4에서 확인한다. 기능과 최적화 옵션은 기본 비활성으로 유지한다.
