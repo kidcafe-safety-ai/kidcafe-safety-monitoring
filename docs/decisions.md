@@ -765,6 +765,11 @@ Event 확정 임계값은 변경하지 않고 다음 opt-in 추론 스케줄링�
   `--fall-model-interval-frames 3` 조합이다. 두 옵션의 기본값은 기존 동작을
   보존하도록 각각 비활성, `1`로 유지한다.
 - 여러 사람이 있으면 모든 Track이 안전 조건을 만족해야만 추론을 생략한다.
+- 하강 판정은 정규화된 foot point 수직 속도 `0.3` 초과 또는 bbox 높이 변화율
+  `-0.3` 미만을 게이트 전용 기준으로 사용한다. center 수직 속도는 기존
+  `recovery_velocity_threshold`를 공유한다. 두 게이트 전용 값은 보수적으로
+  하강 fallback을 유지하면서 Development와 S7~8 전체 캐시 회귀를 통과한
+  채택값이며, `PoseNormalGateConfig` 기본값으로 고정한다.
 
 이 결정은 ADR-020의 Event 확정용 규칙 게이트 기각을 뒤집지 않는다. 다만
 안정적인 정상 자세에서 보조 모델 evidence를 `nofall`로 대체하므로 Event 결과에

@@ -429,7 +429,7 @@ pytest --cov=src --cov-report=term-missing
 | USB C920 E2E 테스트 (Windows) | Done — Phase 2.5 |
 | React Live View (영상 영역) | Done — Phase 3 (latest-frame polling) |
 | WebSocket 실시간 push | Phase 4 이후 필요성 기반 재검토 |
-| FALL_SUSPECT 낙상 PoC | Done — Phase 3 (opt-in, runtime 최적화 완료, 오탐 운영 목표 미달) |
+| FALL_SUSPECT 낙상 PoC | Done — Phase 3 (M1/MPS 단일 파일 opt-in runtime 최적화 검증, 오탐 운영 목표 미달) |
 | FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 | Done — Phase 3 (근접·접근 근거 기반 PoC, 정량 정확도 미검증) |
 | ReID / StrongSORT / BoT-SORT | Phase 4 |
 

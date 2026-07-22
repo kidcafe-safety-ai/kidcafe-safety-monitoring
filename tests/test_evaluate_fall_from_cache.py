@@ -7,6 +7,10 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import evaluate_fall as ef  # noqa: E402
@@ -14,6 +18,9 @@ import evaluate_fall_from_cache as efc  # noqa: E402
 
 from src.common.types import Track, TrackingResult  # noqa: E402
 from src.safety.auxiliary_fall_model import FallDetection  # noqa: E402
+from src.safety.fall_detector import FallDetectorConfig  # noqa: E402
+from src.safety.fall_model_matching import match_detections_to_tracks  # noqa: E402
+from src.safety.fall_pipeline import FallPipeline  # noqa: E402
 
 _TRACKER_META = {
     "tracker_type": "pose",
@@ -186,3 +193,125 @@ def test_cached_adaptive_cadence_holds_evidence_and_refreshes_on_interval():
     assert held_inferred is False
     assert refreshed is fall
     assert refreshed_inferred is True
+
+
+def test_runtime_and_cache_replay_match_across_fallback_hold_and_new_track():
+    """Runtime과 cache replay가 복합 adaptive cadence에서도 같은 Event를 만든다."""
+
+    class StubAuxiliaryModel:
+        enabled = True
+
+        def __init__(self, detections_by_call):
+            self._detections_by_call = iter(detections_by_call)
+            self.infer_calls = 0
+
+        def infer(self, _frame):
+            self.infer_calls += 1
+            return next(self._detections_by_call)
+
+    track_one = [0.0, 0.0, 100.0, 200.0]
+    track_two = [120.0, 0.0, 220.0, 200.0]
+    fall_one = FallDetection(bbox=track_one, label="fall", confidence=0.9)
+    fall_both = [
+        fall_one,
+        FallDetection(bbox=track_two, label="fall", confidence=0.9),
+    ]
+    tracking_results = [
+        _tracking_result(0),
+        _tracking_result(1),
+        _tracking_result(2),
+        TrackingResult(
+            frame_number=3,
+            timestamp="00:00:00.300",
+            video_source="video",
+            tracks=[
+                _tracking_result(3).tracks[0],
+                Track(
+                    track_id=2,
+                    bbox=track_two,
+                    foot_point=[170.0, 200.0],
+                    confidence=0.9,
+                ),
+            ],
+        ),
+        TrackingResult(
+            frame_number=4,
+            timestamp="00:00:00.400",
+            video_source="video",
+            tracks=[
+                _tracking_result(4).tracks[0],
+                Track(
+                    track_id=2,
+                    bbox=track_two,
+                    foot_point=[170.0, 200.0],
+                    confidence=0.9,
+                ),
+            ],
+        ),
+    ]
+    use_auxiliary = [False, True, True, True, True]
+    raw_detections = [[], [fall_one], [fall_one], fall_both, fall_both]
+    config = FallDetectorConfig(
+        min_track_age_sec=0.1,
+        model_candidate_entry_sec=0.05,
+        model_confirm_sec=0.25,
+        model_vote_window_sec=0.5,
+    )
+
+    runtime_model = StubAuxiliaryModel([[fall_one], fall_both])
+    runtime_gate = MagicMock()
+    runtime_gate.evaluate.side_effect = [
+        SimpleNamespace(use_auxiliary=value) for value in use_auxiliary
+    ]
+    runtime_pipeline = FallPipeline(
+        fps=10.0,
+        detector_config=config,
+        auxiliary_model=runtime_model,
+        auxiliary_inference_interval_frames=3,
+        pose_normal_gate=runtime_gate,
+    )
+    runtime_events = []
+    runtime_diagnostics = []
+    for tracking_result in tracking_results:
+        runtime_events.extend(
+            runtime_pipeline.process(
+                np.zeros((8, 8, 3), dtype=np.uint8),
+                tracking_result,
+                diagnostics=runtime_diagnostics,
+            )
+        )
+
+    replay_pipeline = FallPipeline(fps=10.0, detector_config=config)
+    replay_cadence = efc.CachedAdaptiveAuxiliaryCadence(
+        interval_frames=3, iou_threshold=0.3
+    )
+    replay_events = []
+    replay_diagnostics = []
+    replay_inference_frames = []
+    for tracking_result, use_aux, raw in zip(
+        tracking_results, use_auxiliary, raw_detections
+    ):
+        selected = raw if use_aux else efc._normal_detections(tracking_result)
+        detections, inferred = replay_cadence.resolve(
+            tracking_result, selected, raw, use_auxiliary=use_aux
+        )
+        if inferred:
+            replay_inference_frames.append(tracking_result.frame_number)
+        evidence = {
+            item.track_id: item
+            for item in match_detections_to_tracks(
+                tracking_result.tracks, detections, iou_threshold=0.3
+            )
+        }
+        replay_events.extend(
+            replay_pipeline.process_with_evidence(
+                tracking_result, evidence, diagnostics=replay_diagnostics
+            )
+        )
+
+    assert runtime_model.infer_calls == 2
+    assert replay_inference_frames == [1, 3]
+    assert [event.frame_number for event in runtime_events] == [4]
+    assert [event.frame_number for event in replay_events] == [4]
+    assert runtime_diagnostics[0]["confirm_path"] == "model"
+    assert replay_diagnostics[0]["confirm_path"] == "model"

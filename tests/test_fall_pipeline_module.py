@@ -211,6 +211,33 @@ class TestPoseNormalGate:
 
         assert stub.infer_calls == 1
 
+    def test_new_track_during_fallback_runs_immediately(self):
+        gate = MagicMock()
+        gate.evaluate.return_value = SimpleNamespace(use_auxiliary=True)
+        stub = _StubAuxiliaryModel(detections_by_call=[[], []])
+        pipeline = FallPipeline(
+            fps=10.0,
+            auxiliary_model=stub,
+            pose_normal_gate=gate,
+            auxiliary_inference_interval_frames=3,
+        )
+
+        pipeline.process(_FRAME, _tracking_result(0, _BBOX, track_id=1))
+        pipeline.process(_FRAME, _tracking_result(1, _BBOX, track_id=1))
+        new_track_result = _tracking_result(2, _BBOX, track_id=1)
+        new_track_result.tracks.append(
+            Track(
+                track_id=2,
+                bbox=[20.0, 0.0, 30.0, 10.0],
+                foot_point=[25.0, 10.0],
+                confidence=0.9,
+            )
+        )
+        pipeline.process(_FRAME, new_track_result)
+
+        # frame 2는 마지막 추론 후 2프레임뿐이지만 신규 Track 때문에 즉시 실행한다.
+        assert stub.infer_calls == 2
+
 
 class TestFallPipelineWithoutAuxiliaryModel:
     def test_no_auxiliary_model_behaves_like_bbox_only_detector(self):
