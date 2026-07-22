@@ -16,6 +16,106 @@ from src.safety.auxiliary_fall_model import AuxiliaryFallModel
 from src.safety.fall_cause_attributor import FallCauseAttributor, FallCauseAttributorConfig
 from src.safety.fall_detector import FallDetector, FallDetectorConfig
 from src.safety.fall_model_matching import FallModelEvidence, match_detections_to_tracks
+from src.safety.pose_normal_gate import PoseNormalGate
+
+
+def validate_auxiliary_inference_interval_frames(interval_frames: int) -> None:
+    """보조 모델 추론 간격이 양의 정수인지 검증한다."""
+    if (
+        isinstance(interval_frames, bool)
+        or not isinstance(interval_frames, int)
+        or interval_frames <= 0
+    ):
+        raise ValueError(
+            "auxiliary_inference_interval_frames는 0보다 큰 정수여야 합니다: "
+            f"{interval_frames!r}"
+        )
+
+
+def should_run_auxiliary_inference(frame_number: int, interval_frames: int) -> bool:
+    """고정 간격 스케줄에서 현재 프레임이 보조 모델 실행 대상인지 반환한다."""
+    validate_auxiliary_inference_interval_frames(interval_frames)
+    return frame_number % interval_frames == 0
+
+
+class AuxiliaryEvidenceCadence:
+    """고정 간격 추론 사이에서 마지막 Track별 모델 판단을 짧게 유지한다.
+
+    interval_frames=1이면 모든 frame이 fresh inference 대상이라 기존 동작과
+    동일하다. 건너뛴 frame에서는 같은 track_id의 직전 판단만 재사용하며,
+    새 track_id는 unknown으로 시작한다. 다음 scheduled frame에서는 fresh
+    evidence로 전체 active Track 상태를 교체하므로 hold 상한은 최대
+    interval_frames-1 frame이다.
+    """
+
+    def __init__(self, interval_frames: int = 1):
+        validate_auxiliary_inference_interval_frames(interval_frames)
+        self.interval_frames = interval_frames
+        self._last_evidence: Dict[int, FallModelEvidence] = {}
+
+    def should_infer(self, frame_number: int) -> bool:
+        return should_run_auxiliary_inference(frame_number, self.interval_frames)
+
+    def reset(self) -> None:
+        self._last_evidence = {}
+
+    def resolve(
+        self,
+        tracking_result: TrackingResult,
+        fresh_evidence: Optional[Dict[int, FallModelEvidence]],
+    ) -> Dict[int, FallModelEvidence]:
+        """fresh evidence를 저장하거나, skipped frame이면 같은 Track 판단을 유지한다."""
+        resolved: Dict[int, FallModelEvidence] = {}
+        source = self._last_evidence if fresh_evidence is None else fresh_evidence
+        for track in tracking_result.tracks:
+            evidence = source.get(track.track_id)
+            if evidence is None:
+                evidence = FallModelEvidence(
+                    track_id=track.track_id,
+                    label="unknown",
+                    confidence=None,
+                    iou=None,
+                )
+            resolved[track.track_id] = evidence
+
+        # 소실된 Track의 판단은 즉시 버려 새 Track에 잘못 재사용되지 않게 한다.
+        self._last_evidence = resolved
+        return resolved
+
+
+class AdaptiveAuxiliaryInferenceCadence:
+    """Run immediately on fallback entry/new Track, then at a bounded interval."""
+
+    def __init__(self, interval_frames: int):
+        validate_auxiliary_inference_interval_frames(interval_frames)
+        self.interval_frames = interval_frames
+        self.reset()
+
+    def reset(self) -> None:
+        self._in_fallback = False
+        self._last_inference_frame: Optional[int] = None
+        self._known_track_ids: set[int] = set()
+
+    def should_infer(
+        self, tracking_result: TrackingResult, use_auxiliary: bool
+    ) -> bool:
+        active_track_ids = {track.track_id for track in tracking_result.tracks}
+        if not active_track_ids or not use_auxiliary:
+            self.reset()
+            return False
+
+        new_track = not active_track_ids.issubset(self._known_track_ids)
+        interval_elapsed = (
+            self._last_inference_frame is None
+            or tracking_result.frame_number - self._last_inference_frame
+            >= self.interval_frames
+        )
+        should_infer = not self._in_fallback or new_track or interval_elapsed
+        self._in_fallback = True
+        self._known_track_ids = active_track_ids
+        if should_infer:
+            self._last_inference_frame = tracking_result.frame_number
+        return should_infer
 
 
 class FallPipeline:
@@ -33,6 +133,8 @@ class FallPipeline:
         auxiliary_model: Optional[AuxiliaryFallModel] = None,
         iou_threshold: float = 0.3,
         fall_config_path: Optional[str] = None,
+        auxiliary_inference_interval_frames: int = 1,
+        pose_normal_gate: Optional[PoseNormalGate] = None,
     ):
         if not (0.0 < iou_threshold <= 1.0):
             raise ValueError(
@@ -40,9 +142,26 @@ class FallPipeline:
                 "(match_detections_to_tracks와 동일한 계약, 0을 허용하면 전혀 "
                 "겹치지 않는 bbox끼리도 매칭됩니다)"
             )
+        validate_auxiliary_inference_interval_frames(
+            auxiliary_inference_interval_frames
+        )
         self.detector = FallDetector(fps=fps, config=detector_config)
         self.auxiliary_model = auxiliary_model
         self.iou_threshold = iou_threshold
+        self.auxiliary_inference_interval_frames = auxiliary_inference_interval_frames
+        self.pose_normal_gate = pose_normal_gate
+        if pose_normal_gate is not None and (
+            auxiliary_model is None or not auxiliary_model.enabled
+        ):
+            raise ValueError(
+                "pose normal gate requires an enabled auxiliary fall model"
+            )
+        self._auxiliary_evidence_cadence = AuxiliaryEvidenceCadence(
+            auxiliary_inference_interval_frames
+        )
+        self._adaptive_inference_cadence = AdaptiveAuxiliaryInferenceCadence(
+            auxiliary_inference_interval_frames
+        )
 
         if fall_config_path is not None:
             cause_attributor_config = FallCauseAttributorConfig.from_file(fall_config_path)
@@ -127,13 +246,52 @@ class FallPipeline:
     ) -> Optional[Dict[int, FallModelEvidence]]:
         if self.auxiliary_model is None or not self.auxiliary_model.enabled:
             return None
+        if self.pose_normal_gate is not None:
+            return self._compute_pose_gated_evidence(frame, tracking_result)
         if not tracking_result.tracks:
             # Track이 없으면 매칭할 대상도 없다. 빈 딕셔너리를 반환한다 —
             # None(모델 완전 비활성화)과는 의미가 다르다: 모델은 켜져 있지만
             # 이번 프레임엔 매칭할 Track이 없었을 뿐이다.
-            return {}
+            return self._auxiliary_evidence_cadence.resolve(tracking_result, {})
+        if not self._auxiliary_evidence_cadence.should_infer(
+            tracking_result.frame_number
+        ):
+            return self._auxiliary_evidence_cadence.resolve(tracking_result, None)
         detections = self.auxiliary_model.infer(frame)
         evidence_list = match_detections_to_tracks(
             tracking_result.tracks, detections, self.iou_threshold
         )
-        return {evidence.track_id: evidence for evidence in evidence_list}
+        fresh_evidence = {evidence.track_id: evidence for evidence in evidence_list}
+        return self._auxiliary_evidence_cadence.resolve(tracking_result, fresh_evidence)
+
+    def _compute_pose_gated_evidence(
+        self, frame: np.ndarray, tracking_result: TrackingResult
+    ) -> Dict[int, FallModelEvidence]:
+        decision = self.pose_normal_gate.evaluate(tracking_result)
+        if not decision.use_auxiliary:
+            self._adaptive_inference_cadence.should_infer(
+                tracking_result, use_auxiliary=False
+            )
+            self._auxiliary_evidence_cadence.reset()
+            return {
+                track.track_id: FallModelEvidence(
+                    track_id=track.track_id,
+                    label="nofall",
+                    confidence=track.confidence,
+                    iou=1.0,
+                )
+                for track in tracking_result.tracks
+            }
+
+        should_infer = self._adaptive_inference_cadence.should_infer(
+            tracking_result, use_auxiliary=True
+        )
+        if not should_infer:
+            return self._auxiliary_evidence_cadence.resolve(tracking_result, None)
+
+        detections = self.auxiliary_model.infer(frame)
+        evidence_list = match_detections_to_tracks(
+            tracking_result.tracks, detections, self.iou_threshold
+        )
+        fresh_evidence = {evidence.track_id: evidence for evidence in evidence_list}
+        return self._auxiliary_evidence_cadence.resolve(tracking_result, fresh_evidence)

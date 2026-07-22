@@ -26,6 +26,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import List, Optional
 
@@ -47,7 +49,100 @@ from evaluate_fall import (  # noqa: E402
 )
 
 from src.common.types import TrackingResult  # noqa: E402
+from src.safety.auxiliary_fall_model import FallDetection  # noqa: E402
 from src.safety.fall_detector import FallDetectorConfig  # noqa: E402
+from src.safety.fall_pipeline import (  # noqa: E402
+    AdaptiveAuxiliaryInferenceCadence,
+    validate_auxiliary_inference_interval_frames,
+)
+from src.safety.fall_model_matching import match_detections_to_tracks  # noqa: E402
+from src.safety.pose_normal_gate import PoseNormalGate, PoseNormalGateConfig  # noqa: E402
+
+
+@dataclass
+class PoseGateStats:
+    track_present_frames: int = 0
+    safe_normal_frames: int = 0
+    fallback_frames: int = 0
+    fallback_unready_frames: int = 0
+    fallback_pose_unavailable_frames: int = 0
+    fallback_descending_frames: int = 0
+    fallback_non_normal_frames: int = 0
+    auxiliary_inference_frames: int = 0
+    gate_evaluation_frames: int = 0
+    gate_elapsed_sec: float = 0.0
+
+    def add(self, other: "PoseGateStats") -> None:
+        for name in self.__dataclass_fields__:
+            setattr(self, name, getattr(self, name) + getattr(other, name))
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["fallback_frame_ratio"] = (
+            self.fallback_frames / self.track_present_frames
+            if self.track_present_frames
+            else None
+        )
+        payload["auxiliary_inference_frame_ratio"] = (
+            self.auxiliary_inference_frames / self.track_present_frames
+            if self.track_present_frames
+            else None
+        )
+        payload["avg_gate_evaluation_sec"] = (
+            self.gate_elapsed_sec / self.gate_evaluation_frames
+            if self.gate_evaluation_frames
+            else None
+        )
+        return payload
+
+
+class CachedAdaptiveAuxiliaryCadence:
+    """Apply the runtime fallback schedule to cached raw detections."""
+
+    def __init__(self, interval_frames: int, iou_threshold: float):
+        self._schedule = AdaptiveAuxiliaryInferenceCadence(interval_frames)
+        self.iou_threshold = iou_threshold
+        self._last_evidence = {}
+
+    def reset(self) -> None:
+        self._schedule.reset()
+        self._last_evidence = {}
+
+    def resolve(
+        self,
+        tracking_result: TrackingResult,
+        selected_detections: List[FallDetection],
+        raw_detections: Optional[List[FallDetection]],
+        use_auxiliary: bool,
+    ) -> tuple[List[FallDetection], bool]:
+        if not tracking_result.tracks or not use_auxiliary:
+            self.reset()
+            return selected_detections, False
+        if raw_detections is None:
+            raise ValueError("pose normal gate requires cached auxiliary detections")
+
+        if self._schedule.should_infer(tracking_result, use_auxiliary=True):
+            evidence = match_detections_to_tracks(
+                tracking_result.tracks,
+                raw_detections,
+                self.iou_threshold,
+            )
+            self._last_evidence = {item.track_id: item for item in evidence}
+            return raw_detections, True
+
+        held_detections = []
+        for track in tracking_result.tracks:
+            evidence = self._last_evidence.get(track.track_id)
+            if evidence is None or evidence.label == "unknown":
+                continue
+            held_detections.append(
+                FallDetection(
+                    bbox=list(track.bbox),
+                    label=evidence.label,
+                    confidence=float(evidence.confidence),
+                )
+            )
+        return held_detections, False
 
 
 def parse_args() -> argparse.Namespace:
@@ -65,6 +160,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--early-tolerance-sec", type=float, default=0.2)
     parser.add_argument("--timely-window-sec", type=float, default=2.0)
     parser.add_argument("--fall-model-iou-threshold", type=float, default=0.3)
+    parser.add_argument(
+        "--fall-model-interval-frames",
+        type=int,
+        default=1,
+        help="캐시된 보조 모델 detection을 사용할 고정 frame 간격.",
+    )
+    parser.add_argument(
+        "--fall-pose-normal-gate-enabled",
+        action="store_true",
+        help="안정적인 직립 Pose에서는 보조 모델 detection을 사용하지 않는다.",
+    )
     parser.add_argument("--output", default="outputs/fall_eval/from_cache_summary.json")
     parser.add_argument("--include-unreviewed", action="store_true")
     parser.add_argument(
@@ -84,6 +190,65 @@ def _frame_source_from_cache(cached_frames, video_id: str):
             tracks=cached_frame.tracks,
         )
         yield cached_frame.frame_number, tracking_result, cached_frame.raw_detections
+
+
+def _normal_detections(tracking_result: TrackingResult) -> List[FallDetection]:
+    return [
+        FallDetection(
+            bbox=list(track.bbox),
+            label="nofall",
+            confidence=track.confidence,
+        )
+        for track in tracking_result.tracks
+    ]
+
+
+def _frame_source_from_pose_gate(
+    cached_frames,
+    video_id: str,
+    fps: float,
+    interval_frames: int,
+    iou_threshold: float,
+    gate_config: PoseNormalGateConfig,
+    stats: PoseGateStats,
+):
+    gate = PoseNormalGate(fps=fps, config=gate_config)
+    cadence = CachedAdaptiveAuxiliaryCadence(interval_frames, iou_threshold)
+    for cached_frame in cached_frames:
+        tracking_result = TrackingResult(
+            frame_number=cached_frame.frame_number,
+            timestamp=cached_frame.timestamp,
+            video_source=video_id,
+            tracks=cached_frame.tracks,
+        )
+        started = time.perf_counter()
+        decision = gate.evaluate(tracking_result)
+        stats.gate_elapsed_sec += time.perf_counter() - started
+        stats.gate_evaluation_frames += 1
+        if tracking_result.tracks:
+            stats.track_present_frames += 1
+            stats.safe_normal_frames += int(not decision.use_auxiliary)
+        stats.fallback_frames += int(decision.use_auxiliary)
+        stats.fallback_unready_frames += int(decision.unready)
+        stats.fallback_pose_unavailable_frames += int(decision.pose_unavailable)
+        stats.fallback_descending_frames += int(decision.descending)
+        stats.fallback_non_normal_frames += int(decision.non_normal_posture)
+
+        selected = (
+            cached_frame.raw_detections
+            if decision.use_auxiliary
+            else _normal_detections(tracking_result)
+        )
+        if selected is None:
+            raise ValueError("pose normal gate requires cached auxiliary detections")
+        detections, inferred = cadence.resolve(
+            tracking_result,
+            selected,
+            cached_frame.raw_detections,
+            decision.use_auxiliary,
+        )
+        stats.auxiliary_inference_frames += int(inferred)
+        yield cached_frame.frame_number, tracking_result, detections
 
 
 def _validate_cache_metadata(
@@ -140,6 +305,9 @@ def _evaluate_row_from_cache(
     early_tolerance_sec: float,
     timely_window_sec: float,
     fall_model_iou_threshold: float,
+    fall_model_interval_frames: int,
+    pose_normal_gate_enabled: bool = False,
+    pose_gate_stats: Optional[PoseGateStats] = None,
 ) -> _VideoResult:
     cache_file = cache.cache_path_for(cache_dir, row.video_id)
     if not cache_file.exists():
@@ -160,7 +328,22 @@ def _evaluate_row_from_cache(
         return _VideoResult(video_id=row.video_id, label=row.label, event_count=0, error=mismatch)
 
     fps = metadata["fps"]
-    frame_source = _frame_source_from_cache(frames, row.video_id)
+    if pose_normal_gate_enabled:
+        if pose_gate_stats is None:
+            raise ValueError("pose_gate_stats is required when pose normal gate is enabled")
+        frame_source = _frame_source_from_pose_gate(
+            frames,
+            row.video_id,
+            fps,
+            fall_model_interval_frames,
+            fall_model_iou_threshold,
+            PoseNormalGateConfig.from_fall_detector_config(config),
+            pose_gate_stats,
+        )
+        scorer_interval_frames = 1
+    else:
+        frame_source = _frame_source_from_cache(frames, row.video_id)
+        scorer_interval_frames = fall_model_interval_frames
     return score_video_from_frame_source(
         row,
         frame_source,
@@ -168,6 +351,7 @@ def _evaluate_row_from_cache(
         config,
         fall_config_path=fall_config_path,
         fall_model_iou_threshold=fall_model_iou_threshold,
+        fall_model_interval_frames=scorer_interval_frames,
         early_tolerance_sec=early_tolerance_sec,
         timely_window_sec=timely_window_sec,
     )
@@ -180,6 +364,10 @@ def main() -> None:
         raise SystemExit(f"--timely-window-sec는 0보다 커야 합니다: {args.timely_window_sec}")
     if args.early_tolerance_sec < 0:
         raise SystemExit(f"--early-tolerance-sec는 0 이상이어야 합니다: {args.early_tolerance_sec}")
+    try:
+        validate_auxiliary_inference_interval_frames(args.fall_model_interval_frames)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
     config = FallDetectorConfig.from_file(args.config)
     try:
@@ -215,8 +403,11 @@ def main() -> None:
     print(f"[{args.split or cache_dir.name}] 캐시 {len(rows)}개 영상 재생 평가 시작")
 
     results: List[_VideoResult] = []
+    aggregate_pose_gate_stats = PoseGateStats()
+    pose_gate_stats_by_video = {}
     for i, row in enumerate(rows, start=1):
         print(f"  ({i}/{len(rows)}) {row.video_id} [{row.label}] 재생 중...")
+        video_pose_gate_stats = PoseGateStats()
         result = _evaluate_row_from_cache(
             row,
             cache_dir,
@@ -227,10 +418,16 @@ def main() -> None:
             args.early_tolerance_sec,
             args.timely_window_sec,
             args.fall_model_iou_threshold,
+            args.fall_model_interval_frames,
+            pose_normal_gate_enabled=args.fall_pose_normal_gate_enabled,
+            pose_gate_stats=video_pose_gate_stats,
         )
         if result.error:
             print(f"    스킵: {result.error}")
         results.append(result)
+        if args.fall_pose_normal_gate_enabled:
+            aggregate_pose_gate_stats.add(video_pose_gate_stats)
+            pose_gate_stats_by_video[row.video_id] = video_pose_gate_stats.to_dict()
 
     summary = _summarize(results)
     summary["split"] = args.split or cache_dir.name
@@ -242,7 +439,17 @@ def main() -> None:
         "early_tolerance_sec": args.early_tolerance_sec,
         "timely_window_sec": args.timely_window_sec,
         "fall_model_iou_threshold": args.fall_model_iou_threshold,
+        "fall_model_interval_frames": args.fall_model_interval_frames,
+        "fall_pose_normal_gate_enabled": args.fall_pose_normal_gate_enabled,
+        "pose_normal_gate_config": (
+            asdict(PoseNormalGateConfig.from_fall_detector_config(config))
+            if args.fall_pose_normal_gate_enabled
+            else None
+        ),
     }
+    if args.fall_pose_normal_gate_enabled:
+        summary["pose_normal_gate"] = aggregate_pose_gate_stats.to_dict()
+        summary["pose_normal_gate_by_video"] = pose_gate_stats_by_video
     summary["excluded_from_evaluation"] = {"count": len(excluded_rows), "videos": excluded_rows}
     summary["videos"] = [video_result_to_dict(r) for r in results]
 

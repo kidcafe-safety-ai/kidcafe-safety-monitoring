@@ -62,7 +62,12 @@ from src.safety.fall_model_matching import (  # noqa: E402
     FallModelEvidence,
     match_detections_to_tracks,
 )
-from src.safety.fall_pipeline import FallPipeline  # noqa: E402
+from src.safety.fall_pipeline import (  # noqa: E402
+    AuxiliaryEvidenceCadence,
+    FallPipeline,
+    should_run_auxiliary_inference,
+    validate_auxiliary_inference_interval_frames,
+)
 from src.safety.pose_features import PoseFeatureExtractor  # noqa: E402
 from src.tracking.bytetrack_wrapper import ByteTracker  # noqa: E402
 from src.tracking.pose_tracker import PoseTracker  # noqa: E402
@@ -208,6 +213,12 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.3,
         help="보조 모델 detection을 Track에 매칭할 최소 IoU (0보다 크고 1 이하).",
+    )
+    parser.add_argument(
+        "--fall-model-interval-frames",
+        type=int,
+        default=1,
+        help="보조 fall/nofall 모델 실행 간격(frame). 1이면 매 frame 실행.",
     )
     parser.add_argument("--output", default="outputs/fall_eval/summary.json")
     parser.add_argument(
@@ -709,6 +720,7 @@ def score_video_from_frame_source(
     config: FallDetectorConfig,
     fall_config_path: Optional[str] = None,
     fall_model_iou_threshold: float = 0.3,
+    fall_model_interval_frames: int = 1,
     early_tolerance_sec: float = 0.0,
     timely_window_sec: float = 2.0,
 ) -> _VideoResult:
@@ -734,8 +746,10 @@ def score_video_from_frame_source(
             f"fall_model_iou_threshold는 0보다 크고 1 이하여야 합니다: "
             f"{fall_model_iou_threshold}"
         )
+    validate_auxiliary_inference_interval_frames(fall_model_interval_frames)
 
     pipeline = FallPipeline(fps=fps, detector_config=config, fall_config_path=fall_config_path)
+    evidence_cadence = AuxiliaryEvidenceCadence(fall_model_interval_frames)
 
     event_frames: List[int] = []
     diagnostics: List[dict] = []
@@ -752,10 +766,15 @@ def score_video_from_frame_source(
         frame_count += 1
         model_evidence = None
         if raw_detections is not None:
-            evidence_list = match_detections_to_tracks(
-                tracking_result.tracks, raw_detections, fall_model_iou_threshold
-            )
-            model_evidence = {evidence.track_id: evidence for evidence in evidence_list}
+            fresh_evidence = None
+            if evidence_cadence.should_infer(frame_number):
+                evidence_list = match_detections_to_tracks(
+                    tracking_result.tracks, raw_detections, fall_model_iou_threshold
+                )
+                fresh_evidence = {
+                    evidence.track_id: evidence for evidence in evidence_list
+                }
+            model_evidence = evidence_cadence.resolve(tracking_result, fresh_evidence)
         tracks_by_frame.append((frame_number, tracking_result.tracks))
         if row.label == "fall":
             model_evidence_by_frame.append((frame_number, model_evidence))
@@ -873,6 +892,7 @@ def _evaluate_video(
     early_tolerance_sec: float = 0.0,
     auxiliary_model: Optional[AuxiliaryFallModel] = None,
     fall_model_iou_threshold: float = 0.3,
+    fall_model_interval_frames: int = 1,
     fall_config_path: Optional[str] = None,
     timely_window_sec: float = 2.0,
 ) -> _VideoResult:
@@ -916,7 +936,14 @@ def _evaluate_video(
                     # 켜져 있지만 이번 프레임엔 대상이 없었다"를 표현한다
                     # (src/safety/fall_pipeline.py _compute_model_evidence()와
                     # 동일한 구분. None과 다르다 — None은 모델 완전 비활성화).
-                    raw_detections = auxiliary_model.infer(frame) if result.tracks else []
+                    should_infer = should_run_auxiliary_inference(
+                        frame_number, fall_model_interval_frames
+                    )
+                    raw_detections = (
+                        auxiliary_model.infer(frame)
+                        if result.tracks and should_infer
+                        else []
+                    )
                 yield frame_number, result, raw_detections
                 frame_number += 1
         finally:
@@ -929,6 +956,7 @@ def _evaluate_video(
         config,
         fall_config_path=fall_config_path,
         fall_model_iou_threshold=fall_model_iou_threshold,
+        fall_model_interval_frames=fall_model_interval_frames,
         early_tolerance_sec=early_tolerance_sec,
         timely_window_sec=timely_window_sec,
     )
@@ -1059,6 +1087,10 @@ def main() -> None:
         raise SystemExit(f"--timely-window-sec는 0보다 커야 합니다: {args.timely_window_sec}")
     if args.early_tolerance_sec < 0:
         raise SystemExit(f"--early-tolerance-sec는 0 이상이어야 합니다: {args.early_tolerance_sec}")
+    try:
+        validate_auxiliary_inference_interval_frames(args.fall_model_interval_frames)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
     videos_dir = Path(args.videos_dir)
     config = FallDetectorConfig.from_file(args.config)
@@ -1108,6 +1140,7 @@ def main() -> None:
             early_tolerance_sec=args.early_tolerance_sec,
             auxiliary_model=auxiliary_model,
             fall_model_iou_threshold=args.fall_model_iou_threshold,
+            fall_model_interval_frames=args.fall_model_interval_frames,
             fall_config_path=args.config,
             timely_window_sec=args.timely_window_sec,
         )
@@ -1134,6 +1167,9 @@ def main() -> None:
         "fall_model_device": args.fall_model_device if args.fall_model_path else None,
         "fall_model_iou_threshold": (
             args.fall_model_iou_threshold if args.fall_model_path else None
+        ),
+        "fall_model_interval_frames": (
+            args.fall_model_interval_frames if args.fall_model_path else None
         ),
     }
     summary["excluded_from_evaluation"] = {

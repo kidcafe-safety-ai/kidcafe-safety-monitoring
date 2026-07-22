@@ -192,6 +192,13 @@ timely Recall 66.7%, false alarm 0회/분, 중복 Event 0건이다. Subject 7~8
 `docs/realtime_test.md`와 `docs/fall_evaluation.md`의 2026-07-22 통합 기록에
 남긴다.
 
+같은 날 후속 opt-in 최적화에서 M1/MPS 파일 경로에 Pose NORMAL gate와 보조
+모델 interval `3`을 적용했다. 동일 파일 OFF/ON 각 3회 steady-state 중앙값은
+최적화 ON 13.511 FPS, 낙상 OFF 14.5712 FPS로 하락률 7.3%를 기록해 로컬 경로
+목표를 통과했다. Development 지표는 유지됐고 S7~8 진단 FAR는
+2.34→1.75/min으로 감소했다. 이 값은 API·Live Frame을 제외한 단일 파일
+측정이며 S7~8도 tuning 데이터이므로 최종 성능으로 해석하지 않는다.
+
 Subject 9~10 Holdout은 설정 동결 후에도 이번 통합 범위에서는 실행하지 않았다.
 Phase 4 최종 평가에서 한 번만 사용한다. `FALL_SUSPECT.cause`의 원인 후보 Track
 정확도·false attribution도 아직 정량 검증하지 않았으며, Phase 4에서 위 Mini

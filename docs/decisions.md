@@ -736,3 +736,62 @@ bbox/Pose 보조 근거 요구 등)는 **구현하지 않는다** — 기본 비
 - Subject 9~10 holdout 평가 전, Subject 7~8 기반 수치를 "최종 성능"으로
   보고하지 않도록 문서·리포트에서 주의가 필요하다.
 - ReID 기반 Track 재연결과 공간 buffer 튜닝은 별도 후속 작업이다.
+
+---
+
+## ADR-021: Pose NORMAL 기반 보조 모델 추론 스케줄링
+
+**Date**: 2026-07-22
+**Status**: Accepted (opt-in)
+
+### Context
+
+Phase 3 통합 측정에서 PoseTracker와 `fall_detector_v1.pt`를 매 frame 함께
+실행한 능동 인원 경로가 목표 처리량을 충족하지 못했다. 단순 고정 간격 실행은
+비용을 줄이지만, 새 Track이나 낙상 징후가 시작된 시점에도 다음 scheduled
+frame까지 기다릴 수 있다. ADR-020에서 기각한 Pose 게이트는 model-only Event에
+추가 확정 근거를 요구해 Recall을 낮추는 판정 규칙이었다.
+
+### Decision
+
+Event 확정 임계값은 변경하지 않고 다음 opt-in 추론 스케줄링을 추가한다.
+
+- 모든 active Track이 충분히 관측됐고, Pose가 유효하며, 직립·비하강 상태일
+  때만 RGB 보조 detector 실행을 생략하고 해당 Track을 `nofall`로 처리한다.
+- Track 하나라도 신규·Pose 미확인·하강·비정상 자세이면 보조 detector 경로로
+  즉시 복귀한다. 새 Track과 fallback 진입 frame은 interval을 기다리지 않는다.
+- fallback 안에서는 Track별 직전 evidence를 최대 `interval-1` frame만 유지한다.
+- 검증 프로파일은 `--fall-pose-normal-gate-enabled`와
+  `--fall-model-interval-frames 3` 조합이다. 두 옵션의 기본값은 기존 동작을
+  보존하도록 각각 비활성, `1`로 유지한다.
+- 여러 사람이 있으면 모든 Track이 안전 조건을 만족해야만 추론을 생략한다.
+- 하강 판정은 정규화된 foot point 수직 속도 `0.3` 초과 또는 bbox 높이 변화율
+  `-0.3` 미만을 게이트 전용 기준으로 사용한다. center 수직 속도는 기존
+  `recovery_velocity_threshold`를 공유한다. 두 게이트 전용 값은 보수적으로
+  하강 fallback을 유지하면서 Development와 S7~8 전체 캐시 회귀를 통과한
+  채택값이며, `PoseNormalGateConfig` 기본값으로 고정한다.
+
+이 결정은 ADR-020의 Event 확정용 규칙 게이트 기각을 뒤집지 않는다. 다만
+안정적인 정상 자세에서 보조 모델 evidence를 `nofall`로 대체하므로 Event 결과에
+영향을 줄 수 있으며, 그 영향은 Development와 S7~8 전체 캐시 회귀로 검증한다.
+
+### Evidence
+
+- Development S1~6: Recall 83.3%, timely Recall 66.7%, FAR 0/min, 중복 0건 유지
+- S7~8 tuning/diagnostic: Recall 100%, timely Recall 90%, 중복 0건 유지,
+  FAR 2.34→1.75/min
+- 평균 onset latency 증가는 Development 약 0.092초, S7~8 약 0.100초
+- M1/MPS 동일 능동 인원 입력 각 3회 중앙값: 최적화 ON 13.511 FPS,
+  낙상 OFF 14.571 FPS 대비 7.3% 감소
+- interval 2/3/4가 같은 sample Event를 frame 87에 생성했고, interval 3은
+  interval 2보다 빠르며 interval 4와의 차이는 실행 편차 수준이라 보수적으로
+  interval 3을 선택했다.
+
+### Consequences
+
+- 보조 모델 호출 비용과 S7~8의 일부 정상 자세 오탐이 함께 줄었다.
+- 운영 FAR 목표 0.2/min은 여전히 충족하지 못하므로 낙상 기능은 opt-in이다.
+- MPS 수치는 단일 파일의 반복 측정 결과이며 API·Live Frame, 다른 장치,
+  장시간 카메라에서는 다시 측정해야 한다.
+- 실제 접촉 원인 정확도, Subject 9~10 holdout, 외부 데이터 일반화 정책은
+  변경하지 않는다.

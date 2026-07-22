@@ -27,6 +27,7 @@ from src.integrations.live_frame_dispatcher import LiveFrameDispatcher
 from src.safety.auxiliary_fall_model import AuxiliaryFallModel
 from src.safety.fall_detector import FallDetectorConfig
 from src.safety.fall_pipeline import FallPipeline
+from src.safety.pose_normal_gate import PoseNormalGate, PoseNormalGateConfig
 from src.tracking.bytetrack_wrapper import ByteTracker
 from src.tracking.pose_tracker import PoseTracker
 from src.visualization.video_overlay import VideoOverlayWriter
@@ -54,6 +55,8 @@ def run_pipeline(
     fall_model_conf: float = 0.5,
     fall_model_device: str = "auto",
     fall_model_iou_threshold: float = 0.3,
+    fall_model_interval_frames: int = 1,
+    fall_pose_normal_gate_enabled: bool = False,
     metrics_output_path: Optional[str] = None,
     api_failed_events_output_path: str = "outputs/api_failed_events.jsonl",
 ) -> None:
@@ -79,6 +82,8 @@ def run_pipeline(
         fall_model_conf=fall_model_conf,
         fall_model_device=fall_model_device,
         fall_model_iou_threshold=fall_model_iou_threshold,
+        fall_model_interval_frames=fall_model_interval_frames,
+        fall_pose_normal_gate_enabled=fall_pose_normal_gate_enabled,
         metrics_output_path=metrics_output_path,
         api_failed_events_output_path=api_failed_events_output_path,
     )
@@ -106,6 +111,8 @@ def run_pipeline_from_source(
     fall_model_conf: float = 0.5,
     fall_model_device: str = "auto",
     fall_model_iou_threshold: float = 0.3,
+    fall_model_interval_frames: int = 1,
+    fall_pose_normal_gate_enabled: bool = False,
     metrics_output_path: Optional[str] = None,
     api_failed_events_output_path: str = "outputs/api_failed_events.jsonl",
 ) -> None:
@@ -128,6 +135,10 @@ def run_pipeline_from_source(
             Track.keypoints를 필요로 하기 때문이다.
         fall_model_path: fine-tuned fall/nofall 보조 모델 경로. None이면 모델 없이
             bbox+pose 규칙 기반 경로만 사용한다 (scripts/evaluate_fall.py와 동일 정책).
+        fall_model_interval_frames: 보조 모델 실행 간격. pose normal gate가 없으면
+            고정 간격이고, pose normal gate가 있으면 fallback 구간의 최대 간격이다.
+        fall_pose_normal_gate_enabled: 안정적인 직립 Pose에서만 RGB 보조 모델을
+            건너뛰는 보수적 gate. 기본 False로 기존 경로를 유지한다.
         metrics_output_path: 지정 시 모델 초기화와 종료 flush를 제외한 frame-loop
             latency/FPS 지표를 JSON으로 저장한다. None이면 계측 파일을 만들지 않는다.
         api_failed_events_output_path: API 전송 최종 실패 Event를 기록할 JSONL 경로.
@@ -201,6 +212,7 @@ def run_pipeline_from_source(
 
         fall_pipeline: Optional[FallPipeline] = None
         if fall_detection_enabled:
+            fall_detector_config = FallDetectorConfig.from_file(fall_config_path)
             auxiliary_model = None
             if fall_model_path:
                 auxiliary_model = AuxiliaryFallModel(
@@ -208,18 +220,38 @@ def run_pipeline_from_source(
                     conf=fall_model_conf,
                     device=fall_model_device,
                 )
+            pose_normal_gate = None
+            if fall_pose_normal_gate_enabled:
+                if auxiliary_model is None:
+                    raise ValueError(
+                        "--fall-pose-normal-gate-enabled 사용 시 --fall-model-path가 "
+                        "필요합니다."
+                    )
+                pose_normal_gate = PoseNormalGate(
+                    fps=fps,
+                    config=PoseNormalGateConfig.from_fall_detector_config(
+                        fall_detector_config
+                    ),
+                )
             fall_pipeline = FallPipeline(
                 fps=fps,
-                detector_config=FallDetectorConfig.from_file(fall_config_path),
+                detector_config=fall_detector_config,
                 auxiliary_model=auxiliary_model,
                 iou_threshold=fall_model_iou_threshold,
                 fall_config_path=fall_config_path,
+                auxiliary_inference_interval_frames=fall_model_interval_frames,
+                pose_normal_gate=pose_normal_gate,
             )
             LOGGER.info(
                 "Fall Detection 활성화: config=%s, model=%s",
                 fall_config_path,
                 fall_model_path or "없음(bbox+pose 규칙 기반만 사용)",
             )
+            if fall_pose_normal_gate_enabled:
+                LOGGER.info(
+                    "Pose NORMAL gate 활성화: auxiliary_interval=%d",
+                    fall_model_interval_frames,
+                )
 
         writer = EventWriter(
             output_path=output_path,
@@ -514,6 +546,17 @@ def main() -> None:
         choices=["auto", "mps", "cuda", "cpu"],
     )
     parser.add_argument("--fall-model-iou-threshold", type=float, default=0.3)
+    parser.add_argument(
+        "--fall-model-interval-frames",
+        type=int,
+        default=1,
+        help="보조 fall/nofall 모델 실행 간격(frame). 1이면 매 frame 실행.",
+    )
+    parser.add_argument(
+        "--fall-pose-normal-gate-enabled",
+        action="store_true",
+        help="안정적인 직립 Pose에서 RGB 보조 모델 추론을 생략한다. 기본 비활성화.",
+    )
 
     # API 연동
     parser.add_argument(
@@ -611,6 +654,8 @@ def main() -> None:
         fall_model_conf=args.fall_model_conf,
         fall_model_device=args.fall_model_device,
         fall_model_iou_threshold=args.fall_model_iou_threshold,
+        fall_model_interval_frames=args.fall_model_interval_frames,
+        fall_pose_normal_gate_enabled=args.fall_pose_normal_gate_enabled,
         metrics_output_path=args.metrics_output,
         api_failed_events_output_path=args.api_failed_events_output,
     )

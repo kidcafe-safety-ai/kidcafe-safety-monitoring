@@ -167,6 +167,43 @@ class TestInMemoryVsCacheRoundTripEquivalence:
         assert result_memory.event_frames != []
         assert result_memory.confirm_path == "model"
 
+    def test_sample_and_hold_interval_matches_cache_round_trip(self, tmp_path):
+        """간격 추론의 Track별 sample-and-hold도 캐시 재생과 동일해야 한다."""
+        frames = []
+        for i in range(5):
+            frames.append((i, [_track(_STANDING_BBOX, [50.0, 60.0])], []))
+        for i in range(5, 9):
+            frames.append(
+                (
+                    i,
+                    [_track(_STANDING_BBOX, [50.0, 60.0])],
+                    [FallDetection(bbox=list(_STANDING_BBOX), label="fall", confidence=0.9)],
+                )
+            )
+        row = _row()
+        config = _fast_config()
+
+        result_memory = ef.score_video_from_frame_source(
+            row,
+            _in_memory_frame_source(frames),
+            _FPS,
+            config,
+            fall_model_iou_threshold=0.3,
+            fall_model_interval_frames=2,
+        )
+        result_cache = ef.score_video_from_frame_source(
+            row,
+            _cache_round_trip_frame_source(frames, tmp_path),
+            _FPS,
+            config,
+            fall_model_iou_threshold=0.3,
+            fall_model_interval_frames=2,
+        )
+
+        assert ef.video_result_to_dict(result_memory) == ef.video_result_to_dict(result_cache)
+        assert result_memory.event_frames != []
+        assert result_memory.confirm_path == "model"
+
 
 class TestIouThresholdSweepChangesReplayResult:
     def test_lower_iou_threshold_matches_partial_overlap_higher_does_not(self, tmp_path):
