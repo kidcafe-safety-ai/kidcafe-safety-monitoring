@@ -354,7 +354,7 @@ Ultralytics 공식 COCO benchmark에서 YOLO26n은 YOLOv8n 대비 높은 mAP와 
    - ENTER
    - DWELL
    - EXIT
-   - FALL_SUSPECT (Phase 3 opt-in PoC 구현 완료, Validation 개선 후속) / COLLISION_SUSPECT (Phase 4 이후 재검토)
+   - FALL_SUSPECT (Phase 3 opt-in PoC 구현 완료, 외부 평가·최적화 후속) / COLLISION_SUSPECT (Phase 4 이후 재검토)
 5. 필요 시 track_id 연속성 수동 기준 작성
 6. 최종 보고서/논문용 정식 지표 산출
 ```

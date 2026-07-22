@@ -98,6 +98,23 @@ class TestDispatcherWiring:
         # 로컬 EventWriter 저장이 dispatcher 등록보다 먼저 일어나야 한다.
         assert call_order == ["write_batch", "enqueue_event"]
 
+    def test_custom_failed_events_path_is_forwarded(self):
+        patcher, _, _ = _patch_pipeline_internals([])
+        mock_dispatcher = MagicMock()
+
+        with patcher, patch.object(
+            main_module, "AsyncEventDispatcher", return_value=mock_dispatcher
+        ) as mock_dispatcher_cls:
+            run_pipeline_from_source(
+                source=_make_mock_source(),
+                zones_path="unused.json",
+                api_url="http://localhost:8999",
+                api_failed_events_output_path="outputs/run-1-failures.jsonl",
+            )
+
+        _, kwargs = mock_dispatcher_cls.call_args
+        assert kwargs["failed_events_path"] == "outputs/run-1-failures.jsonl"
+
     def test_current_status_is_registered_with_dispatcher(self, monkeypatch):
         monkeypatch.setattr(main_module, "_STATUS_UPDATE_INTERVAL_SEC", 0.0)
         patcher, _, _ = _patch_pipeline_internals([])

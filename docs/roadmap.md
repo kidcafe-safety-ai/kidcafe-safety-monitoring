@@ -300,6 +300,12 @@ C(정현수): Live UI·신규 이벤트/cause·AlertHistory·화면 성능
 
 > B 공간정책 상태 (2026-07-16): `EventManager`에 zone 전이 확인(진입 0.3초, 이탈 0.5초, Track 소실 유예 0.5초)과 `ENTER_RESTRICTED`·`DANGER_ZONE_DWELL` 치환 로직을 구현했다. 단위 테스트로 경계 진동 억제와 중복 이벤트 금지를 확인했으며, 실제 영상 전후 이벤트 수·감지 지연·FPS 비교 및 임계값 재튜닝은 통합 기간에 수행한다.
 
+> A 통합 상태 (2026-07-22): 동결한 낙상 PoC의 JSONL → FastAPI → SQLite →
+> Dashboard / Live Frame 전파와 API 장애 중 비차단 실패 보존을 확인했다.
+> Signal Cache 회귀 지표는 유지됐고, 능동 인원 영상에서 낙상 ON의 FPS 감소가
+> 46.1%로 목표(20% 이내)를 넘었다. 기능은 opt-in·기본 비활성으로 유지하며
+> 실제 원인 후보 정확도, 최종 holdout, 성능 최적화는 Phase 4로 이관한다.
+
 ### 우선순위
 
 ```text

@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 import cv2
 
 from src.common.event_writer import EventWriter
+from src.common.pipeline_metrics import PipelineMetrics
 from src.common.pipeline_logging import format_eta, setup_logging
 from src.common.types import CurrentStatus, CurrentZoneStatus, Zone
 from src.events.event_manager import EventManager
@@ -53,6 +54,8 @@ def run_pipeline(
     fall_model_conf: float = 0.5,
     fall_model_device: str = "auto",
     fall_model_iou_threshold: float = 0.3,
+    metrics_output_path: Optional[str] = None,
+    api_failed_events_output_path: str = "outputs/api_failed_events.jsonl",
 ) -> None:
     """파일 영상 기반 파이프라인 (기존 인터페이스 유지).
 
@@ -76,6 +79,8 @@ def run_pipeline(
         fall_model_conf=fall_model_conf,
         fall_model_device=fall_model_device,
         fall_model_iou_threshold=fall_model_iou_threshold,
+        metrics_output_path=metrics_output_path,
+        api_failed_events_output_path=api_failed_events_output_path,
     )
 
 
@@ -101,6 +106,8 @@ def run_pipeline_from_source(
     fall_model_conf: float = 0.5,
     fall_model_device: str = "auto",
     fall_model_iou_threshold: float = 0.3,
+    metrics_output_path: Optional[str] = None,
+    api_failed_events_output_path: str = "outputs/api_failed_events.jsonl",
 ) -> None:
     """모든 입력 소스 타입을 처리하는 파이프라인 코어.
 
@@ -115,17 +122,23 @@ def run_pipeline_from_source(
         live_frame_enabled: 지정 시 FastAPI PUT /live/frame으로 최신 frame을 전송한다.
             api_url이 필요하며, Event/CurrentStatus 전송과는 별도로 켜고 끌 수 있다.
         fall_detection_enabled: FALL_SUSPECT 감지(FallPipeline)를 켤지 여부. 기본
-            False — Validation에서 오탐/중복 목표를 일부 충족하지 못했으므로
-            (Subject 7~8 결과는 docs/fall_evaluation.md 참고) 명시적으로 켜야만
-            동작한다. 켜면 tracker도 PoseTracker로 바뀐다 — pose confirm
-            경로가 Track.keypoints를 필요로 하기 때문이다.
+            False — Subject 7~8 진단에서 오탐 목표를 충족하지 못했으므로
+            (docs/fall_evaluation.md 참고) 명시적으로 켜야만 동작한다. 켜면
+            tracker도 PoseTracker로 바뀐다 — pose confirm 경로가
+            Track.keypoints를 필요로 하기 때문이다.
         fall_model_path: fine-tuned fall/nofall 보조 모델 경로. None이면 모델 없이
             bbox+pose 규칙 기반 경로만 사용한다 (scripts/evaluate_fall.py와 동일 정책).
+        metrics_output_path: 지정 시 모델 초기화와 종료 flush를 제외한 frame-loop
+            latency/FPS 지표를 JSON으로 저장한다. None이면 계측 파일을 만들지 않는다.
+        api_failed_events_output_path: API 전송 최종 실패 Event를 기록할 JSONL 경로.
     """
     source.open()
     dispatcher: Optional[AsyncEventDispatcher] = None
     overlay_writer = None
     writer = None
+    metrics = PipelineMetrics() if metrics_output_path is not None else None
+    frame_number = 0
+    total_events = 0
     fps = source.fps
     try:
         if live_frame_enabled and not api_url:
@@ -151,6 +164,7 @@ def run_pipeline_from_source(
             dispatcher = AsyncEventDispatcher(
                 base_url=api_url,
                 live_frame_dispatcher=live_frame_dispatcher,
+                failed_events_path=api_failed_events_output_path,
             )
             LOGGER.info("API 비차단 전송 활성화: %s", api_url)
 
@@ -223,13 +237,11 @@ def run_pipeline_from_source(
         LOGGER.info("Loaded %s zones", len(zones))
         LOGGER.info("Tracker: %s, Model: %s", tracker_name, resolved_model_path)
 
-        frame_number = 0
-        total_events = 0
-        pipeline_start = time.time()
-        _last_status_time = pipeline_start
+        pipeline_start = time.perf_counter()
+        _last_status_time = time.time()
 
         while True:
-            frame_start = time.time()
+            frame_start = time.perf_counter()
 
             ret, frame = source.read()
             if not ret or frame is None:
@@ -321,11 +333,13 @@ def run_pipeline_from_source(
                     LOGGER.warning("사용자 입력으로 파이프라인을 중단합니다.")
                     break
 
-            processing_time = time.time() - frame_start
+            processing_time = time.perf_counter() - frame_start
+            if metrics is not None:
+                metrics.record(processing_time)
             processing_fps = 1.0 / processing_time if processing_time > 0 else 0.0
 
             if frame_number % 30 == 0:
-                elapsed = time.time() - pipeline_start
+                elapsed = time.perf_counter() - pipeline_start
                 processed = frame_number + 1
                 if processed > 0 and target_frames:
                     avg_time = elapsed / processed
@@ -359,6 +373,8 @@ def run_pipeline_from_source(
             dispatcher.close(timeout=3.0)
         if writer is not None:
             writer.finalize(fps=fps)
+        if metrics is not None and metrics_output_path is not None:
+            metrics.write_json(metrics_output_path)
 
     LOGGER.info("Processed %s frames, %s events", frame_number, total_events)
 
@@ -459,6 +475,11 @@ def main() -> None:
     parser.add_argument("--csv-output", default="outputs/events.csv")
     parser.add_argument("--summary-output", default="outputs/summary.json")
     parser.add_argument("--overlay-output", default="outputs/result.mp4")
+    parser.add_argument(
+        "--metrics-output",
+        default=None,
+        help="frame-loop FPS/latency JSON 경로. 미지정 시 생성하지 않는다.",
+    )
 
     # 모델
     parser.add_argument(
@@ -473,7 +494,7 @@ def main() -> None:
         "--fall-detection-enabled",
         action="store_true",
         help="FallPipeline 기반 FALL_SUSPECT 감지를 켠다. 기본 비활성화 — "
-        "Validation에서 오탐/중복 목표를 일부 미충족(자세한 내용은 "
+        "Subject 7~8 진단에서 오탐 목표를 미충족(자세한 내용은 "
         "docs/fall_evaluation.md 참고).",
     )
     parser.add_argument(
@@ -499,6 +520,11 @@ def main() -> None:
         "--api-url",
         default=None,
         help="FastAPI 서버 URL. 지정 시 이벤트/상태를 전송한다. 예: http://localhost:8000",
+    )
+    parser.add_argument(
+        "--api-failed-events-output",
+        default="outputs/api_failed_events.jsonl",
+        help="API 최종 전송 실패 Event JSONL 경로.",
     )
     parser.add_argument(
         "--live-frame-enabled",
@@ -585,6 +611,8 @@ def main() -> None:
         fall_model_conf=args.fall_model_conf,
         fall_model_device=args.fall_model_device,
         fall_model_iou_threshold=args.fall_model_iou_threshold,
+        metrics_output_path=args.metrics_output,
+        api_failed_events_output_path=args.api_failed_events_output,
     )
 
 

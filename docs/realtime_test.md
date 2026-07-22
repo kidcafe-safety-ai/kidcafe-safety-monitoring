@@ -1093,3 +1093,94 @@ python -m pytest tests/test_sqlite_concurrency.py -q
 
 결과: **1 passed**. 현재 연결 설정에서 검증 범위를 충족해 WAL이나 별도 timeout
 설정은 추가하지 않았다.
+
+---
+
+## 2026-07-22 — Phase 3 A 낙상 통합 및 장애 안정성 검증
+
+### 목적과 범위
+
+동결된 낙상 PoC를 실제 실행 경로에 연결해 `FALL_SUSPECT`가 로컬 산출물,
+FastAPI, SQLite, React Dashboard와 Live Frame까지 동일한 계약으로 전달되는지
+확인했다. 실제 접촉 원인 후보의 정확도 평가는 이번 통합 범위에 포함하지
+않았고, 고정 fixture로 `cause` 전파 계약만 검증했다.
+
+### 환경과 고정 입력
+
+| 항목 | 값 |
+| --- | --- |
+| OS / 하드웨어 | macOS 15.6.1, MacBook Air M1(8-core CPU, 7-core GPU), 16 GB |
+| Python / 추론 장치 | Python 3.10.20, `auto` → CPU (`torch.backends.mps.is_available()=False`) |
+| 주요 라이브러리 | torch 2.5.1, Ultralytics 8.4.56, OpenCV 4.8.1 |
+| Docker | Engine 29.5.3, Compose v5.1.4 |
+| API / Frontend | Docker Compose, `localhost:8000` / `localhost:3000` |
+| 모델 | `yolo26n-pose.pt` + `fall_detector_v1.pt` |
+| 설정 | `configs/fall_detection.json` |
+| 낙상 입력 | CAUCAFall `S7_fall_backwards`, 720×480, 252프레임, 20 FPS |
+| 성능 비교 | 동일 입력, 각 조건 사전 1회 warm-up 후 3회 |
+| 측정 범위 | frame loop만 측정, 최초 30프레임 제외 steady-state 중앙값 |
+
+실행별 SQLite 파일, 이벤트, 영상, metrics, 실패 JSONL은
+`outputs/phase3_integration/` 아래에 격리했으며 Git에는 포함하지 않는다.
+
+### E2E 결과
+
+| 구간 | 결과 |
+| --- | --- |
+| 로컬 Vision AI | frame 83에서 `FALL_SUSPECT` 1건 생성 |
+| 원인 근거 없음 | 실제 단일 인원 Event의 `cause=null` 유지 |
+| FastAPI / SQLite | Event 필드와 `cause_json=NULL` 일치 |
+| Dashboard | `FALL_SUSPECT`와 `원인 후보 없음` 표시 확인 |
+| Live Frame | 실행 중 `200 image/jpeg`, 640×480, frame header 확인 |
+| stale 정책 | 실행 종료 후 3초가 지난 frame은 계약대로 `204` 반환 |
+
+`NEARBY_TRACK`은 고정 fixture(Event Track 10, 후보 Track 11)를 기존
+`POST /events`에 전송했다. API 응답과 SQLite `cause_json`이 일치했고,
+Dashboard 알림 기록에 `외부 접촉 의심 · Track #11`이 표시됐다. 이 확인은
+전송·저장·표시 계약 검증이며 Vision attribution 정확도 결과가 아니다.
+
+### 동결 지표 회귀
+
+Signal Cache 재생으로 설정·상태머신 회귀 여부를 확인했다.
+
+| 지표 | Development S1~6 | S7~8 tuning/diagnostic |
+| --- | ---: | ---: |
+| Recall | 83.3% | 100% |
+| timely Recall | 66.7% | 90% |
+| False alarm/min | 0.0 | 2.34 |
+| 중복 Event 영상 | 0 | 0 |
+
+S7~8은 반복 진단과 설정 선택에 사용했으므로 최종 Validation으로 해석하지
+않는다. Subject 9~10 holdout은 열람하거나 실행하지 않았다.
+
+### 능동 인원 성능과 API 장애
+
+동일한 S7 낙상 영상에서 낙상 기능 OFF/API 정상, ON/API 정상,
+ON/API 연결 실패(`localhost:8999`)를 각각 3회 측정했다.
+
+| 조건 | FPS | avg latency | p95 latency | max latency | Event / 완료 |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 낙상 OFF, API 정상 | 9.461 | 0.106초 | 0.177초 | 0.270초 | 252프레임 완료 |
+| 낙상 ON, API 정상 | 5.098 | 0.196초 | 0.303초 | 0.461초 | frame 83 Event, 252프레임 완료 |
+| 낙상 ON, API 장애 | 4.919 | 0.203초 | 0.345초 | 0.460초 | frame 83 Event, 252프레임 완료 |
+
+- 낙상 기능 ON 비용은 정상 API 기준 FPS 46.1% 감소로 목표(20% 이내)를
+  충족하지 못했다. PoseTracker와 보조 detector 비용을 포함한 결과이므로
+  기능은 계속 opt-in·기본 비활성으로 유지하고 최적화는 Phase 4로 이관한다.
+- API 장애의 추가 FPS 감소는 낙상 ON 정상 대비 3.5%로 목표(20% 이내)를
+  충족했다. 세 장애 실행 모두 파이프라인이 끝까지 완료됐고, 최종 전송에
+  실패한 frame 83 Event가 실행별 실패 JSONL에 `request_failed`, 2회 시도로
+  보존됐다. 로컬 Event 산출물도 유지됐다.
+
+계획된 `data/videos/test1.mp4 --frames-limit 600` 비교도 모든 조건에서
+완료됐지만, 첫 600프레임에는 유효한 인원 Event가 없어 보조 모델의 lazy
+loading 경로가 실행되지 않았다. 따라서 이 결과는 no-person idle path
+안정성 확인에만 사용하고 낙상 기능 비용 계산에는 사용하지 않았다.
+
+### 판정
+
+- Vision AI → JSONL → FastAPI → SQLite → Dashboard / Live Frame 전파 통과
+- `cause=null` 및 고정 `NEARBY_TRACK` 계약 전파 통과
+- API 장애 중 비차단 처리와 실패 Event 보존 통과
+- 동결 낙상 지표 회귀 없음
+- 능동 인원 경로 FPS 목표 미달: 코드 블로커가 아닌 opt-in PoC 한계로 기록

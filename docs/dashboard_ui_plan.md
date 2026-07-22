@@ -41,13 +41,13 @@ Phase 1.5에서 계획한 mock → FastAPI 전환이 Phase 2에서 완료됐고,
 |---|---|
 | MonitoringPage | 실제 API 연동 |
 | EventsPage | 실제 API 연동 |
-| AlertHistoryPage | Mock Prototype |
+| AlertHistoryPage | 실제 API 읽기 전용 연동 |
 | ReportPage | Mock Prototype |
 | ZoneSettingsPage | Mock Prototype |
 | SystemSettingsModal | Mock Prototype |
 | 영상 영역 | Live View latest-frame polling 연동 |
 
-Mock Prototype 화면의 데이터는 서버에 저장되지 않는다.
+Report·ZoneSettings·SystemSettings의 Mock 데이터는 서버에 저장되지 않는다.
 
 ## Polling 책임 (Phase 2.5 기준)
 
@@ -91,9 +91,9 @@ ZoneSettingsPage는 mock prototype이다.
 
 ---
 
-## Phase 3 계획 (구현 예정)
+## Phase 3 구현 상태
 
-> 상태: 계약 확정 — 구현 PR 적용 예정
+> 상태: Live View, 신규 Event 표시, AlertHistory 읽기 전용 연동 완료
 > 기준선: v0.2.5-dashboard
 
 ### Live View
