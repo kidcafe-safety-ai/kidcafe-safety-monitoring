@@ -13,6 +13,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
 
 import src.main as main_module
 from src.common.types import Event
@@ -225,6 +226,57 @@ class TestFallDetectionEnabled:
 
         _, kwargs = mock_fall_pipeline_cls.call_args
         assert kwargs["fall_config_path"] == "configs/fall_detection.json"
+
+    def test_fall_model_interval_is_forwarded_to_pipeline(self):
+        patcher, _, _ = _patch_pipeline_internals()
+
+        with patcher, patch.object(
+            main_module, "FallPipeline", return_value=MagicMock(process=MagicMock(return_value=[]))
+        ) as mock_fall_pipeline_cls:
+            run_pipeline_from_source(
+                source=_make_mock_source(),
+                zones_path="unused.json",
+                fall_detection_enabled=True,
+                fall_model_interval_frames=3,
+            )
+
+        _, kwargs = mock_fall_pipeline_cls.call_args
+        assert kwargs["auxiliary_inference_interval_frames"] == 3
+
+    def test_pose_normal_gate_is_created_and_forwarded(self):
+        patcher, _, _ = _patch_pipeline_internals()
+        gate = object()
+
+        with patcher, patch.object(
+            main_module, "FallPipeline", return_value=MagicMock(process=MagicMock(return_value=[]))
+        ) as mock_fall_pipeline_cls, patch.object(
+            main_module, "AuxiliaryFallModel", return_value=MagicMock(enabled=True)
+        ), patch.object(main_module, "PoseNormalGate", return_value=gate) as mock_gate:
+            run_pipeline_from_source(
+                source=_make_mock_source(),
+                zones_path="unused.json",
+                fall_detection_enabled=True,
+                fall_model_path="fall.pt",
+                fall_pose_normal_gate_enabled=True,
+            )
+
+        mock_gate.assert_called_once()
+        _, gate_kwargs = mock_gate.call_args
+        assert gate_kwargs["fps"] == 30.0
+        assert gate_kwargs["config"].max_aspect_ratio == 0.9
+        _, kwargs = mock_fall_pipeline_cls.call_args
+        assert kwargs["pose_normal_gate"] is gate
+
+    def test_pose_normal_gate_requires_auxiliary_model_path(self):
+        patcher, _, _ = _patch_pipeline_internals()
+
+        with patcher, pytest.raises(ValueError, match="--fall-model-path"):
+            run_pipeline_from_source(
+                source=_make_mock_source(),
+                zones_path="unused.json",
+                fall_detection_enabled=True,
+                fall_pose_normal_gate_enabled=True,
+            )
 
     def test_zone_and_fall_events_both_flow_to_writer(self):
         from src.common.types import Event as EventType

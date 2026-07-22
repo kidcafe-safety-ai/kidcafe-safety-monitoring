@@ -8,6 +8,9 @@ test_fall_pipeline_module.py로 분리했다.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
 import numpy as np
 import pytest
 
@@ -64,6 +67,149 @@ class TestFallPipelineIouThresholdValidation:
             FallPipeline(fps=10.0, iou_threshold=-0.1)
         with pytest.raises(ValueError, match="iou_threshold"):
             FallPipeline(fps=10.0, iou_threshold=1.1)
+
+
+class TestAuxiliaryInferenceInterval:
+    @pytest.mark.parametrize("value", [0, -1, 1.5, True])
+    def test_rejects_invalid_interval(self, value):
+        with pytest.raises(ValueError, match="auxiliary_inference_interval_frames"):
+            FallPipeline(fps=10.0, auxiliary_inference_interval_frames=value)
+
+    def test_default_interval_runs_model_every_frame_with_tracks(self):
+        stub = _StubAuxiliaryModel(detections_by_call=[[], [], []])
+        pipeline = FallPipeline(fps=10.0, auxiliary_model=stub)
+
+        for frame_number in range(3):
+            pipeline.process(_FRAME, _tracking_result(frame_number, _BBOX))
+
+        assert stub.infer_calls == 3
+
+    def test_interval_runs_only_scheduled_frames(self):
+        stub = _StubAuxiliaryModel(detections_by_call=[[], []])
+        pipeline = FallPipeline(
+            fps=10.0,
+            auxiliary_model=stub,
+            auxiliary_inference_interval_frames=3,
+        )
+
+        for frame_number in range(6):
+            pipeline.process(_FRAME, _tracking_result(frame_number, _BBOX))
+
+        assert stub.infer_calls == 2  # frame 0, 3
+
+    def test_skipped_frame_reuses_last_evidence_for_same_track(self):
+        fall_detection = [FallDetection(bbox=list(_BBOX), label="fall", confidence=0.9)]
+        stub = _StubAuxiliaryModel(detections_by_call=[fall_detection])
+        pipeline = FallPipeline(
+            fps=10.0,
+            auxiliary_model=stub,
+            auxiliary_inference_interval_frames=3,
+        )
+        pipeline.detector.process = MagicMock(return_value=[])
+
+        pipeline.process(_FRAME, _tracking_result(0, _BBOX, track_id=1))
+        pipeline.process(_FRAME, _tracking_result(1, _BBOX, track_id=1))
+
+        _, kwargs = pipeline.detector.process.call_args
+        assert kwargs["model_evidence"][1].label == "fall"
+        assert stub.infer_calls == 1
+
+    def test_skipped_frame_does_not_reuse_evidence_for_new_track(self):
+        fall_detection = [FallDetection(bbox=list(_BBOX), label="fall", confidence=0.9)]
+        stub = _StubAuxiliaryModel(detections_by_call=[fall_detection])
+        pipeline = FallPipeline(
+            fps=10.0,
+            auxiliary_model=stub,
+            auxiliary_inference_interval_frames=3,
+        )
+        pipeline.detector.process = MagicMock(return_value=[])
+
+        pipeline.process(_FRAME, _tracking_result(0, _BBOX, track_id=1))
+        pipeline.process(_FRAME, _tracking_result(1, _BBOX, track_id=2))
+
+        _, kwargs = pipeline.detector.process.call_args
+        assert kwargs["model_evidence"][2].label == "unknown"
+        assert 1 not in kwargs["model_evidence"]
+
+    def test_no_tracks_never_runs_model_even_on_scheduled_frame(self):
+        stub = _StubAuxiliaryModel(detections_by_call=[[]])
+        pipeline = FallPipeline(
+            fps=10.0,
+            auxiliary_model=stub,
+            auxiliary_inference_interval_frames=3,
+        )
+
+        pipeline.process(_FRAME, _tracking_result(0, None))
+
+        assert stub.infer_calls == 0
+
+
+class TestPoseNormalGate:
+    def test_requires_enabled_auxiliary_model(self):
+        with pytest.raises(ValueError, match="requires an enabled auxiliary"):
+            FallPipeline(
+                fps=10.0,
+                pose_normal_gate=MagicMock(),
+            )
+
+    def test_confident_normal_skips_auxiliary_model(self):
+        gate = MagicMock()
+        gate.evaluate.return_value = SimpleNamespace(use_auxiliary=False)
+        stub = _StubAuxiliaryModel()
+        pipeline = FallPipeline(
+            fps=10.0,
+            auxiliary_model=stub,
+            pose_normal_gate=gate,
+            auxiliary_inference_interval_frames=3,
+        )
+        pipeline.detector.process = MagicMock(return_value=[])
+
+        pipeline.process(_FRAME, _tracking_result(8, _BBOX))
+
+        assert stub.infer_calls == 0
+        _, kwargs = pipeline.detector.process.call_args
+        assert kwargs["model_evidence"][1].label == "nofall"
+
+    def test_fallback_runs_immediately_then_holds_until_interval(self):
+        gate = MagicMock()
+        gate.evaluate.return_value = SimpleNamespace(use_auxiliary=True)
+        fall_detection = [
+            FallDetection(bbox=list(_BBOX), label="fall", confidence=0.9)
+        ]
+        stub = _StubAuxiliaryModel(
+            detections_by_call=[fall_detection, fall_detection]
+        )
+        pipeline = FallPipeline(
+            fps=10.0,
+            auxiliary_model=stub,
+            pose_normal_gate=gate,
+            auxiliary_inference_interval_frames=3,
+        )
+        pipeline.detector.process = MagicMock(return_value=[])
+
+        for frame_number in range(4):
+            pipeline.process(_FRAME, _tracking_result(frame_number, _BBOX))
+
+        assert stub.infer_calls == 2  # fallback entry frame 0, refresh frame 3
+
+    def test_fallback_after_normal_route_does_not_wait_for_interval(self):
+        gate = MagicMock()
+        gate.evaluate.side_effect = [
+            SimpleNamespace(use_auxiliary=False),
+            SimpleNamespace(use_auxiliary=True),
+        ]
+        stub = _StubAuxiliaryModel(detections_by_call=[[]])
+        pipeline = FallPipeline(
+            fps=10.0,
+            auxiliary_model=stub,
+            pose_normal_gate=gate,
+            auxiliary_inference_interval_frames=3,
+        )
+
+        pipeline.process(_FRAME, _tracking_result(10, _BBOX))
+        pipeline.process(_FRAME, _tracking_result(11, _BBOX))
+
+        assert stub.infer_calls == 1
 
 
 class TestFallPipelineWithoutAuxiliaryModel:

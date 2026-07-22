@@ -70,6 +70,9 @@ def test_cli_forwards_metrics_and_failure_paths(monkeypatch):
             "outputs/run/metrics.json",
             "--api-failed-events-output",
             "outputs/run/failures.jsonl",
+            "--fall-model-interval-frames",
+            "3",
+            "--fall-pose-normal-gate-enabled",
             "--frames-limit",
             "600",
         ],
@@ -84,4 +87,6 @@ def test_cli_forwards_metrics_and_failure_paths(monkeypatch):
     assert kwargs["source"] is source
     assert kwargs["metrics_output_path"] == "outputs/run/metrics.json"
     assert kwargs["api_failed_events_output_path"] == "outputs/run/failures.jsonl"
+    assert kwargs["fall_model_interval_frames"] == 3
+    assert kwargs["fall_pose_normal_gate_enabled"] is True
     assert kwargs["frames_limit"] == 600

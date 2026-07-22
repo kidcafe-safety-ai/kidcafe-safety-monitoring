@@ -12,6 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import evaluate_fall as ef  # noqa: E402
 import evaluate_fall_from_cache as efc  # noqa: E402
 
+from src.common.types import Track, TrackingResult  # noqa: E402
+from src.safety.auxiliary_fall_model import FallDetection  # noqa: E402
+
 _TRACKER_META = {
     "tracker_type": "pose",
     "model_path": "yolo26n-pose.pt",
@@ -137,3 +140,49 @@ class TestValidateCacheMetadata:
         result = efc._validate_cache_metadata(metadata, manifest, row, tmp_path)
 
         assert result is None
+
+
+def _tracking_result(frame_number, track_id=1) -> TrackingResult:
+    return TrackingResult(
+        frame_number=frame_number,
+        timestamp="00:00:00.000",
+        video_source="video",
+        tracks=[
+            Track(
+                track_id=track_id,
+                bbox=[0.0, 0.0, 100.0, 200.0],
+                foot_point=[50.0, 200.0],
+                confidence=0.9,
+            )
+        ],
+    )
+
+
+def test_cached_adaptive_cadence_holds_evidence_and_refreshes_on_interval():
+    cadence = efc.CachedAdaptiveAuxiliaryCadence(
+        interval_frames=3, iou_threshold=0.3
+    )
+    fall = [
+        FallDetection(
+            bbox=[0.0, 0.0, 100.0, 200.0],
+            label="fall",
+            confidence=0.9,
+        )
+    ]
+
+    first, first_inferred = cadence.resolve(
+        _tracking_result(0), fall, fall, use_auxiliary=True
+    )
+    held, held_inferred = cadence.resolve(
+        _tracking_result(1), [], fall, use_auxiliary=True
+    )
+    refreshed, refreshed_inferred = cadence.resolve(
+        _tracking_result(3), fall, fall, use_auxiliary=True
+    )
+
+    assert first is fall
+    assert first_inferred is True
+    assert [detection.label for detection in held] == ["fall"]
+    assert held_inferred is False
+    assert refreshed is fall
+    assert refreshed_inferred is True
