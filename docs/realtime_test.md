@@ -1067,8 +1067,8 @@ raw `foot_point`로 polygon 포함 여부를 계산한 뒤, 그 zone 판정 결�
 - `sample.json`의 dwell 기준이 5초이므로 비교 구간에는
   `DANGER_ZONE_DWELL`이 발생하지 않았다.
 - 샘플 영상에 zone 진입 ground truth가 없어 false positive·false negative
-  정확도는 산출하지 않았다. 해당 평가는 7/22~7/28 통합 테스트에서 별도
-  annotation을 기준으로 수행한다.
+  정확도는 산출하지 않았다. annotation 기반 정량 평가는 Phase 3 통합 기간
+  중 수행하지 못했으며 Phase 4 실제 카메라 데이터 평가로 이관한다.
 - 실행 산출물은 `outputs/phase3-b-baseline.*`과
   `outputs/phase3-b-stabilized.*`이며 Git에 포함하지 않는다.
 
@@ -1235,3 +1235,34 @@ interval `3`을 채택했다. 선택 후 OFF/ON 순서를 교차해 각각 3회 
 이 측정은 앞 절의 CPU 기반 API E2E 3회 중앙값을 대체하지 않는다. MPS 로컬
 파일 경로의 반복 최적화 검증이며, API·Live Frame 포함 반복 측정과 다른 장치는
 Phase 4에서 확인한다. 기능과 최적화 옵션은 기본 비활성으로 유지한다.
+
+---
+
+## 2026-07-27 — Phase 3 종료 게이트 요약
+
+### 범위
+
+Phase 3 종료 전 최종 확인으로, 종료 문서 정리 직후 병합 전 마지막으로 회귀
+스위트와 빌드·설정 검증을 다시 실행했다. 코드 변경은 없고 문서 갱신만 포함한다.
+
+### 결과
+
+| 항목 | 결과 |
+| --- | --- |
+| `git diff --check` | 공백 오류 없음 |
+| `flake8 src tests` | 위반 없음 |
+| `pytest -q` | 835 passed, 3 skipped |
+| `frontend`: `npm ci && npm run build` | 통과 (dist 산출물 생성 확인) |
+| `docker compose config --quiet` | 통과 |
+| `git ls-files outputs` | `outputs/.gitkeep`만 추적 |
+
+### 판정
+
+- 회귀·빌드·설정 검증 전부 통과, 코드 블로커 없음
+- Phase 3 범위: 공간 안전정책, `FALL_SUSPECT` PoC, `cause` 전파,
+  Live Frame, AlertHistory 실 API 연동, API 장애 중 추론 지속 및 실패
+  Event 보존, M1/MPS 낙상 runtime 최적화(7.3% FPS 하락) — 모두 통합·회귀
+  확인 완료
+- 낙상 오탐(FAR) 개선, 실제 접촉 원인 정확도, Subject 9~10 holdout,
+  외부 데이터 재학습은 이번 게이트에 포함하지 않고 Phase 4로 이관한다
+- 위 결과를 근거로 Phase 3 종료 조건을 충족한 것으로 판정한다

@@ -2,8 +2,8 @@
 
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
-> **최종 수정**: 2026-07-20 (Phase 3 FALL_SUSPECT 안정화 결과 반영)
-> **상태**: Phase 2.5 구현 완료 / Phase 3 Live Frame API 구현 / Phase 3 Event·Zone·EventCause 계약 구현 완료 / 공간 안전정책 및 FALL_SUSPECT opt-in PoC·원인 후보 추정 구현 완료
+> **최종 수정**: 2026-07-27 (Phase 3 종료 — API·EventCause 계약 구현 완료 반영)
+> **상태**: Phase 2.5 구현 완료 / Phase 3 완료 — Live Frame API, Event·Zone·EventCause 계약, 공간 안전정책, FALL_SUSPECT opt-in PoC·원인 후보 추정 구현 완료. Zone Settings 저장(`PUT /zones`)과 인증/인가 구현은 Phase 4.
 > **관련 문서**: [`dashboard_api.md`](dashboard_api.md), [`dashboard_analysis.md`](dashboard_analysis.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md), [`roadmap.md`](roadmap.md)
 
 이 문서는 Phase 1.5~2.5의 구현된 API, Phase 3 Live Frame API·Event/Zone 공용 계약, 그리고 Phase 3의 확정된 후속 계약(안전 감지 로직 등)을 구분해 정리한다.

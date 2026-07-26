@@ -49,7 +49,7 @@ Phase 1.5에서 계획한 mock → FastAPI 전환이 Phase 2에서 완료됐고,
 
 Report·ZoneSettings·SystemSettings의 Mock 데이터는 서버에 저장되지 않는다.
 
-## Polling 책임 (Phase 2.5 기준)
+## Polling 책임 (Phase 3 완료 기준)
 
 MonitoringPage에서 각 API를 독립 polling한다.
 
@@ -72,7 +72,7 @@ ZoneSettingsPage는 mock prototype이다.
 
 - `zoneSettingsMockApi.ts` — mock prototype only. FastAPI 미연동.
 - UI에 "Mock Prototype" badge 표시
-- zone_type: Phase 3 계약 확정, 구현 예정 (`docs/interfaces.md` 참조)
+- zone_type: Phase 3 계약·Backend·Frontend 표시 구현 완료 (`docs/interfaces.md` 참조). Zone Settings 저장 연동은 Phase 4.
 
 ## Docker API mode 검증 완료
 
@@ -93,8 +93,10 @@ ZoneSettingsPage는 mock prototype이다.
 
 ## Phase 3 구현 상태
 
-> 상태: Live View, 신규 Event 표시, AlertHistory 읽기 전용 연동 완료
-> 기준선: v0.2.5-dashboard
+> 상태: Phase 3 완료 — Live View, 신규 Event 표시(FALL_SUSPECT/cause 포함),
+> AlertHistory 읽기 전용 연동 완료. Report·ZoneSettings·SystemSettings 저장
+> 연동은 Phase 4.
+> 기준선: `v0.3.0-safety` 예정 (metadata PR·태그 확정 전)
 
 ### Live View
 

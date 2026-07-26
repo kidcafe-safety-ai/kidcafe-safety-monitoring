@@ -1,6 +1,6 @@
 # KidCafe Safety AI — 개발 로드맵
 
-> 최종 수정: 2026-07-20
+> 최종 수정: 2026-07-27
 > MVP baseline: `v0.1.0-mvp`
 > 본 문서는 MVP 1차 종료 이후 최종 제출까지의 상위 개발 로드맵이다.
 > 한이음 일정은 [2026년 창의도전형 공고](https://www.hanium.or.kr/comm/noticeView.do?ntcAtclSn=63940) 기준으로 갱신했다. 세부 일정(주차별 작업·보고서 내부 마감 등)은 팀 오피스 기준이며 공식 공고와 별개로 운영한다.
@@ -15,7 +15,7 @@
 | 6/1~6/8 | Phase 1.5 | 서비스 구조 전환 준비 — 완료 |
 | 6/8~6/21 | Phase 2 | 실시간 입력 연결 — 완료 |
 | 6/22~6/30 | Phase 2.5 | 실시간 운영 대시보드 v1 안정화 — 완료 |
-| 7월 | Phase 3 ← **진행 중** | 안전 감지 고도화 |
+| 7월 | Phase 3 — **완료(7/27)** | 안전 감지 고도화 |
 | 8월 | Phase 4 | 모델·추적 고도화 및 1차 공모전 준비 |
 | 9월 | Phase 5 | 성과 정리 및 2차 평가 준비 |
 | 10월~ | Final | 최종 제출·시연·발표 |
@@ -259,7 +259,7 @@ Docker는 배포 목적이 아니라, 개발 / 시연 실행 환경을 통일하
 - [x] React 운영 대시보드 v1
 - [x] `docs/realtime_test.md` Phase 2.5 테스트 기록
 - [x] Docker Compose 구현 및 Windows(USB C920) / macOS(내장 웹캠) 검증 완료
-- [ ] 중간평가 보고서 (마감 2026-07-14 18:00, Phase 3 7/7~7/14 일정으로 이관 — Phase 2.5 종료 blocker 아님)
+- [x] 중간평가 보고서 (마감 2026-07-14 18:00, Phase 3 7/7~7/14 일정으로 이관 — Phase 2.5 종료 blocker 아님, 이후 제출 및 B/C 승인 완료)
 
 ### Phase 3 인계 기술 부채
 
@@ -284,8 +284,9 @@ Docker는 배포 목적이 아니라, 개발 / 시연 실행 환경을 통일하
 7/7~7/10   Live View — Live Frame latest-only worker 최소 구현 (E2E 우선)
 7/11~7/14  중간평가 보고서
 7/15~7/21  핵심 기능 — 공간정책·FALL_SUSPECT·이벤트 확장 (AsyncEventDispatcher의 Event FIFO queue·Status latest-only 확장은 완료)
-7/22~7/28  통합
-7/29~7/31  Phase 3 종료
+7/22~7/27  통합 (M1/MPS 낙상 runtime 최적화 포함, 계획(7/28)보다 하루 앞당김)
+7/27       Phase 3 종료 — 낙상 오탐 개선(hard-negative 재학습, temporal
+           classifier, 외부 데이터)과 Subject 9~10 최종 holdout은 Phase 4로 이관
 ```
 
 ### 역할
@@ -298,7 +299,9 @@ C(정현수): Live UI·신규 이벤트/cause·AlertHistory·화면 성능
 
 > 예외: 공간정책·debounce 작업은 README 파일 소유권상 A 소유인 `src/events/`, `src/geofencing/`에 B가 조율해 수정한다. 충돌 방지를 위해 B 공간정책 PR → A 낙상 연결부 PR 순서로 진행한다.
 
-> B 공간정책 상태 (2026-07-16): `EventManager`에 zone 전이 확인(진입 0.3초, 이탈 0.5초, Track 소실 유예 0.5초)과 `ENTER_RESTRICTED`·`DANGER_ZONE_DWELL` 치환 로직을 구현했다. 단위 테스트로 경계 진동 억제와 중복 이벤트 금지를 확인했으며, 실제 영상 전후 이벤트 수·감지 지연·FPS 비교 및 임계값 재튜닝은 통합 기간에 수행한다.
+> B 공간정책 상태 (2026-07-16): `EventManager`에 zone 전이 확인(진입 0.3초, 이탈 0.5초, Track 소실 유예 0.5초)과 `ENTER_RESTRICTED`·`DANGER_ZONE_DWELL` 치환 로직을 구현했다. 단위 테스트로 경계 진동 억제와 중복 이벤트 금지를 확인했다.
+>
+> B 공간정책 실측 결과 (2026-07-18): 실제 영상 전후 비교로 전체 이벤트 46.4% 감소(28→15건), 0.52초 이내 빠른 반전 12→0건을 확인했다(`docs/realtime_test.md` 참고). zone 진입 ground truth annotation이 없어 정량 임계값 재튜닝은 수행하지 못했으며, 실제 카메라 데이터 기반 재튜닝은 Phase 4로 이관한다.
 
 > A 통합 상태 (2026-07-22): 동결한 낙상 PoC의 JSONL → FastAPI → SQLite →
 > Dashboard / Live Frame 전파와 API 장애 중 비차단 실패 보존을 확인했다.
@@ -311,6 +314,15 @@ C(정현수): Live UI·신규 이벤트/cause·AlertHistory·화면 성능
 > M1/MPS 단일 파일 OFF/ON 각 3회 중앙값 기준 FPS 하락률 7.3%로 목표를
 > 통과했고, S7~8 진단 FAR는 2.34→1.75/min으로 감소했다. API 포함 반복 측정,
 > 다른 장치, 운영 FAR 개선은 Phase 4 후속으로 남긴다.
+
+> Phase 3 종료 범위 확정 (2026-07-27): Phase 3는 현재 병합된 범위(Annotation
+> V2·평가 프로토콜, Signal Cache·Tracker Sweep, Candidate/Cooldown Handoff,
+> 원인 후보 추정, Pose gate + interval 3 runtime 최적화, 통합 E2E·성능 측정)로
+> 종료한다. 7/22~7/27 잔여 일정에는 Phase 3 추가 성과로 M1/MPS 낙상 runtime
+> 최적화를 수행했다. 데이터 추가, hard-negative 재학습, temporal classifier
+> 비교 등 정확도 개선 실험은 Phase 3 종료 게이트에 포함하지 않으며 Phase 4
+> 모델 고도화 범위(A 역할 첫 번째 작업 묶음)로 이관한다. Subject 9~10 holdout도
+> Phase 4 최종 평가로 이관한다.
 
 ### 우선순위
 
@@ -328,15 +340,18 @@ P2: Zone Settings 계약, 인증/인가 미니 ADR,
 ### 성공 기준 / 종료 게이트
 
 ```text
-- Live View E2E (frame 제공 → API → React 표시) 확인
-- FALL_SUSPECT opt-in PoC 구현 및 Development/Subject 7~8 진단 결과 기록 (`cause` 원인 후보 추정 완료, 정량 정확도는 Phase 4)
-- zone_type 기반 ENTER_RESTRICTED / DANGER_ZONE_DWELL 이벤트 정상 발생
-- API 장애 중 추론 루프 유지
-- false positive·감지 지연·FPS 결과 기록
-- flake8·pytest·React build·GitHub Actions 통과
-- Zone Settings 계약·인증/인가 미니 ADR 확정
-- 중간평가 보고서 기한 내 제출
-- A/B/C 전원 계약 일치 승인
+- Live View E2E (frame 제공 → API → React 표시) 확인 — 완료
+- FALL_SUSPECT opt-in PoC 구현 및 Development/Subject 7~8 진단 결과 기록
+  (`cause` 원인 후보 추정 완료, 정량 정확도는 Phase 4) — 완료
+- zone_type 기반 ENTER_RESTRICTED / DANGER_ZONE_DWELL 이벤트 정상 발생 — 완료
+- API 장애 중 추론 루프 유지 — 완료 (실패 Event는 실행별 JSONL에 보존)
+- false positive·감지 지연·FPS 결과 기록 — 완료 (S7~8 FAR 1.75/min, 운영 목표
+  0.2/min 미달은 Phase 4 이관, FPS 하락률 7.3%로 목표 충족)
+- flake8·pytest·React build·GitHub Actions 통과 — 완료
+- Zone Settings 계약·인증/인가 미니 ADR 확정 — 완료 (저장 API 구현은 Phase 4,
+  `docs/api_contract.md`의 Zone Settings 저장 계약, ADR-018 참고)
+- 중간평가 보고서 기한 내 제출 — 완료
+- A/B/C 전원 계약 일치 승인 — 완료
 ```
 
 ### CI 품질 게이트
@@ -426,13 +441,12 @@ Phase 3 Open·계약 문서 PR
 - debounce / hysteresis 적용
 - FALL_SUSPECT opt-in PoC 완료 및 잔존 오탐 개선 계획 정리
 - FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 완료 (정량 정확도 평가는 Phase 4)
-- 실제 / 유사 키즈카페 영상 확보
-- 라벨링 기준 정리
+- 공개 데이터(CAUCAFall) 기반 실험 및 라벨링 기준 정리 완료 — 실제 키즈카페 재현 촬영은 Phase 4로 이관
 - 낙상 · 위험구역 이벤트 정의 확정
 
 ### 비고
 
-- 7월 일정은 계획보다 빠르게 진행되어야 한다.
+- Phase 3은 계획(7/28)보다 하루 빠른 7/27에 종료했다.
 - 8월에는 ReID, cross-camera(후순위), 모델 비교, 공모전 1차 제출 준비가 겹치므로 7월 중순까지 공간 안전정책과 FALL_SUSPECT opt-in PoC, 외부 접촉 원인 후보 추정까지 구현을 마쳤다.
 
 ### 산출물
@@ -447,7 +461,7 @@ Phase 3 Open·계약 문서 PR
 
 ## 8월 — Phase 4: 모델·추적 고도화 및 1차 공모전 준비
 
-**목표**: 모델, 추적, ReID, fine-tuning 가능성을 검토하고 1차 공모전 제출 가능한 결과물을 만든다.
+**목표**: 모델·추적 일반화, 외부·촬영 데이터 기반 추가 재학습, ReID를 검증하고 1차 공모전 제출 가능한 결과물을 만든다.
 
 ### 핵심 작업
 
@@ -456,7 +470,7 @@ Phase 3 Open·계약 문서 PR
 - StrongSORT / BoT-SORT 비교
 - cross-camera 확장 가능성 검토
 - YOLO 모델 비교
-- fine-tuning 가능 여부 판단
+- 외부·촬영 데이터 기반 추가 재학습 검증 (PoC 보조 모델 학습은 Phase 3 완료)
 - 키즈카페 / 아동 유사 데이터 라벨링
 - 모델별 성능표 정리
 - ID switch / FPS / event accuracy 실험 정리
