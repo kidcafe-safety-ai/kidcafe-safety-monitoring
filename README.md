@@ -4,7 +4,7 @@ Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
 한이음 드림업 프로젝트 (2026.04 ~ 2026.10)
 
-![status](https://img.shields.io/badge/status-Phase_3_in_progress-blue)
+![status](https://img.shields.io/badge/status-Phase_3_complete-brightgreen)
 ![python](https://img.shields.io/badge/python-3.10-blue)
 ![tests](https://img.shields.io/badge/tests-pytest_passed-green)
 ![license](https://img.shields.io/badge/license-Internal-lightgrey)
@@ -15,17 +15,19 @@ Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
 KidCafe Safety AI는 YOLO + ByteTrack + Geofencing 기반으로 위험구역 진입 및 장시간 체류를 감지하는 Vision AI 안전 모니터링 시스템이다.
 
-**현재 상태: Phase 3 착수 — 기준선 v0.2.5-dashboard, 안전 감지 고도화 진행 중**
+**현재 상태: Phase 3 기능·통합 완료, `v0.3.0-safety` 릴리스 준비 중 — 공간 안전정책·낙상 감지 opt-in PoC 통합**
 
-현재 구현 기준(`v0.2.5-dashboard`):
+현재 구현 기준(태그 확정 전, `v0.3.0-safety` 예정):
 
 ```text
 Webcam / RTSP / File   ← 로컬 실행
-→ YOLO26n + ByteTrack
-→ ENTER / DWELL / EXIT 이벤트
-→ FastAPI POST /events + PUT /status/current  ← Docker 실행 가능
-→ SQLite 저장                                  ← Docker volume
-→ React Dashboard (REST polling 기반)          ← Docker 실행 가능
+→ YOLO26n + ByteTrack / PoseTracker
+→ ENTER / DWELL / EXIT / ENTER_RESTRICTED / DANGER_ZONE_DWELL 이벤트
+→ FallPipeline → FALL_SUSPECT (opt-in) + optional cause(NEARBY_TRACK)
+→ AsyncEventDispatcher (비차단 전송, API 장애 시 로컬 보존)
+→ FastAPI POST /events + PUT /status/current + Live Frame  ← Docker 실행 가능
+→ SQLite 저장                                              ← Docker volume
+→ React Dashboard (Live View·신규 Event·AlertHistory, REST polling)  ← Docker 실행 가능
 ```
 
 검증 환경:
@@ -255,10 +257,13 @@ kidcafe-safety-monitoring/
 │   │   ├── database.py
 │   │   ├── repositories.py
 │   │   └── routers/
-│   ├── common/              # 공통 타입 + 이벤트 IO/집계/분석 API
+│   ├── common/              # 공통 타입 + 이벤트 IO/집계/분석 API + PipelineMetrics
+│   ├── input/               # Webcam/RTSP/File 입력 소스
 │   ├── tracking/            # YOLO + ByteTrack
 │   ├── geofencing/          # Zone 판정
-│   ├── events/              # 상태머신
+│   ├── events/              # 상태머신 (ENTER/EXIT/DWELL, ENTER_RESTRICTED, DANGER_ZONE_DWELL)
+│   ├── safety/              # 낙상 상태머신·FallCauseAttributor·PoseNormalGate (FALL_SUSPECT opt-in PoC)
+│   ├── integrations/        # AsyncEventDispatcher, EventApiClient, Live Frame 비차단 전송
 │   ├── visualization/       # 결과 영상/차트 legacy 유틸 (Streamlit app/pages 종료)
 │   └── main.py              # 파이프라인 진입점
 ├── frontend/                # React Dashboard
@@ -272,9 +277,18 @@ kidcafe-safety-monitoring/
 │   └── package.json
 ├── Dockerfile.api           # FastAPI 컨테이너
 ├── docker-compose.yml       # FastAPI + React + SQLite volume
-├── scripts/                 # 벤치마크 도구 (Phase 1.5)
+├── scripts/                 # annotation·학습·평가·Signal Cache 도구
 │   ├── run_benchmark.py
-│   └── draw_zone.py
+│   ├── draw_zone.py
+│   ├── generate_caucafall_annotations_v2.py
+│   ├── train_fall_detector.py
+│   ├── cache_fall_signals.py
+│   ├── evaluate_fall.py
+│   ├── evaluate_fall_from_cache.py
+│   └── tracker_sweep.py
+├── configs/                 # 낙상 상태머신·학습·데이터 분할 설정
+│   ├── fall_detection.json
+│   └── caucafall_v5_split.json
 ├── data/
 │   ├── videos/              # 입력 영상 (.gitignore)
 │   └── zones/               # Zone JSON
@@ -285,7 +299,8 @@ kidcafe-safety-monitoring/
 │   ├── api_contract.md      # B/C API 기준
 │   ├── model_benchmark.md   # Phase 1.5 모델 비교 결과
 │   ├── docker_phase_2_5.md  # Docker 실행 가이드 (Phase 2.5)
-│   ├── realtime_test.md     # Phase 2~2.5 실시간 실험 로그
+│   ├── fall_evaluation.md   # 낙상 PoC 평가·튜닝·runtime 최적화 기록
+│   ├── realtime_test.md     # Phase 2~3 실시간 실험 로그
 │   └── ...
 ├── tests/
 │   └── test_*.py
@@ -296,11 +311,11 @@ kidcafe-safety-monitoring/
 
 ---
 
-## 역할 분담 (Phase 2.5 기준)
+## 역할 분담 (Phase 3 완료 기준)
 
 | 팀원 | 담당 | 주력 모듈 |
 |------|------|---------|
-| **A** | Vision AI / 실시간 입력 파이프라인 | tracking, events, geofencing, input, integrations, scripts/ |
+| **A** | Vision AI / 실시간 입력 파이프라인 | tracking, events, geofencing, input, safety, integrations, scripts/ |
 | **B** | FastAPI / SQLite / Backend API | src/api/ |
 | **C** | React Dashboard / API 연동 | frontend/ |
 
@@ -428,12 +443,17 @@ pytest --cov=src --cov-report=term-missing
 | 내장 웹캠 E2E 안정화 (macOS) | Done — Phase 2.5 |
 | USB C920 E2E 테스트 (Windows) | Done — Phase 2.5 |
 | React Live View (영상 영역) | Done — Phase 3 (latest-frame polling) |
+| AlertHistory 실제 API 읽기 연동 | Done — Phase 3 |
 | WebSocket 실시간 push | Phase 4 이후 필요성 기반 재검토 |
-| FALL_SUSPECT 낙상 PoC | Done — Phase 3 (M1/MPS 단일 파일 opt-in runtime 최적화 검증, 오탐 운영 목표 미달) |
+| FALL_SUSPECT 낙상 PoC | Done — Phase 3 (opt-in PoC 및 M1/MPS runtime 최적화 완료, S7~8 tuning/diagnostic FAR 1.75/min으로 운영 목표 미달 — 상세는 `docs/fall_evaluation.md` 12절 참고) |
 | FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 | Done — Phase 3 (근접·접근 근거 기반 PoC, 정량 정확도 미검증) |
+| 낙상 오탐 개선(hard-negative 재학습, temporal classifier, 외부 데이터) | Phase 4 |
 | ReID / StrongSORT / BoT-SORT | Phase 4 |
 
-Phase 2.5에서 실시간 운영 대시보드 v1 안정화와 Docker 재현 환경 구축을 완료했다.
+Phase 3에서 공간 안전정책 temporal hysteresis, `FALL_SUSPECT`/`cause` opt-in PoC와
+런타임 통합, AlertHistory 실제 연동을 완료했다. 낙상 오탐 개선(hard-negative
+재학습, temporal classifier, 외부 데이터 검증)과 Subject 9~10 최종 holdout은
+Phase 4로 이관한다.
 
 ---
 
@@ -487,11 +507,12 @@ Phase 2.5에서 실시간 운영 대시보드 v1 안정화와 Docker 재현 환�
 | 한계 | 원인 | 개선 계획 |
 |------|------|----------------|
 | 원거리·소형 객체 탐지 한계 | 경량 모델 및 촬영 환경 한계 | Phase 4: 라벨 데이터 평가 및 fine-tuning 검토 |
-| 작은 객체 bbox 깜빡임 | 작은 객체 confidence 흔들림 | Phase 3: 후처리 보강 |
+| 작은 객체 bbox 깜빡임 | 작은 객체 confidence 흔들림 | Phase 3 범위에서 미착수 — Phase 4: 후처리 보강 |
 | track_id 자주 변경 | ReID 없음 | Phase 4: OSNet 기반 ReID 도입 |
 | 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | Phase 4: StrongSORT 또는 ReID 보강 |
-| ENTER/EXIT 경계 흔들림 | zone 경계 foot_point 진동 | Phase 3 temporal hysteresis 적용, 실제 카메라 재튜닝 후속 |
-| 낙상 opt-in 처리량 비용 | PoseTracker와 보조 detector를 함께 실행 | Pose NORMAL gate+interval 3으로 MPS 파일 경로 개선, 다른 장치·API E2E 재검증은 Phase 4 |
+| ENTER/EXIT 경계 흔들림 | zone 경계 foot_point 진동 | Phase 3에서 temporal hysteresis 적용 완료, 실제 카메라 재튜닝은 Phase 4 |
+| 낙상 opt-in 처리량 비용 | PoseTracker와 보조 detector를 함께 실행 | Phase 3에서 Pose NORMAL gate+interval 3으로 MPS 파일 경로 개선 완료, 다른 장치·API E2E 재검증은 Phase 4 |
+| 낙상 오탐(S7~8 tuning/diagnostic FAR 1.75/min, 목표 0.2/min 미달) | 보조 모델이 앉기·무릎 꿇기를 일부 오분류 | Phase 4: hard-negative 재학습, temporal classifier, 외부 데이터 검증 |
 | 알림 조치 상태·리포트·설정 저장 미연동 | 조치 API 미구현, 일부 화면 Mock | Phase 4에서 API·저장 연동 |
 > 상세 분석: [`docs/tracking_analysis.md`](docs/tracking_analysis.md)
 
