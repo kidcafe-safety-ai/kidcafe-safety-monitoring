@@ -15,7 +15,7 @@ function successResponse<T>(data: T): MockApiResponse<T> {
   };
 }
 
-// Phase 2.5 mock prototype only. This service is not connected to FastAPI.
+// Development fixture only. Phase 4 replaces this path with the Zone Settings API.
 export async function getMockZoneSettings(): Promise<
   MockApiResponse<AlertZoneSetting[]>
 > {

@@ -15,7 +15,7 @@ function successResponse<T>(data: T): MockApiResponse<T> {
   };
 }
 
-// Phase 2.5 mock prototype only. This service is not connected to FastAPI.
+// Legacy development fixture. AlertHistory API mode uses eventsApi instead.
 export async function getMockAlertHistory(): Promise<
   MockApiResponse<AlertHistoryItem[]>
 > {
