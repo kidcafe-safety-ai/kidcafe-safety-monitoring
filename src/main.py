@@ -627,7 +627,7 @@ def main() -> None:
     setup_logging(args.log_level)
 
     LOGGER.info("=" * 50)
-    LOGGER.info("KidCafe Safety AI v0.2.5")
+    LOGGER.info("KidCafe Safety AI v0.3.0")
     LOGGER.info("=" * 50)
 
     source = _build_source(args)

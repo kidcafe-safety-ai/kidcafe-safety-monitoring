@@ -15,7 +15,7 @@ function successResponse<T>(data: T): MockApiResponse<T> {
   };
 }
 
-// Phase 2.5 mock prototype only. This service is not connected to FastAPI.
+// Development fixture only. The contest flow must use the FastAPI-backed report path.
 export async function getMockReports(): Promise<MockApiResponse<SafetyReport[]>> {
   return successResponse(mockReports);
 }

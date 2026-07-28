@@ -1,7 +1,7 @@
 """RTSP 입력 소스.
 
-Phase 2.5에서는 연결 시도 및 기본 구현만 제공한다.
-reconnect 안정화는 장비 확보 후 Phase 3에서 검증한다.
+현재 연결 시도와 기본 프레임 읽기를 제공한다.
+reconnect 안정화는 실제 IP 카메라 장비로 Phase 4에서 검증한다.
 """
 
 from __future__ import annotations
