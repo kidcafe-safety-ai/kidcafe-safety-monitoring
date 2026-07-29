@@ -1,0 +1,48 @@
+{
+  "status": "success",
+  "data": {
+    "items": [
+      {
+        "id": 2,
+        "event_id": "evt-phase4-002",
+        "timestamp": "00:00:04.350",
+        "event_type": "FALL_SUSPECT",
+        "track_id": 7,
+        "zone_id": "**global**",
+        "zone_name": null,
+        "bbox": [260.0, 190.0, 356.0, 338.0],
+        "foot_point": [308.0, 338.0],
+        "frame_number": 87,
+        "video_time_sec": 4.35,
+        "confidence": 0.85,
+        "event_confidence": 0.44,
+        "cause": null,
+        "video_source": "P4_S01_A01_fall_backward_01_cam01.mp4",
+        "created_at": "2026-08-07 01:00:10"
+      },
+      {
+        "id": 1,
+        "event_id": "evt-phase4-001",
+        "timestamp": "00:00:03.000",
+        "event_type": "ENTER_RESTRICTED",
+        "track_id": 3,
+        "zone_id": "danger_door",
+        "zone_name": "출입문 위험구역",
+        "bbox": [100.0, 120.0, 200.0, 360.0],
+        "foot_point": [150.0, 360.0],
+        "frame_number": 60,
+        "video_time_sec": 3.0,
+        "confidence": 0.91,
+        "event_confidence": 0.91,
+        "cause": null,
+        "video_source": "P4_S01_A01_zone_enter_01_cam01.mp4",
+        "created_at": "2026-08-07 01:00:05"
+      }
+    ],
+    "total": 2,
+    "limit": 2,
+    "offset": 0,
+    "count": 2
+  },
+  "message": null
+}

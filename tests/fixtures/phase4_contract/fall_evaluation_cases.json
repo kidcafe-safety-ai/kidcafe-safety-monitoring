@@ -1,0 +1,135 @@
+{
+  "evaluation_protocol_version": "phase4_fall_eval_v1",
+  "timely": [
+    {
+      "name": "inclusive_start",
+      "fps": 20.0,
+      "fall_start_frame": 100,
+      "event_frames": [96],
+      "expected_timely_frame": 96,
+      "expected_early_false_alarms": 0,
+      "expected_late": false,
+      "expected_duplicate": false
+    },
+    {
+      "name": "inclusive_end_and_duplicate",
+      "fps": 20.0,
+      "fall_start_frame": 100,
+      "event_frames": [140, 180],
+      "expected_timely_frame": 140,
+      "expected_early_false_alarms": 0,
+      "expected_late": false,
+      "expected_duplicate": true
+    },
+    {
+      "name": "late_only",
+      "fps": 20.0,
+      "fall_start_frame": 100,
+      "event_frames": [141],
+      "expected_timely_frame": null,
+      "expected_early_false_alarms": 0,
+      "expected_late": true,
+      "expected_duplicate": false
+    },
+    {
+      "name": "early_and_timely",
+      "fps": 20.0,
+      "fall_start_frame": 100,
+      "event_frames": [95, 96],
+      "expected_timely_frame": 96,
+      "expected_early_false_alarms": 1,
+      "expected_late": false,
+      "expected_duplicate": false
+    },
+    {
+      "name": "early_only",
+      "fps": 20.0,
+      "fall_start_frame": 100,
+      "event_frames": [95],
+      "expected_timely_frame": null,
+      "expected_early_false_alarms": 1,
+      "expected_late": false,
+      "expected_duplicate": false
+    }
+  ],
+  "far": {
+    "false_event_count": 3,
+    "videos": [
+      {"processed_frame_count": 1200, "fps": 20.0},
+      {"processed_frame_count": 900, "fps": 30.0}
+    ],
+    "expected_minutes": 1.5,
+    "expected_far_per_min": 2.0
+  },
+  "cause": {
+    "correct_null_count": 9,
+    "no_candidate_count": 10,
+    "correct_top1_count": 8,
+    "candidate_count": 10,
+    "missed_cause_count": 1,
+    "false_attribution_count": 2,
+    "evaluable_count": 20,
+    "expected_null_specificity": 0.9,
+    "expected_top1_accuracy": 0.8,
+    "expected_false_attribution_rate": 0.1
+  },
+  "cause_cases": [
+    {
+      "name": "correct_null",
+      "review_status": "reviewed",
+      "cause_candidate_exists": false,
+      "cause_actor_id": null,
+      "predicted_cause_actor_id": null,
+      "expected": "correct_null"
+    },
+    {
+      "name": "false_attribution_without_candidate",
+      "review_status": "reviewed",
+      "cause_candidate_exists": false,
+      "cause_actor_id": null,
+      "predicted_cause_actor_id": "A02",
+      "expected": "false_attribution"
+    },
+    {
+      "name": "missed_cause",
+      "review_status": "reviewed",
+      "cause_candidate_exists": true,
+      "cause_actor_id": "A02",
+      "predicted_cause_actor_id": null,
+      "expected": "missed_cause"
+    },
+    {
+      "name": "correct_top1",
+      "review_status": "reviewed",
+      "cause_candidate_exists": true,
+      "cause_actor_id": "A02",
+      "predicted_cause_actor_id": "A02",
+      "expected": "correct_top1"
+    },
+    {
+      "name": "false_attribution_wrong_actor",
+      "review_status": "reviewed",
+      "cause_candidate_exists": true,
+      "cause_actor_id": "A02",
+      "predicted_cause_actor_id": "A03",
+      "expected": "false_attribution"
+    },
+    {
+      "name": "excluded_needs_review",
+      "review_status": "needs_review",
+      "cause_candidate_exists": true,
+      "cause_actor_id": "A02",
+      "predicted_cause_actor_id": "A02",
+      "expected": "excluded"
+    }
+  ],
+  "cause_zero_denominator": {
+    "no_candidate_count": 0,
+    "candidate_count": 0,
+    "evaluable_count": 0,
+    "expected_null_specificity": null,
+    "expected_top1_accuracy": null,
+    "expected_false_attribution_rate": null,
+    "evaluation_status": "not_evaluable"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "contract_version": "phase4_contract_v1",
+  "evaluation_protocol_version": "phase4_fall_eval_v1",
+  "homography_acceptance_version": "homography_acceptance_v1",
+  "annotation_schema_versions": {
+    "caucafall": "caucafall_annotation_v2",
+    "recordings_manifest": "phase4_recordings_manifest_v1",
+    "fall_cause": "phase4_fall_cause_v1",
+    "zone_intervals": "phase4_zone_intervals_v1",
+    "calibration_points": "phase4_calibration_points_v1",
+    "track_actor_review": "phase4_track_actor_review_v1"
+  },
+  "evaluation_rule_ids": {
+    "event_matching_rule": "first_fall_suspect_in_closed_timely_window_v1",
+    "duplicate_rule": "second_fall_suspect_from_window_start_to_video_end_v1",
+    "far_denominator_rule": "processed_no_fall_frames_over_fps_v1"
+  }
+}

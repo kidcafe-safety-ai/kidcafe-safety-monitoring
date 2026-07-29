@@ -1,0 +1,15 @@
+{
+  "protocol_version": "homography_acceptance_v1",
+  "camera_id": "cam01",
+  "calibration_version": "cam01-20260807-v1",
+  "max_mean_error_m": null,
+  "max_p95_error_m": null,
+  "min_zone_error_reduction_ratio": 0.3,
+  "min_zone_accuracy_gain_percentage_point": 5.0,
+  "min_event_error_reduction_ratio": 0.3,
+  "max_added_latency_ms_per_frame": 1.0,
+  "max_fps_drop_ratio": 0.05,
+  "max_calibration_minutes": 15,
+  "frozen_at": null,
+  "review_status": "pending"
+}

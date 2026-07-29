@@ -328,7 +328,7 @@ Phase 2에서는 polling으로 실시간성을 확보한다. WebSocket은 Phase 
 ### Reason
 
 - WebSocket 구현보다 실시간 입력 연결 자체가 Phase 2의 핵심이다.
-- polling 기반으로도 2~3초 주기로 충분한 실시간성 확보가 가능하다.
+- polling 기반으로도 2-3초 주기로 충분한 실시간성 확보가 가능하다.
 - 개발 복잡도를 낮추고 Phase 2 일정 리스크를 줄인다.
 
 ### Update
@@ -366,7 +366,7 @@ Event는 발생 기록으로 누적 저장(`POST /events`)하고, Current Status
 
 ### Context
 
-Phase 2에서 웹캠과 RTSP 입력을 모두 연결해야 하나, 시험 기간(6/17~6/23)으로 실질 개발 기간이 제한적이다.
+Phase 2에서 웹캠과 RTSP 입력을 모두 연결해야 하나, 시험 기간(6/17-6/23)으로 실질 개발 기간이 제한적이다.
 
 ### Decision
 
@@ -429,7 +429,7 @@ Phase 3에서 Dashboard에 실시간 영상 영역을 추가해야 한다. WebSo
 
 ### Decision
 
-`PUT /live/frame` + `GET /live/frame` 기반 latest-frame polling 방식으로 구현한다. React는 500~1000ms 간격으로 polling한다.
+`PUT /live/frame` + `GET /live/frame` 기반 latest-frame polling 방식으로 구현한다. React는 500-1000ms 간격으로 polling한다.
 
 ### Alternatives
 
@@ -440,7 +440,7 @@ Phase 3에서 Dashboard에 실시간 영상 영역을 추가해야 한다. WebSo
 
 - REST polling 구조를 Phase 3 내에서 유지한다는 핵심 원칙에 부합
 - FastAPI 단일 worker 기준에서 구현이 단순
-- 1~2 FPS 업로드로 키즈카페 안전 모니터링 용도에 충분
+- 1-2 FPS 업로드로 키즈카페 안전 모니터링 용도에 충분
 - 3초 미갱신 시 `204 No Content`로 stale 상태를 명확히 처리
 
 ### Consequences
@@ -462,7 +462,7 @@ Phase 3에서 낙상 감지 PoC와 함께 낙상 직전 외부 접촉 원인 후
 
 ### Decision
 
-독립 `COLLISION_SUSPECT` 이벤트를 생성하지 않는다. 낙상 확정(`FALL_CONFIRMED`) 시 낙상 시작 직전 0.5~1초의 Track 기록을 소급 조회하여, 근접 근거가 충분한 경우 `FALL_SUSPECT.cause`에 원인 후보 Track 정보를 기록한다. 근거 부족 시 `cause=null`을 유지한다.
+독립 `COLLISION_SUSPECT` 이벤트를 생성하지 않는다. 낙상 확정(`FALL_CONFIRMED`) 시 낙상 시작 직전 0.5-1초의 Track 기록을 소급 조회하여, 근접 근거가 충분한 경우 `FALL_SUSPECT.cause`에 원인 후보 Track 정보를 기록한다. 근거 부족 시 `cause=null`을 유지한다.
 
 ### Implementation Status
 
@@ -679,7 +679,7 @@ Track 소실 유예: 0.5초
 전제 아래, ByteTrack/PoseTracker의 ReID 부재로 Track ID가 바뀌는 경우의
 견고성을 보강했다(Candidate Handoff, Cooldown Handoff). 상세 설계와 수치는
 `docs/fall_evaluation.md`의 Track ID 안정화 절에 기록한다. 안정화 이후
-Subject 7~8 진단에 남은 오탐 4건(S7_kneel, S7_pick_up_object, S7_sit_down,
+Subject 7-8 진단에 남은 오탐 4건(S7_kneel, S7_pick_up_object, S7_sit_down,
 S8_sit_down)은 전부 `confirm_path=model`이라, temporal vote 강화나 약한
 motion 게이트로 추가 필터링할지 결정이 필요했다.
 
@@ -691,25 +691,25 @@ bbox/Pose 보조 근거 요구 등)는 **구현하지 않는다** — 기본 비
 
 - 현재 Cooldown Handoff까지의 설정(`configs/fall_detection.json`)을
   기준선으로 동결한다.
-- Subject 7~8의 정상 활동 전체 프레임을 추가한 hard-negative 교차 실험은
+- Subject 7-8의 정상 활동 전체 프레임을 추가한 hard-negative 교차 실험은
   한쪽 Fold의 Recall 하락으로 채택하지 않는다. 후속 데이터 개선은 실제
   false Event 주변 구간만 선별하거나, Phase 4의 경량 temporal classifier로
-  전환하는 방식으로 제한한다. Subject 9~10 holdout은 재학습에 사용하지 않는다.
-- Validation 디렉터리(Subject 7~8)는 이 진단 과정에서 직접 보고 규칙을
+  전환하는 방식으로 제한한다. Subject 9-10 holdout은 재학습에 사용하지 않는다.
+- Validation 디렉터리(Subject 7-8)는 이 진단 과정에서 직접 보고 규칙을
   설계·검증하는 데 이미 쓰였으므로, 이 시점부터 "보지 않은 최종 검증
   데이터"가 아니라 tuning/diagnostic 데이터로 취급한다. 이후 최종 성능
-  평가는 Subject 9~10(holdout) 또는 별도 외부 데이터로 한다.
+  평가는 Subject 9-10(holdout) 또는 별도 외부 데이터로 한다.
 
 ### Reason
 
 - 이미 `model_vote_window_sec` 기반 bounded temporal voting을 쓰고
-  있다. Event를 유발한 최초 연속 오분류 구간은 5~28프레임이고, 영상 전체의
-  최장 연속 오분류 구간은 5~85프레임이다. 짧게 흩어진 패턴이 아니므로
+  있다. Event를 유발한 최초 연속 오분류 구간은 5-28프레임이고, 영상 전체의
+  최장 연속 오분류 구간은 5-85프레임이다. 짧게 흩어진 패턴이 아니므로
   voting을 더 엄격하게 해도 근본적으로 걸러지지 않는다.
 - 캐시 데이터로 직접 검증한 결과, 진짜 model-only TP(S8_fall_forward,
-  `aspect_ratio` 0.34~0.4)와 오탐(S7_sit_down, `aspect_ratio`
-  0.33~0.41)의 aspect_ratio·속도가 사실상 겹친다. 최근 bbox/Pose 보조
-  근거를 추가로 요구하는 규칙은 Subject 7~8 FAR를 0/min까지 낮추지만
+  `aspect_ratio` 0.34-0.4)와 오탐(S7_sit_down, `aspect_ratio`
+  0.33-0.41)의 aspect_ratio·속도가 사실상 겹친다. 최근 bbox/Pose 보조
+  근거를 추가로 요구하는 규칙은 Subject 7-8 FAR를 0/min까지 낮추지만
   Development의 `S4_fall_sitting` TP(강한 동적 근거 없는 model-only
   케이스)를 함께 잃어 Development Recall이 83.3%→76.7%로 떨어진다 —
   오탐 제거가 아니라 Precision-Recall 교환이다.
@@ -733,7 +733,7 @@ bbox/Pose 보조 근거 요구 등)는 **구현하지 않는다** — 기본 비
   알려진 한계로 남는다.
 - 다음 정확도 개선은 코드 규칙이 아니라 오탐 구간 중심 데이터 보강 또는
   모델 아키텍처(Phase 4 temporal classifier) 방향이다.
-- Subject 9~10 holdout 평가 전, Subject 7~8 기반 수치를 "최종 성능"으로
+- Subject 9-10 holdout 평가 전, Subject 7-8 기반 수치를 "최종 성능"으로
   보고하지 않도록 문서·리포트에서 주의가 필요하다.
 - ReID 기반 Track 재연결과 공간 buffer 튜닝은 별도 후속 작업이다.
 
@@ -768,19 +768,19 @@ Event 확정 임계값은 변경하지 않고 다음 opt-in 추론 스케줄링�
 - 하강 판정은 정규화된 foot point 수직 속도 `0.3` 초과 또는 bbox 높이 변화율
   `-0.3` 미만을 게이트 전용 기준으로 사용한다. center 수직 속도는 기존
   `recovery_velocity_threshold`를 공유한다. 두 게이트 전용 값은 보수적으로
-  하강 fallback을 유지하면서 Development와 S7~8 전체 캐시 회귀를 통과한
+  하강 fallback을 유지하면서 Development와 S7-8 전체 캐시 회귀를 통과한
   채택값이며, `PoseNormalGateConfig` 기본값으로 고정한다.
 
 이 결정은 ADR-020의 Event 확정용 규칙 게이트 기각을 뒤집지 않는다. 다만
 안정적인 정상 자세에서 보조 모델 evidence를 `nofall`로 대체하므로 Event 결과에
-영향을 줄 수 있으며, 그 영향은 Development와 S7~8 전체 캐시 회귀로 검증한다.
+영향을 줄 수 있으며, 그 영향은 Development와 S7-8 전체 캐시 회귀로 검증한다.
 
 ### Evidence
 
-- Development S1~6: Recall 83.3%, timely Recall 66.7%, FAR 0/min, 중복 0건 유지
-- S7~8 tuning/diagnostic: Recall 100%, timely Recall 90%, 중복 0건 유지,
+- Development S1-6: Recall 83.3%, timely Recall 66.7%, FAR 0/min, 중복 0건 유지
+- S7-8 tuning/diagnostic: Recall 100%, timely Recall 90%, 중복 0건 유지,
   FAR 2.34→1.75/min
-- 평균 onset latency 증가는 Development 약 0.092초, S7~8 약 0.100초
+- 평균 onset latency 증가는 Development 약 0.092초, S7-8 약 0.100초
 - M1/MPS 동일 능동 인원 입력 각 3회 중앙값: 최적화 ON 13.511 FPS,
   낙상 OFF 14.571 FPS 대비 7.3% 감소
 - interval 2/3/4가 같은 sample Event를 frame 87에 생성했고, interval 3은
@@ -789,9 +789,77 @@ Event 확정 임계값은 변경하지 않고 다음 opt-in 추론 스케줄링�
 
 ### Consequences
 
-- 보조 모델 호출 비용과 S7~8의 일부 정상 자세 오탐이 함께 줄었다.
+- 보조 모델 호출 비용과 S7-8의 일부 정상 자세 오탐이 함께 줄었다.
 - 운영 FAR 목표 0.2/min은 여전히 충족하지 못하므로 낙상 기능은 opt-in이다.
 - MPS 수치는 단일 파일의 반복 측정 결과이며 API·Live Frame, 다른 장치,
   장시간 카메라에서는 다시 측정해야 한다.
-- 실제 접촉 원인 정확도, Subject 9~10 holdout, 외부 데이터 일반화 정책은
+- 실제 접촉 원인 정확도, Subject 9-10 holdout, 외부 데이터 일반화 정책은
   변경하지 않는다.
+
+---
+
+## ADR-022: Phase 4 계약과 평가 프로토콜을 기능 구현보다 먼저 동결
+
+**Date**: 2026-07-29
+**Status**: Accepted
+
+### Context
+
+Phase 4에서는 A의 낙상 평가, B의 Event·Zone API, C의 Report·Zone UI가
+병렬로 진행된다. 기간 경계, Zone version, Cause 분모, Track·Actor mapping을
+각 역할이 다르게 해석하면 구현 완료 후에도 결과를 비교할 수 없다. Subject
+7-8은 이미 tuning에 사용됐고 Subject 9-10은 최종 holdout으로 남아 있어,
+평가 규칙을 사후 변경하면 결과 신뢰성도 훼손된다.
+
+### Decision
+
+- `docs/api_contract.md`, `docs/interfaces.md`, `docs/fall_evaluation.md`와
+  machine-readable fixture를 기능 PR보다 먼저 병합한다.
+- 공식 낙상 평가는 `phase4_fall_eval_v1`을 사용한다.
+- timely window, Event matching, duplicate, FAR, Cause, ID switch 판정 규칙을
+  동결한다.
+- Subject 9-10 열람 전 모델·tracker·config·threshold·evaluator commit을
+  동결한다.
+- holdout 열람 후 치명적인 평가기 오류를 수정해야 하면 protocol version을
+  올리고 기존 결과를 보존한다.
+- C는 fixture로 선개발하고 B의 endpoint가 준비되면 연결만 교체한다.
+
+### Consequences
+
+- 계약 PR은 실제 production 동작을 변경하지 않지만 A/B/C의 구현 기준이 된다.
+- `GET /zones` envelope 변경은 계획된 breaking contract이며 B/C가 함께
+  반영한다.
+- 계약 변경은 문서·fixture·테스트와 세 역할 승인이 필요하다.
+
+---
+
+## ADR-023: Homography는 기본 비활성 PoC로 분리하고 정량 기준으로 채택
+
+**Date**: 2026-07-29
+**Status**: Accepted
+
+### Context
+
+현재 Zone 판정은 pixel foot point와 image-normalized polygon을 사용한다.
+고정 카메라의 원근 오차를 floor-plane 좌표로 줄일 수 있지만 calibration
+오차, 카메라 이동, 운영 재설정 비용이 추가된다. 실제 정확도 개선을 확인하지
+않고 production 경로를 바꾸면 기존 Zone 안정성을 잃을 수 있다.
+
+### Decision
+
+- Homography는 고정 카메라 1대·단일 평면·기본 비활성 PoC로 구현한다.
+- fit point와 holdout point를 분리하고 동일 Track·foot point 입력으로 기존
+  방식과 비교한다.
+- 위치 평균·p95, Zone 오류, ENTER·EXIT 오류, latency·FPS, calibration 시간을
+  측정한다.
+- 절대 오차 기준은 8월 7일 공간 실측 후 holdout 결과를 보기 전에 동결한다.
+- 모든 `homography_acceptance_v1` 조건을 만족할 때만 production 확장을 별도
+  PR로 진행한다.
+- Event의 pixel `foot_point`와 기존 image-coordinate 경로는 유지한다.
+
+### Consequences
+
+- PoC 실패나 개선 불안정은 정상적인 미채택 결과로 기록한다.
+- calibration·floor-zone 편집 UI와 cross-camera 좌표 통합은 범위에서 제외한다.
+- 카메라 ID·해상도 불일치는 fail-fast하며 기존 경로로 조용히 fallback하지
+  않는다.

@@ -8,9 +8,9 @@
 - 데이터셋: CAUCAFall V5 (DOI 10.17632/7w7fccy7ky.5, CC BY 4.0)
 - 상세 라이선스·체크섬: [docs/data_sources.md](data_sources.md)
 - 분할 (docs/data_sources.md, configs/caucafall_v5_split.json과 동일):
-  - Development (Subject 1~6): 60개 영상 — fall 30, no_fall 30
-  - 진단·튜닝 (Subject 7~8, 디렉터리명 `validation`): 20개 영상 — fall 10, no_fall 10
-  - Holdout (Subject 9~10): 최종 평가 전까지 미사용
+  - Development (Subject 1-6): 60개 영상 — fall 30, no_fall 30
+  - 진단·튜닝 (Subject 7-8, 디렉터리명 `validation`): 20개 영상 — fall 10, no_fall 10
+  - Holdout (Subject 9-10): 최종 평가 전까지 미사용
 
 ## 2. Annotation 생성·검수
 
@@ -27,7 +27,7 @@ YOLO 라벨(`class 0=nofall, 1=fall`)의 0→1 전환을 `fall_start_frame`으�
 - `impact_frame`: 신체가 바닥과 충돌한 첫 프레임
 - `lying_start_frame`: 넘어진 자세가 안정적으로 유지되기 시작한 프레임
 
-Development 60개와 Subject 7~8 20개, 총 80개 행을 모두 `reviewed`로 확정했고
+Development 60개와 Subject 7-8 20개, 총 80개 행을 모두 `reviewed`로 확정했고
 구조 검증을 통과했다. no_fall 40개는 실제 AVI 프레임 범위의 class가 모두 0인지
 자동 검증한 뒤 표본을 사람이 확인했다. 현재 공식 기준선은
 `development_annotations_v2.csv`와 `validation_annotations_v2.csv`를 사용한다.
@@ -39,7 +39,7 @@ txt가 AVI 프레임보다 많은 경우 초과분을 뒤에서 제외하고 생
 
 최초 구현은 "하강 속도 / 높이 수축률 / 수평 자세" 3개 근거 중 2개 이상이 **같은
 프레임에** 동시에 있어야 candidate에 진입했다. Subject 1 Fall backwards로
-확인한 결과, 실제 낙상은 하강/수축이 먼저 나타나고(frame 68~71) 수평 자세는
+확인한 결과, 실제 낙상은 하강/수축이 먼저 나타나고(frame 68-71) 수평 자세는
 한참 뒤(frame 75+)에야 나타나 두 근거가 겹치지 않았고, 그 결과 개발 60개 중
 26개가 `event_count=0`으로 아예 candidate에 진입하지 못했다.
 
@@ -72,8 +72,8 @@ early tolerance는 0.2초로 고정했다.
 **Development 결론**: bbox+pose 규칙만으로는 Recall 34.5%에 머물렀지만,
 fine-tuned 2-class detector와 시간·상태 제어를 결합한 Tune 13은 Development
 목표(Recall 75% 이상, false alarm 0.2/분 이하, 평균 지연 2초 이하, 중복 Event
-0건)를 모두 만족했다. 이 수치는 Subject 1~6 개발 데이터에서 설정을 고른
-결과이므로, 운영 성능의 증명은 아니며 Subject 7~8 초기 Validation 결과와 분리해
+0건)를 모두 만족했다. 이 수치는 Subject 1-6 개발 데이터에서 설정을 고른
+결과이므로, 운영 성능의 증명은 아니며 Subject 7-8 초기 Validation 결과와 분리해
 해석한다.
 
 ## 5. 알려진 한계: 낙상 방향에 따른 미검출
@@ -91,7 +91,7 @@ Tune 1에서도 Recall이 목표(≥75%)에 크게 못 미친다. 놓친 25개 �
 
 | 방향 | max aspect_ratio | 1.3 도달 |
 |---|---:|:---:|
-| Fall backwards | ~1.60 | O |
+| Fall backwards | 약 1.60 | O |
 | Fall right | 1.71 | O |
 | Fall sitting | 1.77 | O |
 | Fall left | 0.71 | X |
@@ -121,7 +121,7 @@ Tune 1에서도 Recall이 목표(≥75%)에 크게 못 미친다. 놓친 25개 �
 ### 5.3 Pose 기반 보완
 
 `yolo26n-pose.pt`(COCO 17 keypoint)로 `Subject 1 Fall forward`를 재확인한
-결과, `nose_y - hip_y`가 서 있을 때는 음수(-52~-67)였다가 쓰러진 뒤에는
+결과, `nose_y - hip_y`가 서 있을 때는 음수(-52에서 -67 사이)였다가 쓰러진 뒤에는
 양수(+57)로 부호가 뒤집힌다 — bbox aspect_ratio로는 잡지 못한 자세 변화를
 keypoint 관계로는 명확하게 포착한다.
 
@@ -129,7 +129,7 @@ keypoint 관계로는 명확하게 포착한다.
 `pose_horizontal_angle_threshold_deg` 이상 지속되면 confirm하는 방식으로
 구현·평가했으나(Recall 20%, `development_tune_02_pose_confirmation.json`),
 `S1_fall_forward`를 프레임 단위로 직접 추적한 결과 각도가 60° 이상으로
-올라가는 프레임이 사실상 1개(frame 142, 37.5~71.8° 순간 스파이크)뿐이었다.
+올라가는 프레임이 사실상 1개(frame 142, 37.5-71.8° 순간 스파이크)뿐이었다.
 원인은 카메라를 향해/멀어지는 방향(깊이 방향)으로 쓰러지면 몸 전체가 2D
 영상에 압축 투영되어 어깨-엉덩이 벡터도 수직에 가깝게 남는다는 것 —
 앞서 확인한 aspect_ratio와 동일한 카메라 각도 문제가 골격 각도에도 그대로
@@ -141,9 +141,9 @@ Figure8)로도 교차 확인됐다: `S1 Fall forward`의 공식 낙상 각도는
 
 **2차 시도(채택): 머리-엉덩이 상대 높이(head_hip_diff_norm)**.
 `(head_y - hip_y) / bbox_height`로 정의하며, 머리 keypoint는 코 신뢰도가
-자세 변화 중 자주 떨어지므로(관측: 0.9 → 0.16~0.48) 코 → 눈 평균 → 귀 평균
+자세 변화 중 자주 떨어지므로(관측: 0.9 → 0.16-0.48) 코 → 눈 평균 → 귀 평균
 순 fallback을 쓴다. Subject 1 Development 실측 결과 낙상 지속 구간
-최소값(~0.24)과 일상 동작 최댓값(~0.16)이 겹치지 않아 벡터 각도보다 훨씬
+최소값(약 0.24)과 일상 동작 최댓값(약 0.16)이 겹치지 않아 벡터 각도보다 훨씬
 안정적으로 분리된다. `_advance_candidate`의 confirm 조건에 수평 자세
 경로와 OR로 추가했고(`pose_duration_sec >= fall_confirm_sec`), 다음 보조
 규칙을 함께 넣었다:
@@ -231,12 +231,12 @@ cooldown을 승계해 `FALL_SUSPECT`를 억제하는 false negative 위험이 �
 작업으로 남긴다. Development에서는 Tune 13에서 중복 Event가 0건으로 줄었고,
 다른 위치 Track의 독립 감지와 만료 tombstone 정리만 단위 테스트로 확인했다.
 
-## 6. 초기 V1 Validation (Subject 7~8)
+## 6. 초기 V1 Validation (Subject 7-8)
 
-Tune 13 설정과 `fall_detector_v1.pt`를 동결한 뒤 Subject 7~8 20개 영상에서
+Tune 13 설정과 `fall_detector_v1.pt`를 동결한 뒤 Subject 7-8 20개 영상에서
 한 번 실행했다. 이 초기 Validation 단계에서는 결과를 확인한 뒤 임계값·모델을
 다시 조정하지 않았다. 이후 Track handoff 오류 분석부터는 10장에 명시한 대로
-Subject 7~8을 tuning/diagnostic 데이터로 전환했다.
+Subject 7-8을 tuning/diagnostic 데이터로 전환했다.
 
 | 지표 | 결과 | 목표 | 판정 |
 |---|---:|---:|---|
@@ -257,9 +257,9 @@ Event를 막은 사례를 포함한다. no-fall 영상의 false alarm은
 `--fall-detection-enabled`의 기본값을 `false`로 유지했다. 실제 키즈카페/IP
 카메라 데이터와 temporal 동작 분류를 포함한 후속 검증이 필요하다.
 
-## 7. Subject 9~10 사용 확인
+## 7. Subject 9-10 사용 확인
 
-Subject 9~10 holdout은 로컬 원본 데이터에 존재하더라도 학습,
+Subject 9-10 holdout은 로컬 원본 데이터에 존재하더라도 학습,
 체크포인트 선택, 임계값 튜닝, Development/Validation 평가에 사용하지 않았다.
 `generate_caucafall_annotations.py`와 `evaluate_fall.py`는 holdout split을 코드
 수준에서 차단한다(`guard_holdout`, `_contains_holdout_segment`). Holdout 평가는
@@ -279,12 +279,12 @@ CAUCAFall의 프레임별 `nofall`/`fall` bbox 라벨로 `yolo26n.pt`를 2-class
 
 | Subject | 역할 |
 |---|---|
-| 1~5 | fine-tuning 학습 |
+| 1-5 | fine-tuning 학습 |
 | 6 | 내부 검증(val), 모델 선택·early stopping |
-| 7~8 | 초기 Event-level Validation, 이후 진단·튜닝 데이터 |
-| 9~10 | 최종 Holdout, 접근 금지 |
+| 7-8 | 초기 Event-level Validation, 이후 진단·튜닝 데이터 |
+| 9-10 | 최종 Holdout, 접근 금지 |
 
-`best.pt`는 Subject 1~6 전체로 재학습하지 않고, Subject 6 internal validation
+`best.pt`는 Subject 1-6 전체로 재학습하지 않고, Subject 6 internal validation
 기준으로 선택된 체크포인트를 그대로 사용했다. 학습 데이터 준비에서는 손상된
 `S6_fall_backwards` AVI가 아니라 PNG/txt 라벨만 사용한다.
 
@@ -303,7 +303,7 @@ CAUCAFall의 프레임별 `nofall`/`fall` bbox 라벨로 `yolo26n.pt`를 2-class
 
 `--dest`에 남는 `dataset_manifest.json`에 입력 PNG 수, 매칭 수, copia 복구
 경로, 라벨 누락 제외 경로, train/val Subject, split별 클래스 프레임 수를
-모두 기록한다. 실제 생성 결과(Subject 1~5 train / Subject 6 val):
+모두 기록한다. 실제 생성 결과(Subject 1-5 train / Subject 6 val):
 
 | split | 프레임 수 | nofall | fall |
 |---|---:|---:|---:|
@@ -374,7 +374,7 @@ model_confirm_sec = 0.2
 cooldown_inherit_iou_threshold = 0.3
 ```
 
-이 값은 초기 V1 실험에서 Subject 1~6 Development로 고정했고 첫 Subject 7~8
+이 값은 초기 V1 실험에서 Subject 1-6 Development로 고정했고 첫 Subject 7-8
 평가 뒤에는 변경하지 않았다. 이후 Annotation V2와 Track handoff 안정화 결과는
 10절에 별도로 기록한다. 오탐 목표를 충족하지 못했으므로 현재 모델은 실시간
 PoC의 선택적 기능이지 운영 환경에서 기본으로 켜는 기능은 아니다.
@@ -535,7 +535,7 @@ NORMAL부터 다시 시작해 최소 지속시간을 다시 채우지 못해 Eve
 confirm 이후(`COOLDOWN`) 단계에서도 같은 문제가 발생한다. 기존 공간 기반
 cooldown 승계(8.4절, `_try_inherit_cooldown`)는 confirm 시점 bbox를 IoU로만
 비교하고, tombstone도 `cooldown_until_sec`이 지나면 함께 만료된다. 두
-가지 실패 모드를 Subject 7~8 진단(S7_fall_right, S8_fall_backwards)에서
+가지 실패 모드를 Subject 7-8 진단(S7_fall_right, S8_fall_backwards)에서
 확인했다.
 
 - **S7_fall_right**(같은 track_id 재확정): Track이 소실된 채로
@@ -588,40 +588,40 @@ Candidate Handoff와 같은 패턴으로 별도 tombstone(`_CooldownHandoffTombs
 | Development Recall | 83.3% (25/30) | 83.3% (25/30) |
 | Development timely Recall | 63.3% (19/30) | 66.7% (20/30) |
 | Development 중복 Event | 1건(S6_fall_backwards) | 0건 |
-| Subject 7~8 Recall | 100% (10/10) | 100% (10/10) |
-| Subject 7~8 timely Recall | 90% (9/10) | 90% (9/10) |
-| Subject 7~8 FAR | 2.92/min | 2.34/min |
-| Subject 7~8 중복 Event | 2건(S7_fall_right, S8_fall_backwards) | 0건 |
+| Subject 7-8 Recall | 100% (10/10) | 100% (10/10) |
+| Subject 7-8 timely Recall | 90% (9/10) | 90% (9/10) |
+| Subject 7-8 FAR | 2.92/min | 2.34/min |
+| Subject 7-8 중복 Event | 2건(S7_fall_right, S8_fall_backwards) | 0건 |
 
 Development timely Recall 상승(S5_fall_sitting: late frame103 →
 timely frame82, `candidate_entry_reason="handoff"`)은 Cooldown Handoff가
 아니라 Candidate Handoff의 재등장-취소 버그 수정이 원인이다 — Track이
 candidate 진행 중 한 번 소실됐다가 같은 track_id로 재등장했을 때, 예전엔
 tombstone이 잘못 취소돼 진행 상황이 사라지고 NORMAL부터 다시 쌓여야 했던
-것이 정상 복구됐다. Subject 7~8 FAR 개선(S7_sit_down 오탐 2건 중 1건의
+것이 정상 복구됐다. Subject 7-8 FAR 개선(S7_sit_down 오탐 2건 중 1건의
 재확정 억제)은 Cooldown Handoff 자체의 효과다.
 
 ### 10.5 잔존 오탐 4건과 규칙 기반 게이트를 보류한 이유
 
-Cooldown Handoff 이후 Subject 7~8에 남은 오탐은 전부 no_fall 영상 4개
+Cooldown Handoff 이후 Subject 7-8에 남은 오탐은 전부 no_fall 영상 4개
 (S7_kneel, S7_pick_up_object, S7_sit_down, S8_sit_down)에서 각 1건씩,
 모두 `candidate_entry_reason="model"` · `confirm_path="model"`이다.
 temporal vote(K-of-N + max-gap) 확장과 약한 motion 게이트(aspect_ratio
 하한, 속도 하한)를 캐시 데이터로 직접 검증했으나 둘 다 채택하지 않았다.
 
 - 이미 `model_vote_window_sec`(0.5초) 기반 bounded temporal voting을
-  쓰고 있다. Event를 유발한 최초 연속 오분류 구간은 5~28프레임이고,
-  영상 전체의 최장 연속 오분류 구간은 5~85프레임이다. 짧게 흩어진
+  쓰고 있다. Event를 유발한 최초 연속 오분류 구간은 5-28프레임이고,
+  영상 전체의 최장 연속 오분류 구간은 5-85프레임이다. 짧게 흩어진
   confidence 흔들림이 아니라 모델이 해당 동작(무릎 꿇기·줍기·앉기)을
   지속적으로 `fall`로 오분류한 것이므로 temporal vote를 더 엄격하게
   만들어도 근본적으로 걸러지지 않는다.
-- 진짜 model-only TP인 S8_fall_forward의 `aspect_ratio`(0.34~0.4)가
-  오탐인 S7_sit_down의 `aspect_ratio`(0.33~0.41)와 사실상 구분되지
+- 진짜 model-only TP인 S8_fall_forward의 `aspect_ratio`(0.34-0.4)가
+  오탐인 S7_sit_down의 `aspect_ratio`(0.33-0.41)와 사실상 구분되지
   않는다. 속도도 마찬가지로 겹친다(일부 정상 앉기 동작이 실제 낙상보다
   순간 속도가 더 크다). 단순 aspect_ratio/속도 하한 게이트는 오탐 제거가
   아니라 진짜 TP를 잃는 교환에 가깝다.
 - 최근 bbox/Pose 보조 근거(예: 최근 0.5초 Pose 값 0.2 이상)를 model→model
-  confirm에 추가로 요구하는 규칙을 캐시 기반 오프라인 분석으로 비교한 결과, Subject 7~8
+  confirm에 추가로 요구하는 규칙을 캐시 기반 오프라인 분석으로 비교한 결과, Subject 7-8
   FAR는 0/min까지 떨어지지만 Development의 `S4_fall_sitting`
   TP(`aspect_ratio` 약 0.49, Pose 약 -0.31, 강한 동적 근거도 없음)를
   함께 잃는다(Development Recall 83.3%→76.7%, timely Recall
@@ -638,8 +638,8 @@ temporal vote(K-of-N + max-gap) 확장과 약한 motion 게이트(aspect_ratio
 **중요한 방법론적 주의**: 이 진단 과정에서 S7·S8(Validation) 영상을 직접
 보고 규칙을 설계·검증했다 — 즉 이 시점부터 `validation/` split은 더 이상
 "보지 않은 최종 검증 데이터"가 아니라 **tuning/diagnostic 데이터**로
-전환됐다. Cooldown Handoff까지의 설정을 최종 동결한 뒤에는 Subject 9~10
-(holdout) 또는 별도 외부 데이터로 최종 평가해야 하며, Subject 7~8 수치를
+전환됐다. Cooldown Handoff까지의 설정을 최종 동결한 뒤에는 Subject 9-10
+(holdout) 또는 별도 외부 데이터로 최종 평가해야 하며, Subject 7-8 수치를
 그대로 "최종 성능"으로 보고하면 안 된다.
 
 ### 10.6 전체 활동 프레임 hard-negative 재학습 결과 (미채택)
@@ -657,7 +657,7 @@ Phase 3 종료 전 추가 실험으로 Subject 7·8의 무릎 꿇기·물건 집
 충족하지 못했다. 따라서 두 가중치와 전체 활동 프레임 보강 방식은 채택하지
 않고 기존 `fall_detector_v1.pt`를 유지한다. 연속된 활동 전체 프레임 대신
 실제 false Event 주변 구간만 선별하는 방식은 Phase 4 후보로 남긴다.
-Subject 9~10 holdout은 이 실험에서도 사용하지 않았다.
+Subject 9-10 holdout은 이 실험에서도 사용하지 않았다.
 
 ## 11. Phase 3 통합 검증
 
@@ -677,11 +677,11 @@ Subject 9~10 holdout은 이 실험에서도 사용하지 않았다.
 - 실행 중 Live Frame은 JPEG 640×480으로 조회됐고, 종료 후 stale TTL이
   지나면 계약대로 `204`를 반환했다.
 - Signal Cache 재생 결과는 Development Recall 83.3%, timely Recall 66.7%,
-  FAR 0.0/min, 중복 0건과 S7~8 진단 Recall 100%, timely Recall 90%,
+  FAR 0.0/min, 중복 0건과 S7-8 진단 Recall 100%, timely Recall 90%,
   FAR 2.34/min, 중복 0건으로 동결 기준과 일치했다.
 
-S7~8은 이미 반복 분석에 사용한 tuning/diagnostic split이며 최종 Validation이
-아니다. Subject 9~10 holdout은 이번 통합에서도 사용하지 않았다.
+S7-8은 이미 반복 분석에 사용한 tuning/diagnostic split이며 최종 Validation이
+아니다. Subject 9-10 holdout은 이번 통합에서도 사용하지 않았다.
 
 ### 11.2 성능 판정
 
@@ -709,7 +709,7 @@ API 장애의 추가 FPS 감소는 낙상 ON 정상 대비 3.5%였다. 세 장�
 ### 11.3 최종 범위 판정
 
 Phase 3의 낙상 기능은 **정량 한계를 공개한 opt-in PoC**로 통합 게이트를
-통과했다. 실제 원인 후보 정확도, 외부 데이터 일반화, Subject 9~10 최종
+통과했다. 실제 원인 후보 정확도, 외부 데이터 일반화, Subject 9-10 최종
 holdout, 장시간 IP 카메라 안정성, 능동 인원 FPS 최적화는 Phase 4 범위다.
 
 ## 12. Pose NORMAL 기반 runtime 최적화
@@ -729,7 +729,7 @@ holdout, 장시간 IP 카메라 안정성, 능동 인원 FPS 최적화는 Phase 
 
 모델과 Track 캐시는 그대로 두고 Pose NORMAL gate와 interval `3`만 적용했다.
 
-| 지표 | Development 기준 | Development 최적화 | S7~8 기준 | S7~8 최적화 |
+| 지표 | Development 기준 | Development 최적화 | S7-8 기준 | S7-8 최적화 |
 | --- | ---: | ---: | ---: | ---: |
 | Recall | 83.3% | 83.3% | 100% | 100% |
 | timely Recall | 66.7% | 66.7% | 90% | 90% |
@@ -737,11 +737,11 @@ holdout, 장시간 IP 카메라 안정성, 능동 인원 FPS 최적화는 Phase 
 | 평균 onset latency | 1.006초 | 1.098초 | 0.906초 | 1.006초 |
 | 중복 Event 영상 | 0 | 0 | 0 | 0 |
 
-Development에서는 active Track frame의 20.8%, S7~8에서는 24.4%에서만 보조
+Development에서는 active Track frame의 20.8%, S7-8에서는 24.4%에서만 보조
 detector evidence를 새로 사용했다. gate 자체의 평균 계산 시간은 frame당
-0.01ms 미만이었다. S7~8 FAR는 약 25% 감소했지만 운영 목표 0.2/min은 여전히
-충족하지 못한다. S7~8은 tuning/diagnostic split이며 최종 Validation이 아니다.
-Subject 9~10 holdout은 열람하거나 평가하지 않았다.
+0.01ms 미만이었다. S7-8 FAR는 약 25% 감소했지만 운영 목표 0.2/min은 여전히
+충족하지 못한다. S7-8은 tuning/diagnostic split이며 최종 Validation이 아니다.
+Subject 9-10 holdout은 열람하거나 평가하지 않았다.
 
 ### 12.2 M1/MPS 단일 파일 측정
 
@@ -775,3 +775,112 @@ Interval `2`는 같은 frame에 Event를 만들면서 더 느렸다. 따라서 �
 Frame을 제외한 단일 파일 측정이므로 장시간 실행, 다른 하드웨어와 전체 E2E에서
 재검증해야 한다. 최적화 프로파일을 채택해도 낙상 기능과 두 최적화 옵션은
 기본 비활성이다.
+
+## 13. Phase 4 평가 프로토콜 동결
+
+Phase 4의 공식 평가는 `phase4_fall_eval_v1`을 사용한다. 이 절이 평가
+분자·분모의 기준이며, API·artifact schema는 각각 `docs/api_contract.md`,
+`docs/interfaces.md`, `docs/data_sources.md`를 따른다.
+
+### 13.1 E0 기준선
+
+```text
+model: fall_detector_v1.pt
+fall config: configs/fall_detection.json
+Pose NORMAL gate: enabled
+auxiliary model interval: 3
+Development: Subject 1-6
+tuning/diagnostic: Subject 7-8
+final holdout: Subject 9-10
+```
+
+| 지표 | Development | S7-8 tuning/diagnostic |
+| --- | ---: | ---: |
+| Recall | 83.3% | 100% |
+| timely Recall | 66.7% | 90% |
+| FAR | 0.0/min | 1.75/min |
+| 중복 Event 영상 | 0 | 0 |
+
+S7-8은 학습하지 않는다. S9-10은 모델·tracker·config·threshold·평가 protocol과
+evaluator commit을 동결한 뒤 한 번만 평가한다.
+
+공식 결과 JSON에는 다음 실행 조건을 기록한다.
+
+```text
+contract_version=phase4_contract_v1
+evaluation_protocol_version=phase4_fall_eval_v1
+annotation_schema_version
+evaluator_git_commit
+model_sha256
+config_sha256
+tracker
+tracker_config
+device
+early_tolerance_sec
+timely_window_sec
+event_matching_rule
+duplicate_rule
+far_denominator_rule
+```
+
+`annotation_schema_version`은 CAUCAFall 평가에서
+`caucafall_annotation_v2`, 직접 촬영 평가에서 `phase4_fall_cause_v1`이다.
+평가 규칙 식별자는 다음 값으로 고정한다.
+
+```text
+event_matching_rule=first_fall_suspect_in_closed_timely_window_v1
+duplicate_rule=second_fall_suspect_from_window_start_to_video_end_v1
+far_denominator_rule=processed_no_fall_frames_over_fps_v1
+```
+
+### 13.2 Timely·중복·FAR
+
+- timely 인정 구간은
+  `[fall_start_frame - round(0.2 * fps), fall_start_frame + round(2.0 * fps)]`
+  이며 양 끝을 포함한다.
+- 구간 안 첫 `FALL_SUSPECT`만 대표 timely Event로 매칭한다.
+- 허용 구간 시작 이후 영상 종료 전 추가 Event는 duplicate로 기록한다.
+- FAR는 오류 없이 처리된 no-fall 영상의 모든 `FALL_SUSPECT` 수를
+  `processed_frame_count / fps` 합계 분으로 나눈다.
+- 오류·스킵 영상이 하나라도 있으면 `evaluation_valid=false`다.
+
+### 13.3 Cause·Track 평가
+
+- Cause는 raw Track ID가 아닌 reviewed actor mapping으로 채점한다.
+- reviewed ground truth에 매칭된 대표 Event만 Cause 지표 분모에 포함한다.
+- 후보 없음의 `cause=null`, 후보 있음의 actor top-1을 각각 측정한다.
+- 분모가 0인 지표는 `null/not_evaluable`이며 목표 통과로 해석하지 않는다.
+- ID switch 자체가 아니라 missed·late·duplicate·victim·cause 오류를 실제로
+  유발한 경우만 tracker 문제로 판정한다.
+- 다중 ID switch는 `track_id_switches.csv`에 전환별로 기록한다.
+- 관련 구간에 ID switch와 Event 오류가 함께 있지만 인과가 확인되지 않으면
+  `associated`로 기록한다.
+- alias 연결 재생 또는 state diagnostic으로 오류가 해소되는 경우에만
+  `caused`로 기록한다.
+- Event 오류가 없으면 같은 영상에 ID switch가 있어도 `none`으로 기록한다.
+- Tracker 비교는 `caused` 오류가 반복 재현될 때만 진행한다.
+
+```text
+cause_null_specificity =
+  correct_null_count
+  / reviewed matched Event 중 cause_candidate_exists=false인 건수
+
+cause_top1_accuracy =
+  correct_top1_count
+  / reviewed matched Event 중 cause_candidate_exists=true인 건수
+
+false_attribution_rate =
+  false_attribution_count
+  / cause 평가 가능한 reviewed matched Event 전체
+```
+
+후보 있음인데 대표 Event의 `cause=null`이면 `missed_cause_count`에 포함한다.
+대표 Event가 없는 낙상은 fall detection miss로 기록하고 Cause 분모에서는
+제외한다.
+
+### 13.4 Protocol 변경
+
+Holdout 열람 후 평가 규칙이나 threshold를 변경하지 않는다. 치명적인 평가기
+오류를 수정해야 하면 protocol version을 올리고 기존 결과를 보존한 뒤
+Development와 S7-8을 전체 재평가한다. 수정된 S9-10 결과에는
+`post-hoc protocol correction`을 표시하며 모델 선택에 사용하지 않는다.

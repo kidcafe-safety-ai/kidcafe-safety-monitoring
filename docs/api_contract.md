@@ -2,11 +2,14 @@
 
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
-> **최종 수정**: 2026-07-27 (Phase 3 종료 — API·EventCause 계약 구현 완료 반영)
-> **상태**: Phase 2.5 구현 완료 / Phase 3 완료 — Live Frame API, Event·Zone·EventCause 계약, 공간 안전정책, FALL_SUSPECT opt-in PoC·원인 후보 추정 구현 완료. Zone Settings 저장(`PUT /zones`)과 인증/인가 구현은 Phase 4.
-> **관련 문서**: [`dashboard_api.md`](dashboard_api.md), [`dashboard_analysis.md`](dashboard_analysis.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md), [`roadmap.md`](roadmap.md)
+> **최종 수정**: 2026-07-29 (Phase 4 Contract v1 반영)
+> **상태**: Phase 3 API 구현 완료 / Phase 4 기간 조회·Zone 저장 계약 동결,
+> 실제 구현은 역할별 후속 PR
+> **관련 문서**: [`interfaces.md`](interfaces.md),
+> [`fall_evaluation.md`](fall_evaluation.md), [`decisions.md`](decisions.md),
+> [`roadmap.md`](roadmap.md)
 
-이 문서는 Phase 1.5~2.5의 구현된 API, Phase 3 Live Frame API·Event/Zone 공용 계약, 그리고 Phase 3의 확정된 후속 계약(안전 감지 로직 등)을 구분해 정리한다.
+이 문서는 Phase 1.5-2.5의 구현된 API, Phase 3 Live Frame API·Event/Zone 공용 계약, 그리고 Phase 3의 확정된 후속 계약(안전 감지 로직 등)을 구분해 정리한다.
 
 ---
 
@@ -235,7 +238,8 @@ Phase 3에서도 `CurrentStatus.risk_level`은 `NORMAL | HIGH`를 유지한다.
 
 ## GET /events
 
-이벤트 목록을 조회한다. 기본 정렬은 `id DESC` 최신순이다.
+이벤트 목록을 조회한다. Phase 4에서는 기간 필터를 하위 호환 방식으로
+추가하며, 기본 정렬은 `created_at DESC`, 내부 SQLite `id DESC`다.
 
 ### Query Parameters
 
@@ -245,8 +249,14 @@ Phase 3에서도 `CurrentStatus.risk_level`은 `NORMAL | HIGH`를 유지한다.
 | `offset` | `integer` | `0` | `offset >= 0` |
 | `event_type` | `string | null` | `null` | Phase 3 활성 `EventType` 6종 중 하나 |
 | `zone_id` | `string | null` | `null` | zone ID 필터 |
+| `created_from` | RFC 3339 datetime 또는 `null` | `null` | 저장 시각 시작, 포함 |
+| `created_to` | RFC 3339 datetime 또는 `null` | `null` | 저장 시각 종료, 미포함 |
 
 `total`은 필터 적용 후, `limit`/`offset` pagination 적용 전 전체 개수다.
+기간 입력은 timezone을 포함해야 하며 UTC로 변환해 SQLite `created_at`과
+비교한다. `created_from < created_to`여야 하고, 잘못된 datetime·timezone
+누락·역전된 범위는 기존 FastAPI/Pydantic `422 detail` 형식으로 반환한다.
+영상 상대 시각 `timestamp`는 기간 조회에 사용하지 않는다.
 
 ### Response
 
@@ -280,6 +290,17 @@ Phase 3에서도 `CurrentStatus.risk_level`은 `NORMAL | HIGH`를 유지한다.
   "message": null
 }
 ```
+
+### Phase 4 Report 사용
+
+- C는 pagination envelope를 보존하는 `getEventsPage(params)`를 추가한다.
+- 기존 `getEvents()`의 반환 의미는 변경하지 않는다.
+- `total`, `limit`, `offset`으로 선택 기간 전체 페이지를 조회한다.
+- 현재 시각을 포함하는 기간은 첫 요청의 `created_to`를 고정하고 모든
+  페이지에서 같은 값을 사용한다.
+- Phase 4 UI는 한 번에 최대 31일을 조회한다.
+- EventType·Zone별 집계는 Frontend에서 수행한다.
+- 기존 `/summary`는 현재 KPI용이며 과거 기간 Report 집계에 사용하지 않는다.
 
 ---
 
@@ -459,11 +480,14 @@ Vision AI 파이프라인이 현재 프레임 기준 감지 상태를 저장/갱
 
 ---
 
-## GET /zones
+## GET /zones (Phase 3 현재 구현)
 
 `data/zones/sample.json`을 읽어 반환한다. 파일이 없거나 형식이 맞지 않으면 빈 리스트를 반환할 수 있다.
 API 응답에서는 `zone_name`을 보장한다.
 전환기 호환성을 위해 기존 `name` 필드는 제거하지 않는다.
+
+이 동작은 Phase 3 기준선이다. Phase 4 후속 구현에서는 아래
+`GET /zones Phase 4 계약`의 version envelope와 오류 정책으로 전환한다.
 
 ### Response
 
@@ -594,7 +618,7 @@ WebSocket은 Phase 2.5와 Phase 3에서도 제외하며 Phase 4 이후 검토한
 ## Phase 3 계약
 
 > 상태: Live Frame API 구현 완료 / Event Schema v2·ZoneType·SQLite migration 구현 완료 / 공간 안전정책 및 FALL_SUSPECT opt-in PoC·원인 후보 추정 구현 완료
-> 기준선: v0.2.5-dashboard
+> 기준선: v0.3.0-safety
 > 적용 시점: 아래 각 계약은 해당 구현 PR 머지 이후 적용됨
 
 ---
@@ -623,8 +647,8 @@ Content-Type: image/jpeg
 - Body: JPEG binary
 - Content-Type: `image/jpeg`
 - 최대 크기: 1 MiB
-- 업로드 주기: 1~2 FPS
-- 해상도: 640×480, JPEG quality 70~80
+- 업로드 주기: 1-2 FPS
+- 해상도: 640×480, JPEG quality 70-80
 
 **응답**
 
@@ -718,7 +742,7 @@ FALL_SUSPECT
 ```
 
 - `confidence`: optional (기존 DB 행은 null 허용)
-- `event_confidence`: optional, 0.0~1.0 또는 null
+- `event_confidence`: optional, 0.0-1.0 또는 null
 - `cause`: optional, 전체 객체 또는 null (부분 객체 불허)
 - 외부 접촉 근거가 충분하면 `FALL_SUSPECT.cause`에 `NEARBY_TRACK` 후보를
   기록하고, 근거가 부족하거나 attribution이 비활성화되면 `cause=null`을 기록한다.
@@ -728,12 +752,12 @@ FALL_SUSPECT
 ```text
 cause.type: "NEARBY_TRACK"
 cause.track_id: 0 이상의 정수
-cause.score: 0.0~1.0
+cause.score: 0.0-1.0
 cause.evidence.min_distance_norm / closing_speed_norm / time_to_fall_sec: 0 이상의 실수
 ```
 
 - 위 범위를 벗어나거나 `cause`가 일부 필드만 포함한 부분 객체인 경우 `422 Unprocessable Entity`
-- `event_confidence`가 `0.0~1.0` 범위를 벗어나면 `422 Unprocessable Entity`
+- `event_confidence`가 `0.0-1.0` 범위를 벗어나면 `422 Unprocessable Entity`
 
 ---
 
@@ -781,79 +805,116 @@ Phase 3 신규 EventType의 Summary 집계 기준:
 
 ---
 
-## GET /zones Phase 3 계약
+## GET /zones Phase 4 계약
 
-> 상태: 구현 완료 — `data/zones/*.json`에 `zone_type` 반영, `GET /zones`가 그대로 직렬화해 반환
+> 상태: 계약 동결, 실제 구현은 B 후속 PR
 
-기존 `GET /zones`는 Zone 목록을 반환한다. Phase 3에서 `zone_type` 필드가 추가됐다.
+Phase 4에서는 기존 list-only `data`를 version이 포함된 설정 envelope로
+변경한다.
 
 ```json
 {
   "status": "success",
-  "data": [
-    {
-      "zone_id": "playground_bottom_right",
-      "zone_name": "test video zone",
-      "zone_type": "danger",
-      "type": "polygon",
-      "points": [[0.65, 0.65], [1.0, 0.65], [1.0, 1.0], [0.65, 1.0]],
-      "rules": { "enter_alert": true, "dwell_threshold_sec": 5 }
-    }
-  ],
+  "data": {
+    "version": "sha256:<64자리 lowercase hex>",
+    "updated_at": "2026-08-07T10:30:00Z",
+    "zones": [
+      {
+        "zone_id": "playground_bottom_right",
+        "zone_name": "test video zone",
+        "zone_type": "danger",
+        "type": "polygon",
+        "points": [[0.65, 0.65], [1.0, 0.65], [1.0, 1.0], [0.65, 1.0]],
+        "rules": { "enter_alert": true, "dwell_threshold_sec": 5 }
+      }
+    ]
+  },
   "message": null
 }
 ```
 
 - 내부 JSON `name` → API 응답 `zone_name`으로 변환
-- `zone_type`: `play | exit | restricted | danger` (Phase 3 필수)
-- `PUT /zones`: Phase 4
+- `zone_type`: `play | exit | restricted | danger`
+- version은 현재 runtime 파일 bytes의 SHA-256 opaque token
+- version 형식은 `sha256:<64자리 lowercase hex>`
+- `updated_at`은 runtime 파일 최종 변경 시각의 UTC RFC 3339 값
+- 유효한 빈 파일만 `zones=[]` 성공
+- 파일 누락·읽기 실패·JSON 또는 schema 오류는 generic envelope `500`
+- 오류를 빈 Zone이나 Mock 데이터로 대체하지 않음
+
+```json
+{
+  "status": "error",
+  "data": null,
+  "message": "zone configuration is unavailable"
+}
+```
 
 **`name` / `zone_name` 호환성 원칙**
 
 - `zone_name`을 표준 필드로 사용한다.
-- 기존 `name`은 Phase 3에서 deprecated alias로 계속 유지한다 (API 응답에서 제거하지 않음).
-- `name` 제거 여부는 Phase 4에서 재검토한다.
+- runtime 내부 JSON은 기존 `name`을 유지한다.
+- API request·response는 `zone_name`을 사용한다.
 
 ---
 
-## Zone Settings 저장 계약 (Phase 3: 필드·저장 구조만 확정)
+## PUT /zones Phase 4 저장 계약
 
-Phase 3에서는 Zone Settings의 필드와 저장 구조만 확정한다. `PUT /zones`를 통한 실제 저장 구현은 Phase 4다.
+> 상태: 계약 동결, 실제 구현은 B 후속 PR
 
-**API 필드**
-
-```text
-zone_id
-zone_name
-zone_type
-points
-dwell_threshold_sec
-enter_alert
-version
-updated_at
+```json
+{
+  "expected_version": "sha256:<64자리 lowercase hex>",
+  "zones": [
+    {
+      "zone_id": "danger_door",
+      "zone_name": "출입문 위험구역",
+      "type": "polygon",
+      "zone_type": "danger",
+      "points": [[0.1, 0.2], [0.3, 0.2], [0.3, 0.5]],
+      "rules": {
+        "enter_alert": true,
+        "dwell_threshold_sec": 5
+      }
+    }
+  ]
+}
 ```
 
-**내부 JSON 필드**
+- `PUT /zones`는 전체 Zone 목록을 교체한다.
+- request는 `expected_version`과 전체 `zones`를 포함한다.
+- 일부 Zone만 보내면 누락한 Zone은 삭제 대상으로 해석한다.
+- `zone_id`와 `zone_name`은 비어 있지 않아야 하고 `zone_id`는 고유해야 한다.
+- `type`은 `polygon`, `zone_type`은 `play | exit | restricted | danger`다.
+- image Zone point는 0.0-1.0 범위이며 최소 3개다.
+- polygon은 첫 점을 끝에 반복하지 않는 open ring으로 저장한다.
+- NaN·Infinity·중복 점·면적 0·self-intersection polygon을 거부한다.
+- `enter_alert`는 boolean, `dwell_threshold_sec`은 0-3600 정수다.
+- version 확인, 검증, 임시 파일 작성, `os.replace()`를 하나의 lock 임계
+  구역에서 수행한다.
+- version 불일치는 `409`, schema·polygon 오류는 기본 `422`, 저장 실패는
+  generic envelope `500`이다.
+- Phase 4 운영 기준은 단일 Backend process다.
+- seed `data/zones/sample.json`은 읽기 전용이다.
+- mutable runtime은 `outputs/zones_runtime.json`, Docker에서는
+  `/app/outputs/zones_runtime.json`을 사용한다.
+- runtime 경로는 `KIDCAFE_ZONES_PATH`로 변경할 수 있다.
+- 최초 실행 전에 setup 단계가 seed를 runtime으로 복사하며 API는 누락 파일을
+  자동 생성하지 않는다.
+- Vision AI의 `--zones` 기본값은 기존 단독 실행과의 하위 호환을 위해
+  `data/zones/sample.json`을 유지한다.
+- Phase 4 통합 실행에서는 Vision AI에
+  `--zones outputs/zones_runtime.json`을 명시하고 저장 후 재시작해 반영한다.
+- Docker Backend의 `KIDCAFE_ZONES_PATH=/app/outputs/zones_runtime.json`과
+  host Vision AI의 `outputs/zones_runtime.json`은 같은 volume 파일이어야 한다.
 
-```text
-zone_id
-name
-zone_type
-type
-points
-rules.enter_alert
-rules.dwell_threshold_sec
-version
-updated_at
-```
+성공 응답은 `GET /zones`와 같은 `version`, `updated_at`, `zones` envelope다.
+`409`가 발생하면 Frontend는 자동 덮어쓰지 않고 최신 설정을 재조회한 뒤
+사용자에게 다시 확인받는다. API 저장 성공 후 화면에는
+`Vision AI 재시작 후 적용`을 표시한다.
 
-**변환 원칙**
-
-- API `zone_name` ↔ 내부 JSON `name`
-- API `dwell_threshold_sec` / `enter_alert` ↔ 내부 JSON `rules.dwell_threshold_sec` / `rules.enter_alert`
-- `version`, `updated_at`은 저장 시마다 갱신 (동시 수정 감지용)
-- `GET /zones` endpoint와 `zone_type` 응답 확장 모두 구현 완료
-- `PUT /zones`(Zone Settings 저장)는 Phase 4 구현
+평가 artifact와 fixture 필드는 `docs/interfaces.md`, 촬영 데이터 필드는
+`docs/data_sources.md`를 따른다.
 
 ---
 
@@ -866,5 +927,5 @@ updated_at
 - `target`: `Track #N` 형식
 - `title`·`message`·`severity`: `event_type` 기반 Frontend 매핑
 - 처리 상태: Phase 3에서 `미확인` 고정
-- `확인중`·`처리완료`·조치 메모 저장: Phase 4
+- `확인중`·`처리완료`·조치 메모 저장: Phase 4 후속 범위
 - 실제 이벤트와 Mock 처리 상태 혼용 금지

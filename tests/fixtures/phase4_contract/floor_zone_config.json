@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "camera_id": "cam01",
+  "coordinate_space": "floor_meters",
+  "zones": [
+    {
+      "zone_id": "danger_door_floor",
+      "zone_name": "출입문 위험구역",
+      "type": "polygon",
+      "zone_type": "danger",
+      "points": [[0.0, 0.0], [2.0, 0.0], [2.0, 1.5], [0.0, 1.5]],
+      "rules": {
+        "enter_alert": true,
+        "dwell_threshold_sec": 5
+      }
+    }
+  ]
+}

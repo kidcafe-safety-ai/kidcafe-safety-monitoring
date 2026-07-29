@@ -1,0 +1,11 @@
+{
+  "status": "success",
+  "data": {
+    "items": [],
+    "total": 0,
+    "limit": 100,
+    "offset": 0,
+    "count": 0
+  },
+  "message": null
+}

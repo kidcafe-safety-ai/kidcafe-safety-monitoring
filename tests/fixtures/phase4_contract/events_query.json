@@ -1,0 +1,8 @@
+{
+  "created_from": "2026-08-07T00:00:00+09:00",
+  "created_to": "2026-08-08T00:00:00+09:00",
+  "limit": 100,
+  "offset": 0,
+  "event_type": "FALL_SUSPECT",
+  "zone_id": "**global**"
+}

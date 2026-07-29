@@ -1,0 +1,10 @@
+{
+  "detail": [
+    {
+      "type": "value_error",
+      "loc": ["body", "zones", 0, "points"],
+      "msg": "Value error, polygon must not self-intersect",
+      "input": [[0.1, 0.1], [0.3, 0.3], [0.1, 0.3], [0.3, 0.1]]
+    }
+  ]
+}

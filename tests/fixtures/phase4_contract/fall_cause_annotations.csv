@@ -1,0 +1,4 @@
+video_id,label,fall_start_frame,impact_frame,lying_start_frame,recovery_frame,victim_actor_id,contact_occurred,cause_candidate_exists,cause_actor_id,contact_frame,review_status,reviewer_id,second_reviewer_id,notes
+P4_S01_A01_fall_backward_01_cam01,fall,80,92,108,180,A01,false,false,,,reviewed,R01,R02,단독 통제 낙상
+P4_S01_A01_near_pass_01_cam01,no_fall,,,,,A01,false,false,,,reviewed,R01,R02,비접촉 근접 통과
+P4_S01_A01_contact_fall_01_cam01,fall,80,92,108,180,A01,true,true,A02,78,reviewed,R01,R02,약한 접촉 신호 후 통제 낙상

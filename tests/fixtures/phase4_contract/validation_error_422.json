@@ -1,0 +1,10 @@
+{
+  "detail": [
+    {
+      "type": "value_error",
+      "loc": ["query", "created_from"],
+      "msg": "Value error, timezone is required",
+      "input": "2026-08-07T00:00:00"
+    }
+  ]
+}
