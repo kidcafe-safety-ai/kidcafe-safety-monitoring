@@ -6,7 +6,8 @@ React 기반 운영 대시보드 구현
 ## 화면 범위
 - 실시간 모니터링 (MonitoringPage)
 - 이벤트 기록 / 통계 (EventsPage)
-- Zone 설정 (ZoneSettingsPage) — Phase 2.5 Mock Prototype
+- Zone 설정 (ZoneSettingsPage) — Phase 3까지 Mock, Phase 4 실제 API 연동 예정
+- 기간별 Report (ReportPage) — Phase 4 읽기 전용 실제 Event 연동 예정
 
 ## Event Schema v1
 필수 필드는 MVP 이벤트 로그와 FastAPI 응답 구조를 맞추기 위한 기준이다.
@@ -64,11 +65,12 @@ MonitoringPage에서 각 API를 독립 polling한다.
 
 WebSocket은 Phase 4 이후 필요성 기반 재검토한다.
 
-## Zone Settings — mock prototype
+## Zone Settings — Phase 4 전환 대상
 
-ZoneSettingsPage는 mock prototype이다.
+Phase 3 종료 시점의 ZoneSettingsPage는 mock prototype이다.
 
-> Zone Settings 실제 API 연동은 Phase 4에서 검토한다.
+> Phase 4에서 `GET /zones`·`PUT /zones`·version 충돌 계약에 따라 실제 API로
+> 전환한다. 상세 계약은 `docs/api_contract.md`를 따른다.
 
 - `zoneSettingsMockApi.ts` — mock prototype only. FastAPI 미연동.
 - UI에 "Mock Prototype" badge 표시
@@ -96,11 +98,11 @@ ZoneSettingsPage는 mock prototype이다.
 > 상태: Phase 3 완료 — Live View, 신규 Event 표시(FALL_SUSPECT/cause 포함),
 > AlertHistory 읽기 전용 연동 완료. Report·ZoneSettings·SystemSettings 저장
 > 연동은 Phase 4.
-> 기준선: `v0.3.0-safety` 예정 (metadata PR·태그 확정 전)
+> 기준선: `v0.3.0-safety`
 
 ### Live View
 
-- `PUT /live/frame` → FastAPI 메모리 보관 → `GET /live/frame` → React 500~1000ms polling
+- `PUT /live/frame` → FastAPI 메모리 보관 → `GET /live/frame` → React 500-1000ms polling
 - MonitoringPage 영상 영역 placeholder를 실제 JPEG 표시로 교체 완료
 - 204 No Content 수신 시 empty 상태 표시
 - 연결 오류·파이프라인 중단 시 error fallback 표시
@@ -126,7 +128,7 @@ ZoneSettingsPage는 mock prototype이다.
 - 발생 시각: `created_at` (UTC → Asia/Seoul 변환)
 - `MOCK_TODAY` 하드코딩 제거
 - 처리 상태: `미확인` 고정
-- `확인중`·`처리완료`·조치 메모 저장 기능: 비활성화 (Phase 4)
+- `확인중`·`처리완료`·조치 메모 저장 기능: 비활성화 (Phase 4 후속)
 
 ### Mock 유지 화면
 
@@ -135,3 +137,42 @@ ZoneSettingsPage는 mock prototype이다.
 | ReportPage | Mock 유지 |
 | ZoneSettingsPage | Mock 유지 |
 | SystemSettingsModal | Mock 유지 |
+
+## Phase 4 Frontend 계약
+
+### Zone Settings
+
+- ZoneSettingsPage는 version 기반 전체 목록 교체와 `409` 충돌 UX를 구현한다.
+- 정상 빈 Zone과 조회 오류를 구분하고, 조회 오류 중에는 수정·저장을
+  비활성화한다.
+- validation 오류, 저장 실패, 저장 성공 상태를 각각 표시한다.
+- 저장 성공 후 `Vision AI 재시작 후 적용`을 안내한다.
+
+### Report
+
+- ReportPage는 `created_from`·`created_to`와 전체 pagination을 사용하는
+  읽기 전용 화면으로 전환한다.
+- Report 조회는 전용 `getEventsPage(params)`를 사용하고 기존 `getEvents()`의
+  반환 의미는 유지한다.
+- 첫 요청의 `created_to`를 전체 페이지에서 고정하고 한 번에 최대 31일을
+  조회한다.
+- loading, empty, error와 기간 경계 상태를 구분한다.
+
+### Recent Event
+
+- 기존 Event 표시 metadata를 재사용해 한글명·severity·색상을 통일한다.
+- `created_at`을 UTC로 해석한 뒤 Asia/Seoul 발생 시각으로 표시한다.
+- Zone 이름, Track ID와 Cause 요약을 함께 표시한다.
+- `cause=null`은 `원인 후보 없음`, 후보가 있으면
+  `외부 접촉 의심 · Track #N`으로 표시한다.
+- 신규 HIGH Event만 짧게 강조하고 `event_id` 기준으로 같은 Event를 반복
+  강조하지 않는다.
+- `prefers-reduced-motion`, 긴 Zone 이름, 미지 EventType과 모바일 레이아웃을
+  지원한다.
+- loading, empty, API 오류를 패널 내부에서 처리한다.
+- Event 선택 대상은 AlertHistory로 고정한다.
+
+- 읽음·확인·처리 상태는 Backend 계약이 없으므로 임의 생성하지 않는다.
+- SystemSettingsModal과 AlertHistory 조치 상태 저장은 후속 범위다.
+
+상세 일정과 인수 기준은 `docs/roadmap.md`, `docs/api_contract.md`를 따른다.

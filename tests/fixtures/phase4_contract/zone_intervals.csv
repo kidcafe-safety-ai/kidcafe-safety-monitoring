@@ -1,0 +1,2 @@
+video_id,zone_id,interval_index,enter_frame,exit_frame,dwell_start_frame,review_status,notes
+P4_S01_A01_fall_backward_01_cam01,danger_door,1,40,150,140,reviewed,발 기준점 사용

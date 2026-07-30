@@ -2,9 +2,9 @@
 
 Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
-한이음 드림업 프로젝트 (2026.04 ~ 2026.10)
+한이음 드림업 프로젝트 (2026.04-2026.10)
 
-![status](https://img.shields.io/badge/status-Phase_3_complete-brightgreen)
+![status](https://img.shields.io/badge/status-Phase_4_active-blue)
 ![python](https://img.shields.io/badge/python-3.10-blue)
 ![tests](https://img.shields.io/badge/tests-pytest_passed-green)
 ![license](https://img.shields.io/badge/license-Internal-lightgrey)
@@ -15,9 +15,9 @@ Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
 KidCafe Safety AI는 YOLO + ByteTrack + Geofencing 기반으로 위험구역 진입 및 장시간 체류를 감지하는 Vision AI 안전 모니터링 시스템이다.
 
-**현재 상태: Phase 3 기능·통합 완료, `v0.3.0-safety` 릴리스 준비 중 — 공간 안전정책·낙상 감지 opt-in PoC 통합**
+**현재 상태: `v0.3.0-safety` 기준 Phase 4 시작, Contract v1·평가 프로토콜 동결**
 
-현재 구현 기준(태그 확정 전, `v0.3.0-safety` 예정):
+현재 구현 기준(`v0.3.0-safety`):
 
 ```text
 Webcam / RTSP / File   ← 로컬 실행
@@ -65,7 +65,7 @@ pip install -r requirements.txt
 ### 2. 테스트 영상 준비
 검증용 영상을 `data/videos/test.mp4`에 배치합니다.
 - 권장 해상도: 1920x1080 또는 1280x720
-- 권장 길이: 10~30초
+- 권장 길이: 10-30초
 
 ### 3. 실행
 
@@ -148,14 +148,15 @@ shasum -a 256 outputs/fall_training/models/fall_detector_v1.pt
 # 5985d5a24db8b69bf0d231644a4c7a71f6a1143724ed7df2be6d669373c83da7
 ```
 
-Annotation V2와 Track handoff 안정화 이후 Subject 7~8 진단 결과는 Recall 100%,
-timely Recall 90%, false alarm 2.34/min, 중복 Event 0건이다. 오탐 목표를 충족하지
-못했고 이 split을 진단에 사용했으므로, 현재는 **선택적 PoC**다. 실제 키즈카페/IP
-카메라 hard-negative 검증과 Subject 9~10 holdout 평가 전에는 기본 활성화하지 않는다.
+Annotation V2와 Track handoff 안정화 이후, runtime 최적화 전 Subject 7-8
+진단 결과는 Recall 100%, timely Recall 90%, false alarm 2.34/min, 중복 Event
+0건이었다. 오탐 목표를 충족하지 못했고 이 split을 진단에 사용했으므로,
+현재는 **선택적 PoC**다. 실제 키즈카페/IP 카메라 hard-negative 검증과
+Subject 9-10 holdout 평가 전에는 기본 활성화하지 않는다.
 
 Pose NORMAL gate와 보조 detector interval `3`을 함께 사용한 opt-in 프로파일은
 Development Recall 83.3%·timely Recall 66.7%·false alarm 0/min을 유지했고,
-Subject 7~8 진단의 false alarm을 2.34→1.75/min으로 줄였다. M1/MPS 동일 파일을
+Subject 7-8 진단의 false alarm을 2.34→1.75/min으로 줄였다. M1/MPS 동일 파일을
 OFF/ON 각각 3회 측정한 steady-state 중앙값은 낙상 OFF 14.571 FPS, 최적화 ON
 13.511 FPS로 하락률 7.3%를 기록했다. tuning split·단일 파일 결과이므로 다른
 하드웨어나 실제 카메라 성능을 보장하지 않으며, 기능과 최적화 옵션은 모두
@@ -300,7 +301,7 @@ kidcafe-safety-monitoring/
 │   ├── model_benchmark.md   # Phase 1.5 모델 비교 결과
 │   ├── docker_phase_2_5.md  # Docker 실행 가이드 (Phase 2.5)
 │   ├── fall_evaluation.md   # 낙상 PoC 평가·튜닝·runtime 최적화 기록
-│   ├── realtime_test.md     # Phase 2~3 실시간 실험 로그
+│   ├── realtime_test.md     # Phase 2-3 실시간 실험 로그
 │   └── ...
 ├── tests/
 │   └── test_*.py
@@ -356,7 +357,7 @@ pytest --cov=src --cov-report=term-missing
 |------|--------|------|
 | `--model` | `yolo26n.pt` | YOLO 모델 경로 |
 | `--infer-device` | `auto` | 추론 장치 (`auto` / `mps` / `cuda` / `cpu`) |
-| `--conf` | `0.5` | YOLO confidence threshold (0~1) |
+| `--conf` | `0.5` | YOLO confidence threshold (0-1) |
 
 ### Zone / API
 
@@ -365,6 +366,12 @@ pytest --cov=src --cov-report=term-missing
 | `--zones` | `data/zones/sample.json` | Zone 정의 JSON |
 | `--api-url` | `None` | FastAPI 서버 URL. 지정 시 이벤트/상태를 전송 (예: `http://localhost:8000`) |
 | `--api-failed-events-output` | `outputs/api_failed_events.jsonl` | API 최종 전송 실패 Event JSONL 경로 |
+
+`--zones` 기본값은 기존 단독 실행과의 하위 호환을 위해
+`data/zones/sample.json`을 유지한다. Phase 4 Zone Settings 통합 실행에서는
+setup 단계에서 seed를 `outputs/zones_runtime.json`으로 복사한 뒤 Vision AI에도
+`--zones outputs/zones_runtime.json`을 명시해야 한다. Zone 저장 후에는 Vision
+AI를 재시작해 변경 내용을 적용한다.
 
 ### 출력
 
@@ -445,15 +452,25 @@ pytest --cov=src --cov-report=term-missing
 | React Live View (영상 영역) | Done — Phase 3 (latest-frame polling) |
 | AlertHistory 실제 API 읽기 연동 | Done — Phase 3 |
 | WebSocket 실시간 push | Phase 4 이후 필요성 기반 재검토 |
-| FALL_SUSPECT 낙상 PoC | Done — Phase 3 (opt-in PoC 및 M1/MPS runtime 최적화 완료, S7~8 tuning/diagnostic FAR 1.75/min으로 운영 목표 미달 — 상세는 `docs/fall_evaluation.md` 12절 참고) |
+| FALL_SUSPECT 낙상 PoC | Done — Phase 3 (opt-in PoC 및 M1/MPS runtime 최적화 완료, S7-8 tuning/diagnostic FAR 1.75/min으로 운영 목표 미달 — 상세는 `docs/fall_evaluation.md` 12절 참고) |
 | FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 | Done — Phase 3 (근접·접근 근거 기반 PoC, 정량 정확도 미검증) |
-| 낙상 오탐 개선(hard-negative 재학습, temporal classifier, 외부 데이터) | Phase 4 |
-| ReID / StrongSORT / BoT-SORT | Phase 4 |
+| Phase 4 계약·평가 프로토콜 | Done — Contract v1·`phase4_fall_eval_v1` 동결 |
+| 낙상 오탐 개선(hard-negative 재학습, 외부·촬영 데이터) | Phase 4 E1 |
+| 경량 temporal classifier | E1과 실제 촬영 결과가 조건을 충족할 때만 검토 |
+| BoT-SORT / StrongSORT / ReID | 실제 Event 오류를 유발하는 ID switch가 반복될 때만 검토 |
+| Homography floor-plane Zone | Phase 4 기본 비활성 PoC |
+| Zone Settings 저장·Report 실제 연동 | Phase 4 |
 
 Phase 3에서 공간 안전정책 temporal hysteresis, `FALL_SUSPECT`/`cause` opt-in PoC와
 런타임 통합, AlertHistory 실제 연동을 완료했다. 낙상 오탐 개선(hard-negative
-재학습, temporal classifier, 외부 데이터 검증)과 Subject 9~10 최종 holdout은
-Phase 4로 이관한다.
+재학습과 외부·촬영 데이터 검증)과 Subject 9-10 최종 holdout은 Phase 4로
+이관한다. temporal classifier는 E1 이후에도 같은 문제가 실제 촬영에서
+재현될 때만 조건부로 검토한다.
+
+Phase 4는 계약과 평가 프로토콜을 먼저 동결한 뒤 실제 촬영 데이터로 개선안을
+선택한다. 일정은 [`docs/roadmap.md`](docs/roadmap.md), 구현 계약은
+[`docs/api_contract.md`](docs/api_contract.md), 평가 기준은
+[`docs/fall_evaluation.md`](docs/fall_evaluation.md)를 따른다.
 
 ---
 
@@ -484,6 +501,8 @@ Phase 4로 이관한다.
 | ADR-019 | 공간 안전정책 temporal hysteresis | 경계 진동을 즉시 Event로 확정하지 않고 시간 기반 상태를 사용 |
 | ADR-020 | Track ID 안정화 후 임계값 게이트 추가 중단 | 확인된 Recall 손실을 피하고 다음 정확도 개선을 데이터·모델 문제로 분리 |
 | ADR-021 | opt-in Pose NORMAL 추론 스케줄링 | 불확실 구간은 원래 경로를 유지하면서 안정적 정상 구간의 보조 모델 비용 절감 |
+| ADR-022 | Phase 4 계약·평가 프로토콜 선행 동결 | A/B/C 병렬 구현과 S9-10 holdout 오염 방지 |
+| ADR-023 | Homography 기본 비활성·조건부 채택 | 실제 Zone 정확도 개선과 운영 비용을 측정한 뒤 production 여부 결정 |
 
 ---
 
@@ -508,12 +527,12 @@ Phase 4로 이관한다.
 |------|------|----------------|
 | 원거리·소형 객체 탐지 한계 | 경량 모델 및 촬영 환경 한계 | Phase 4: 라벨 데이터 평가 및 fine-tuning 검토 |
 | 작은 객체 bbox 깜빡임 | 작은 객체 confidence 흔들림 | Phase 3 범위에서 미착수 — Phase 4: 후처리 보강 |
-| track_id 자주 변경 | ReID 없음 | Phase 4: OSNet 기반 ReID 도입 |
-| 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | Phase 4: StrongSORT 또는 ReID 보강 |
+| track_id 자주 변경 | ReID 없음 | 실제 Event 오류를 유발하면 Phase 4에서 BoT-SORT부터 조건부 비교 |
+| 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | handoff로 해결되지 않는 Event 오류가 반복될 때만 ReID 후속 검토 |
 | ENTER/EXIT 경계 흔들림 | zone 경계 foot_point 진동 | Phase 3에서 temporal hysteresis 적용 완료, 실제 카메라 재튜닝은 Phase 4 |
 | 낙상 opt-in 처리량 비용 | PoseTracker와 보조 detector를 함께 실행 | Phase 3에서 Pose NORMAL gate+interval 3으로 MPS 파일 경로 개선 완료, 다른 장치·API E2E 재검증은 Phase 4 |
-| 낙상 오탐(S7~8 tuning/diagnostic FAR 1.75/min, 목표 0.2/min 미달) | 보조 모델이 앉기·무릎 꿇기를 일부 오분류 | Phase 4: hard-negative 재학습, temporal classifier, 외부 데이터 검증 |
-| 알림 조치 상태·리포트·설정 저장 미연동 | 조치 API 미구현, 일부 화면 Mock | Phase 4에서 API·저장 연동 |
+| 낙상 오탐(S7-8 tuning/diagnostic FAR 1.75/min, 목표 0.2/min 미달) | 보조 모델이 앉기·무릎 꿇기를 일부 오분류 | Phase 4 E1 hard-negative·외부 데이터 검증, 동일 문제가 실제 촬영에서도 남을 때만 temporal classifier 검토 |
+| 알림 조치 상태·리포트·설정 저장 미연동 | 조치 API 미구현, 일부 화면 Mock | Phase 4에서 Zone·Report를 연동하고 알림 조치 저장은 후속 범위 유지 |
 > 상세 분석: [`docs/tracking_analysis.md`](docs/tracking_analysis.md)
 
 ---

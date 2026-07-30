@@ -1,0 +1,13 @@
+[
+  {
+    "zone_id": "danger_door",
+    "name": "출입문 위험구역",
+    "type": "polygon",
+    "zone_type": "danger",
+    "points": [[0.1, 0.2], [0.3, 0.2], [0.3, 0.5], [0.1, 0.5]],
+    "rules": {
+      "enter_alert": true,
+      "dwell_threshold_sec": 7
+    }
+  }
+]

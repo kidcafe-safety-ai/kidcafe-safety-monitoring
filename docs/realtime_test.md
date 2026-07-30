@@ -279,7 +279,7 @@ ultralytics: 8.4.56
 
 - 성공
 - 300프레임 전 구간 frame drop 없음
-- steady-state avg ~12.86 FPS (첫 프레임 warm-up 제외 시 ~13 FPS)
+- steady-state avg 약 12.86 FPS (첫 프레임 warm-up 제외 시 약 13 FPS)
 - API 서버 없을 때 WARNING 출력 후 pipeline 계속 진행 — 예외로 죽지 않음
 - zone `playground_bottom_right` 기준으로 ENTER/EXIT 이벤트 정상 발생 및 저장
 
@@ -327,7 +327,7 @@ React:        VITE_API_MODE=api VITE_API_BASE_URL=http://localhost:8000 npm run 
 
 ### 측정 지표 (300프레임 기준)
 
-- FPS: 약 14~16 (steady-state)
+- FPS: 약 14-16 (steady-state)
 - frame drop: 없음
 - 총 이벤트: 24건 (ENTER/EXIT)
 - 감지 track_id: 1, 7
@@ -350,7 +350,7 @@ React:        VITE_API_MODE=api VITE_API_BASE_URL=http://localhost:8000 npm run 
 
 - **Phase 2.0 E2E smoke test 성공**
 - 웹캠 → YOLO26n + ByteTrack → 이벤트 생성 → FastAPI → SQLite → React 전 구간 정상 동작 확인
-- API 전송 포함 시 steady-state ~14 FPS 유지
+- API 전송 포함 시 steady-state 약 14 FPS 유지
 
 ### 이슈
 
@@ -614,7 +614,7 @@ DB:           outputs/kidcafe_events.db
 처리 frame: 300
 이벤트: 4건 (ENTER×2, EXIT×2)
 track_id: 1 (전체 구간 안정)
-FPS: 13.4~22.1 (steady-state ~15 FPS)
+FPS: 13.4-22.1 (steady-state 약 15 FPS)
 API 전송: 정상
 SQLite 저장: 정상
 React 표시: 최근 이벤트 표시 확인
@@ -622,7 +622,7 @@ React 표시: 최근 이벤트 표시 확인
 
 결과: **성공**
 
-### 2단계 — 2700프레임 장시간 안정화 테스트 (~3분)
+### 2단계 — 2700프레임 장시간 안정화 테스트 (약 3분)
 
 ```text
 처리 frame: 2700
@@ -630,7 +630,7 @@ React 표시: 최근 이벤트 표시 확인
   - ENTER: 20건
   - EXIT:  19건
   - DWELL:  1건 (track_id=1, frame 1709)
-FPS: 9.9~22.1 (steady-state ~14-15 FPS)
+FPS: 9.9-22.1 (steady-state 약 14-15 FPS)
 frame read 실패 / 중단: 없음
 API 전송: 정상
 SQLite 저장: 정상 (최근 10건 확인)
@@ -679,7 +679,7 @@ ENTER|34|playground_bottom_right|2336|webcam:0
 FastAPI를 실행 중 종료(Ctrl+C)한 상태에서 Vision AI 600프레임 계속 실행.
 
 ```text
-API 종료 시점: frame ~210
+API 종료 시점: frame 210 전후
 WARNING 발생: 4회 (PUT /status/current 실패)
 pipeline 유지: 정상 (WARNING 후 계속 진행)
 600프레임 정상 완료: 확인
@@ -702,7 +702,7 @@ HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded
 - 화면 밖 이탈 후 재입장 시 ByteTrack이 새 track_id 할당
   → 단명 track_id 다수 발생 (5, 23, 25, 27, 28, 33, 34, 40)
 - zone 경계 근처에서 ENTER/EXIT 빠른 반복 관찰
-  → 대표 사례: track_id=28, frame 1807~1814 (7프레임 내 ENTER/EXIT 3회 반복)
+  → 대표 사례: track_id=28, frame 1807-1814 (7프레임 내 ENTER/EXIT 3회 반복)
 - 원인: zone 경계 근처 foot_point 진동 + bbox 흔들림
 - Phase 3 debounce / hysteresis 고도화 근거로 기록
 ```
@@ -716,7 +716,7 @@ RTSPSource 구조는 코드베이스에 존재하며, 장비 확보 후 Phase 3 
 
 ```text
 [x] 300프레임 smoke test 성공
-[x] 2700프레임 장시간 테스트 성공 (~3분)
+[x] 2700프레임 장시간 테스트 성공 (약 3분)
 [x] FastAPI POST /events 수신 확인
 [x] PUT /status/current 수신 확인
 [x] SQLite 저장 확인
@@ -989,7 +989,7 @@ docker compose up --build -d
 | --- | --- |
 | processed_frames | 300 |
 | dropped_frames | 0 |
-| avg_fps | 약 11~15 FPS |
+| avg_fps | 약 11-15 FPS |
 | events | 9건 (ENTER 5, EXIT 4) |
 | pipeline 종료 코드 | 0 (정상) |
 
@@ -1143,15 +1143,15 @@ Dashboard 알림 기록에 `외부 접촉 의심 · Track #11`이 표시됐다. 
 
 Signal Cache 재생으로 설정·상태머신 회귀 여부를 확인했다.
 
-| 지표 | Development S1~6 | S7~8 tuning/diagnostic |
+| 지표 | Development S1-6 | S7-8 tuning/diagnostic |
 | --- | ---: | ---: |
 | Recall | 83.3% | 100% |
 | timely Recall | 66.7% | 90% |
 | False alarm/min | 0.0 | 2.34 |
 | 중복 Event 영상 | 0 | 0 |
 
-S7~8은 반복 진단과 설정 선택에 사용했으므로 최종 Validation으로 해석하지
-않는다. Subject 9~10 holdout은 열람하거나 실행하지 않았다.
+S7-8은 반복 진단과 설정 선택에 사용했으므로 최종 Validation으로 해석하지
+않는다. Subject 9-10 holdout은 열람하거나 실행하지 않았다.
 
 ### 능동 인원 성능과 API 장애
 
@@ -1198,15 +1198,15 @@ detector를 생략하고, 불확실·하강·비정상 자세이면 즉시 fallb
 
 ### 회귀 결과
 
-| 지표 | Development S1~6 | S7~8 tuning/diagnostic |
+| 지표 | Development S1-6 | S7-8 tuning/diagnostic |
 | --- | ---: | ---: |
 | Recall | 83.3% | 100% |
 | timely Recall | 66.7% | 90% |
 | False alarm/min | 0.0 | 1.75 |
 | 중복 Event 영상 | 0 | 0 |
 
-기존 S7~8 FAR 2.34/min 대비 약 25% 감소했지만 운영 목표 0.2/min은 미달이다.
-Subject 9~10 holdout은 사용하지 않았다.
+기존 S7-8 FAR 2.34/min 대비 약 25% 감소했지만 운영 목표 0.2/min은 미달이다.
+Subject 9-10 holdout은 사용하지 않았다.
 
 ### MPS 측정
 
@@ -1263,6 +1263,6 @@ Phase 3 종료 전 최종 확인으로, 종료 문서 정리 직후 병합 전 �
   Live Frame, AlertHistory 실 API 연동, API 장애 중 추론 지속 및 실패
   Event 보존, M1/MPS 낙상 runtime 최적화(7.3% FPS 하락) — 모두 통합·회귀
   확인 완료
-- 낙상 오탐(FAR) 개선, 실제 접촉 원인 정확도, Subject 9~10 holdout,
+- 낙상 오탐(FAR) 개선, 실제 접촉 원인 정확도, Subject 9-10 holdout,
   외부 데이터 재학습은 이번 게이트에 포함하지 않고 Phase 4로 이관한다
 - 위 결과를 근거로 Phase 3 종료 조건을 충족한 것으로 판정한다

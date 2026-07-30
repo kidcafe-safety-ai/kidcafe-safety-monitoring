@@ -1,0 +1,21 @@
+{
+  "status": "success",
+  "data": {
+    "version": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "updated_at": "2026-08-07T01:40:00Z",
+    "zones": [
+      {
+        "zone_id": "danger_door",
+        "zone_name": "출입문 위험구역",
+        "type": "polygon",
+        "zone_type": "danger",
+        "points": [[0.1, 0.2], [0.3, 0.2], [0.3, 0.5], [0.1, 0.5]],
+        "rules": {
+          "enter_alert": true,
+          "dwell_threshold_sec": 7
+        }
+      }
+    ]
+  },
+  "message": null
+}

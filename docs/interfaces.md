@@ -20,7 +20,7 @@ class Track:
     track_id: int                # 사람 고유 ID
     bbox: List[float]            # [x1, y1, x2, y2] pixel 좌표
     foot_point: List[float]      # [cx, y2] pixel 좌표
-    confidence: float            # 0.0~1.0
+    confidence: float            # 0.0-1.0
 
 @dataclass
 class TrackingResult:
@@ -166,7 +166,7 @@ class Event:
 ### 좌표 기준
 
 - `points`는 **정규화 좌표**를 사용한다.
-- 범위: `0.0 ~ 1.0`
+- 범위: `0.0-1.0`
 - `[0.0, 0.0]` = 영상 왼쪽 위
 - `[1.0, 1.0]` = 영상 오른쪽 아래
 
@@ -175,7 +175,7 @@ class Event:
 - `zone_id`, `name`, `type`, `points` 필수
 - `type`은 현재 MVP에서 `polygon` 사용
 - polygon은 최소 3개 이상의 점 필요
-- 모든 좌표는 `0.0 ~ 1.0` 범위여야 함
+- 모든 좌표는 `0.0-1.0` 범위여야 함
 - 잘못된 형식이면 `ValueError` 발생
 
 ---
@@ -518,7 +518,7 @@ RTSPSource
 ## 9. Phase 3 공용 계약
 
 > 상태: EventType·ZoneType·EventCause·DB migration·Frontend 타입·공간 안전정책 반영 완료 / FALL_SUSPECT opt-in PoC 및 `cause` 외부 접촉 원인 후보 추정 구현 완료(정량 정확도 미검증)
-> 기준선: v0.2.5-dashboard
+> 기준선: v0.3.0-safety
 
 ### ZoneType 계약
 
@@ -580,7 +580,7 @@ ZoneType = Literal["play", "exit", "restricted", "danger"]
 | 필드 | 의미 |
 |---|---|
 | `confidence` | detector/tracker confidence (기존) |
-| `event_confidence` | 낙상 판정 점수 (0.0~1.0 또는 null) |
+| `event_confidence` | 낙상 판정 점수 (0.0-1.0 또는 null) |
 | `cause.score` | 외부 접촉 원인 후보 휴리스틱 점수 |
 
 - 원인 근거 부족 시 `cause: null`
@@ -594,13 +594,13 @@ ZoneType = Literal["play", "exit", "restricted", "danger"]
 ```text
 type: "NEARBY_TRACK"
 track_id: 0 이상의 정수
-score: 0.0~1.0
+score: 0.0-1.0
 evidence.min_distance_norm: 0 이상의 실수
 evidence.closing_speed_norm: 0 이상의 실수
 evidence.time_to_fall_sec: 0 이상의 실수
 ```
 
-- `event_confidence`: `0.0~1.0` 또는 `null`
+- `event_confidence`: `0.0-1.0` 또는 `null`
 - `cause`: 위 필드를 모두 포함한 전체 객체 또는 `null`
 
 **낙상 PoC 상태 흐름**
@@ -647,7 +647,7 @@ Frontend SafetyEvent.severity:    LOW | MEDIUM | HIGH       (Phase 3 신규, 파
 | APPROACH_EXIT (Stretch, 구현 시) | MEDIUM |
 
 - Severity는 `event_type` 기준으로 결정하며 `cause` 유무로 바뀌지 않음
-- Phase 3에서는 Frontend 매핑으로 처리하고, API·DB 저장은 Phase 4에서 재검토
+- Phase 4에서도 Frontend 파생 표시값을 유지하며 API·DB 필드로 추가하지 않음
 
 **직렬화 형식**
 
@@ -699,7 +699,169 @@ class Event:
 
 ---
 
-## 10. 변경 절차
+## 10. Phase 4 계약 경계
+
+Phase 4는 기존 `Event`, `EventCause`, `TrackingResult` runtime 구조를 유지한다.
+새로운 촬영·평가 artifact는 `docs/data_sources.md`, Zone 설정은
+`docs/api_contract.md`, 평가 방식은 `docs/fall_evaluation.md`를 기준으로 한다.
+
+### 유지되는 runtime 인터페이스
+
+- Event `foot_point`는 pixel 좌표를 유지한다.
+- Homography `floor_point`는 내부 Zone 판정과 평가에만 사용한다.
+- 독립 `COLLISION_SUSPECT`를 추가하지 않는다.
+- cause는 `null` 또는 기존 `NEARBY_TRACK` 구조를 유지한다.
+- Severity는 EventType 기반 Frontend 파생값이다.
+
+### Homography calibration
+
+Runtime 파일:
+
+`configs/camera_calibration/<camera_id>.json`
+
+필수 필드:
+
+```text
+schema_version
+calibration_version
+enabled
+camera_id
+frame_size.width
+frame_size.height
+coordinate_unit
+origin_description
+image_points_px
+floor_points
+```
+
+- `schema_version=1`, `coordinate_unit=meter`, 기본 `enabled=false`다.
+- image point와 floor point 개수는 같고 최소 4개다.
+- 모든 좌표는 finite·고유하며 image point는 frame 안에 있어야 한다.
+- fit point는 image·floor 각각 동일 직선 위에만 놓일 수 없다.
+- 변환은 fit point 전체와
+  `cv2.findHomography(image_points, floor_points, method=0)`을 사용한다.
+- 행렬이 finite가 아니거나 역행렬이 없으면 시작 오류다.
+- camera ID·해상도가 다르면 fail-fast하고 기존 방식으로 fallback하지 않는다.
+- holdout point는 runtime config에 넣지 않고 `calibration_points.csv`에서만
+  관리한다.
+
+Floor Zone PoC 파일:
+
+`data/zones/floor_<camera_id>.json`
+
+```text
+schema_version
+camera_id
+coordinate_space=floor_meters
+zones[].zone_id
+zones[].zone_name
+zones[].zone_type
+zones[].type=polygon
+zones[].points
+zones[].rules
+```
+
+Homography가 채택 기준을 모두 통과한 경우에만 production 계약 확장을 별도
+PR로 진행한다. 기존 Zone Settings는 image-normalized polygon만 편집한다.
+
+### 신규 평가 artifact
+
+```text
+recordings_manifest.csv
+fall_cause_annotations.csv
+zone_intervals.csv
+calibration_points.csv
+track_actor_segments.csv
+track_id_switches.csv
+event_attribution_review.csv
+```
+
+- 계약 식별자: `phase4_contract_v1`
+- CAUCAFall annotation: `caucafall_annotation_v2`
+- 직접 촬영 낙상·Cause annotation: `phase4_fall_cause_v1`
+- Track·Actor review: `phase4_track_actor_review_v1`
+- annotation frame 번호는 0부터 시작한다.
+- Track·Actor mapping은 ground truth가 아니라 run별 평가 산출물이다.
+- 하나의 Track segment는 양 끝 frame을 모두 포함한다.
+- ID switch는 전환마다 별도 row로 기록한다.
+- Cause 공식 지표는 reviewed ground truth에 매칭된 대표 Event만 사용한다.
+- 분모가 0인 Cause 지표는 `null/not_evaluable`이다.
+
+`track_actor_segments.csv`:
+
+```text
+run_id,video_id,start_frame,end_frame,track_id,actor_id,review_status,notes
+```
+
+`track_id_switches.csv`:
+
+```text
+run_id,switch_id,video_id,actor_id,from_track_id,to_track_id,
+switch_frame,review_status,notes
+```
+
+`event_attribution_review.csv`:
+
+```text
+run_id,video_id,event_frame,victim_track_id,victim_actor_id,
+predicted_cause_track_id,predicted_cause_actor_id,related_switch_ids,
+id_switch_relation,event_error_type,review_status,notes
+```
+
+- `switch_frame`은 새 Track ID가 처음 관측된 frame이다.
+- `related_switch_ids`는 여러 값이면 pipe로 연결한다.
+- `id_switch_relation`: `none | associated | caused`
+- `none`: Event 오류가 없거나 ID switch와 관련이 없음
+- `associated`: 관련 구간에 ID switch와 Event 오류가 모두 있지만 인과 미확정
+- `caused`: alias 연결 재생 또는 state diagnostic으로 Event 오류가 해소됨
+- `event_error_type`: `none | missed_fall | late_fall | duplicate_fall |
+  victim_mismatch | missed_cause | false_attribution`
+- missed fall처럼 Event가 없으면 Event·Track·Cause 필드를 비워둘 수 있다.
+
+### Homography 평가
+
+- 위치 오차는 예측·실측 floor point 사이 meter 단위 Euclidean distance다.
+- 평균은 reviewed holdout 전체 산술평균이다.
+- p95는 `numpy.percentile(errors, 95, method="linear")`다.
+- Zone 정확도 분모는 판정 가능한 reviewed holdout 관측 전체다.
+- ENTER·EXIT 오류는 reviewed interval 대비 missed·false·extra Event 합이다.
+- 기존 방식과 Homography 방식은 동일 frame·Track·foot point 입력을 사용한다.
+- 절대 평균·p95 기준은 8월 7일 실측 후 holdout 결과를 보기 전에 동결한다.
+- Zone 오류 30% 이상 감소 또는 정확도 5%p 이상 개선, Event 오류 30% 이상
+  감소, 추가 비용 1ms/frame 이하, FPS 하락 5% 이하를 모두 만족해야 한다.
+
+Acceptance 파일:
+
+`data/annotations/phase4/homography_acceptance_<camera_id>.json`
+
+```text
+protocol_version=homography_acceptance_v1
+camera_id
+calibration_version
+max_mean_error_m
+max_p95_error_m
+min_zone_error_reduction_ratio=0.30
+min_zone_accuracy_gain_percentage_point=5.0
+min_event_error_reduction_ratio=0.30
+max_added_latency_ms_per_frame=1.0
+max_fps_drop_ratio=0.05
+max_calibration_minutes=15
+frozen_at
+review_status
+```
+
+Acceptance 파일은 holdout 계산 전에 `review_status=reviewed`로 동결한다.
+
+### 계약 동결
+
+- 공식 낙상 평가는 `phase4_fall_eval_v1`을 사용한다.
+- Subject 7-8은 tuning/diagnostic이며 학습하지 않는다.
+- Subject 9-10은 모델·tracker·config·평가 규칙 동결 후 한 번만 평가한다.
+- 계약 변경은 문서·fixture·테스트와 함께 version을 올린다.
+
+---
+
+## 11. 변경 절차
 
 1. Discord/카톡에서 변경 아이디어 공유
 2. `types.py`와 `interfaces.md` 동시 수정

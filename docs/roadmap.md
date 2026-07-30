@@ -1,6 +1,6 @@
 # KidCafe Safety AI — 개발 로드맵
 
-> 최종 수정: 2026-07-27
+> 최종 수정: 2026-07-29
 > MVP baseline: `v0.1.0-mvp`
 > 본 문서는 MVP 1차 종료 이후 최종 제출까지의 상위 개발 로드맵이다.
 > 한이음 일정은 [2026년 창의도전형 공고](https://www.hanium.or.kr/comm/noticeView.do?ntcAtclSn=63940) 기준으로 갱신했다. 세부 일정(주차별 작업·보고서 내부 마감 등)은 팀 오피스 기준이며 공식 공고와 별개로 운영한다.
@@ -11,19 +11,19 @@
 
 | 기간 | 단계 | 핵심 목표 |
 | --- | --- | --- |
-| ~5/31 | MVP 1차 종료 | 파일 영상 기반 MVP 기준선 고정 |
-| 6/1~6/8 | Phase 1.5 | 서비스 구조 전환 준비 — 완료 |
-| 6/8~6/21 | Phase 2 | 실시간 입력 연결 — 완료 |
-| 6/22~6/30 | Phase 2.5 | 실시간 운영 대시보드 v1 안정화 — 완료 |
+| 5/31까지 | MVP 1차 종료 | 파일 영상 기반 MVP 기준선 고정 |
+| 6/1-6/8 | Phase 1.5 | 서비스 구조 전환 준비 — 완료 |
+| 6/8-6/21 | Phase 2 | 실시간 입력 연결 — 완료 |
+| 6/22-6/30 | Phase 2.5 | 실시간 운영 대시보드 v1 안정화 — 완료 |
 | 7월 | Phase 3 — **완료(7/27)** | 안전 감지 고도화 |
-| 8월 | Phase 4 | 모델·추적 고도화 및 1차 공모전 준비 |
+| 7/29-8/29 | Phase 4 | 실제 데이터 검증·선택 개선·1차 공모전 준비 |
 | 9월 | Phase 5 | 성과 정리 및 2차 평가 준비 |
-| 10월~ | Final | 최종 제출·시연·발표 |
+| 10월 이후 | Final | 최종 제출·시연·발표 |
 | 11월 | Post Final | 최종 평가 및 시상 대응 |
 
 ---
 
-## ~5/31 — MVP 1차 종료
+## 5/31까지 — MVP 1차 종료
 
 **목표**: 파일 영상 기반 MVP를 공식 기준선으로 고정한다.
 
@@ -46,7 +46,7 @@
 
 ---
 
-## 6/1~6/8 — Phase 1.5: 서비스 구조 전환 준비 — 완료
+## 6/1-6/8 — Phase 1.5: 서비스 구조 전환 준비 — 완료
 
 **목표**: MVP 1차를 실시간 서비스 구조로 확장하기 위한 기반을 만든다.
 
@@ -70,7 +70,7 @@
 
 ---
 
-## 6/8~6/21 — Phase 2: 실시간 입력 연결 — 완료
+## 6/8-6/21 — Phase 2: 실시간 입력 연결 — 완료
 
 **목표**: 저장 영상 기반 구조를 웹캠 / RTSP / IP 카메라 기반 실시간 구조로 전환한다.
 
@@ -113,7 +113,7 @@
 
 ---
 
-## 6/22~6/30 — Phase 2.5: 실시간 운영 대시보드 안정화 — 완료
+## 6/22-6/30 — Phase 2.5: 실시간 운영 대시보드 안정화 — 완료
 
 **목표**: Phase 2.0에서 구현한 실시간 연결 구조를 기반으로, 중간평가 및 시연 가능한 실시간 운영 대시보드 v1을 완성한다.
 
@@ -140,7 +140,7 @@ Phase 3   = 안전 감지 기능을 고도화한다
 **A — Vision AI / 실시간 입력 안정화**
 
 ```text
-[x] 내장 웹캠 3~5분 E2E 테스트 (300프레임 / 2700프레임)
+[x] 내장 웹캠 3-5분 E2E 테스트 (300프레임 / 2700프레임)
 [x] API 서버 미기동 / 재기동 상황 테스트
 [x] FPS / latency / frame drop 측정
 [x] ENTER / EXIT 이벤트 흔들림 기록
@@ -168,7 +168,7 @@ Phase 3   = 안전 감지 기능을 고도화한다
 [x] KPI 문구 정확화
 [x] 이벤트 기록 / 통계 화면 완성도 개선
 [x] USB C920 웹캠 연결 확인 (camera index 0 / 1)
-[x] USB 웹캠 반복 E2E 검증 (Windows, 단일 3~5분 실행 대신 반복 시나리오로 완료 인정)
+[x] USB 웹캠 반복 E2E 검증 (Windows, 단일 3-5분 실행 대신 반복 시나리오로 완료 인정)
     - 300프레임 API/SQLite E2E
     - 180프레임 메인 pipeline
     - 60프레임 API 장애 테스트
@@ -189,7 +189,7 @@ Phase 3   = 안전 감지 기능을 고도화한다
 ### Phase 2.5 완료 기준
 
 ```text
-1. 내장 웹캠 기반 end-to-end 흐름이 3~5분 이상 안정적으로 동작한다.
+1. 내장 웹캠 기반 end-to-end 흐름이 3-5분 이상 안정적으로 동작한다.
 2. USB 웹캠 환경에서도 동일 흐름을 테스트한다.
 3. 이벤트가 FastAPI와 SQLite를 거쳐 React에 표시된다.
 4. CurrentStatus가 React KPI와 zone 상태에 반영된다.
@@ -259,7 +259,7 @@ Docker는 배포 목적이 아니라, 개발 / 시연 실행 환경을 통일하
 - [x] React 운영 대시보드 v1
 - [x] `docs/realtime_test.md` Phase 2.5 테스트 기록
 - [x] Docker Compose 구현 및 Windows(USB C920) / macOS(내장 웹캠) 검증 완료
-- [x] 중간평가 보고서 (마감 2026-07-14 18:00, Phase 3 7/7~7/14 일정으로 이관 — Phase 2.5 종료 blocker 아님, 이후 제출 및 B/C 승인 완료)
+- [x] 중간평가 보고서 (마감 2026-07-14 18:00, Phase 3 7/7-7/14 일정으로 이관 — Phase 2.5 종료 blocker 아님, 이후 제출 및 B/C 승인 완료)
 
 ### Phase 3 인계 기술 부채
 
@@ -281,12 +281,12 @@ Docker는 배포 목적이 아니라, 개발 / 시연 실행 환경을 통일하
 ### 일정
 
 ```text
-7/7~7/10   Live View — Live Frame latest-only worker 최소 구현 (E2E 우선)
-7/11~7/14  중간평가 보고서
-7/15~7/21  핵심 기능 — 공간정책·FALL_SUSPECT·이벤트 확장 (AsyncEventDispatcher의 Event FIFO queue·Status latest-only 확장은 완료)
-7/22~7/27  통합 (M1/MPS 낙상 runtime 최적화 포함, 계획(7/28)보다 하루 앞당김)
+7/7-7/10   Live View — Live Frame latest-only worker 최소 구현 (E2E 우선)
+7/11-7/14  중간평가 보고서
+7/15-7/21  핵심 기능 — 공간정책·FALL_SUSPECT·이벤트 확장 (AsyncEventDispatcher의 Event FIFO queue·Status latest-only 확장은 완료)
+7/22-7/27  통합 (M1/MPS 낙상 runtime 최적화 포함, 계획(7/28)보다 하루 앞당김)
 7/27       Phase 3 종료 — 낙상 오탐 개선(hard-negative 재학습, temporal
-           classifier, 외부 데이터)과 Subject 9~10 최종 holdout은 Phase 4로 이관
+           classifier, 외부 데이터)과 Subject 9-10 최종 holdout은 Phase 4로 이관
 ```
 
 ### 역할
@@ -310,18 +310,18 @@ C(정현수): Live UI·신규 이벤트/cause·AlertHistory·화면 성능
 > 실제 원인 후보 정확도와 최종 holdout은 Phase 4로 이관한다.
 
 > A runtime 최적화 상태 (2026-07-22): 별도 opt-in Pose NORMAL gate와 보조
-> 모델 interval `3` 프로파일은 Development·S7~8 회귀 기준을 유지했다.
+> 모델 interval `3` 프로파일은 Development·S7-8 회귀 기준을 유지했다.
 > M1/MPS 단일 파일 OFF/ON 각 3회 중앙값 기준 FPS 하락률 7.3%로 목표를
-> 통과했고, S7~8 진단 FAR는 2.34→1.75/min으로 감소했다. API 포함 반복 측정,
+> 통과했고, S7-8 진단 FAR는 2.34→1.75/min으로 감소했다. API 포함 반복 측정,
 > 다른 장치, 운영 FAR 개선은 Phase 4 후속으로 남긴다.
 
 > Phase 3 종료 범위 확정 (2026-07-27): Phase 3는 현재 병합된 범위(Annotation
 > V2·평가 프로토콜, Signal Cache·Tracker Sweep, Candidate/Cooldown Handoff,
 > 원인 후보 추정, Pose gate + interval 3 runtime 최적화, 통합 E2E·성능 측정)로
-> 종료한다. 7/22~7/27 잔여 일정에는 Phase 3 추가 성과로 M1/MPS 낙상 runtime
+> 종료한다. 7/22-7/27 잔여 일정에는 Phase 3 추가 성과로 M1/MPS 낙상 runtime
 > 최적화를 수행했다. 데이터 추가, hard-negative 재학습, temporal classifier
 > 비교 등 정확도 개선 실험은 Phase 3 종료 게이트에 포함하지 않으며 Phase 4
-> 모델 고도화 범위(A 역할 첫 번째 작업 묶음)로 이관한다. Subject 9~10 holdout도
+> 모델 고도화 범위(A 역할 첫 번째 작업 묶음)로 이관한다. Subject 9-10 holdout도
 > Phase 4 최종 평가로 이관한다.
 
 ### 우선순위
@@ -341,11 +341,11 @@ P2: Zone Settings 계약, 인증/인가 미니 ADR,
 
 ```text
 - Live View E2E (frame 제공 → API → React 표시) 확인 — 완료
-- FALL_SUSPECT opt-in PoC 구현 및 Development/Subject 7~8 진단 결과 기록
+- FALL_SUSPECT opt-in PoC 구현 및 Development/Subject 7-8 진단 결과 기록
   (`cause` 원인 후보 추정 완료, 정량 정확도는 Phase 4) — 완료
 - zone_type 기반 ENTER_RESTRICTED / DANGER_ZONE_DWELL 이벤트 정상 발생 — 완료
 - API 장애 중 추론 루프 유지 — 완료 (실패 Event는 실행별 JSONL에 보존)
-- false positive·감지 지연·FPS 결과 기록 — 완료 (S7~8 FAR 1.75/min, 운영 목표
+- false positive·감지 지연·FPS 결과 기록 — 완료 (S7-8 FAR 1.75/min, 운영 목표
   0.2/min 미달은 Phase 4 이관, FPS 하락률 7.3%로 목표 충족)
 - flake8·pytest·React build·GitHub Actions 통과 — 완료
 - Zone Settings 계약·인증/인가 미니 ADR 확정 — 완료 (저장 API 구현은 Phase 4,
@@ -414,7 +414,7 @@ per-file-ignores =
 Phase 3 Open·계약 문서 PR
 → CI 기준선 PR
 → Live View A→B→C 순차 통합
-→ 7/11~7/14 보고서 제출
+→ 7/11-7/14 보고서 제출
 → EventType·ZoneType·EventCause 공용 코드 PR
 → A/B/C 역할별 병렬 개발
 → integration E2E
@@ -447,49 +447,69 @@ Phase 3 Open·계약 문서 PR
 ### 비고
 
 - Phase 3은 계획(7/28)보다 하루 빠른 7/27에 종료했다.
-- 8월에는 ReID, cross-camera(후순위), 모델 비교, 공모전 1차 제출 준비가 겹치므로 7월 중순까지 공간 안전정책과 FALL_SUSPECT opt-in PoC, 외부 접촉 원인 후보 추정까지 구현을 마쳤다.
+- Phase 4에는 실제 촬영 평가, 선택적 낙상 개선, Homography, Zone·Report 연동과
+  공모전 제출 준비가 겹치므로 Phase 3에서 공간 안전정책과 FALL_SUSPECT
+  opt-in PoC, 외부 접촉 원인 후보 추정까지 구현을 마쳤다.
 
 ### 산출물
 
 - 공간 안전정책 v1
-- FALL_SUSPECT opt-in PoC 및 Development/Subject 7~8 진단 기록
+- FALL_SUSPECT opt-in PoC 및 Development/Subject 7-8 진단 기록
 - FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 완료 (정량 정확도 평가는 Phase 4)
 - Live View latest-frame polling E2E
 - 실험 데이터 기준
 
 ---
 
-## 8월 — Phase 4: 모델·추적 고도화 및 1차 공모전 준비
+## 7월 29일-8월 29일 — Phase 4: 실제 데이터 검증 및 공모전 준비
 
-**목표**: 모델·추적 일반화, 외부·촬영 데이터 기반 추가 재학습, ReID를 검증하고 1차 공모전 제출 가능한 결과물을 만든다.
+**목표**: Phase 3의 낙상·원인 후보·공간 안전정책을 실제 촬영 데이터로
+검증하고, 조건을 충족한 개선만 production에 반영한 뒤 공모전 제출물을 만든다.
+
+### 주요 일정
+
+- 7/29-7/30: 계약·`phase4_fall_eval_v1` 동결
+- 7/31-8/6: E1 hard-negative·Homography·Zone·Report 병렬 개발
+- 8/7: 실제 테스트 영상 공동 촬영
+- 8/8-8/12: 라벨링·기준선·cause·tracking·Homography 분석
+- 8/13-8/16: 조건을 충족한 개선만 선택 적용
+- 8/17-8/20: 모델·API·UI 동결과 최종 E2E
+- 8/21-8/28: 제출물 제작·검수, 8/28 내부 제출
+- 8/29: 공식 일정 확인과 제출 상태 대응
 
 ### 핵심 작업
 
-- ReID 적용 여부 최종 판단
-- 단일 카메라 ReID 우선 개발
-- StrongSORT / BoT-SORT 비교
-- cross-camera 확장 가능성 검토
-- YOLO 모델 비교
-- 외부·촬영 데이터 기반 추가 재학습 검증 (PoC 보조 모델 학습은 Phase 3 완료)
-- 키즈카페 / 아동 유사 데이터 라벨링
-- 모델별 성능표 정리
-- ID switch / FPS / event accuracy 실험 정리
-- 시연 동영상 준비
-- 개발보고서 / 제작설계서 초안 준비
-- 논문대회 일정 및 양식 확인
+- 외부·촬영 데이터 기반 낙상 E1 개선 실험
+- 실제 촬영 timely Recall·FAR·cause·ID switch 정량 평가
+- Homography floor-plane Zone 기본 비활성 PoC
+- Zone Settings 실제 저장·version 충돌 처리
+- ReportPage 기간별 실제 Event 연동
+- Recent Event UX와 API mode 회귀
+- Subject 9-10 최종 holdout 1회 평가
+- 실제 영상 A/B/C E2E
+- 개발보고서·제작설계서·시연 영상 준비
 
-### 한이음 일정 참고
+경량 temporal classifier는 E1 이후에도 같은 오탐이 실제 촬영에서 재현될 때만
+검토한다. BoT-SORT는 ID switch가 실제 missed·duplicate·cause 오류를 반복해서
+유발할 때만 비교하며, StrongSORT·ReID는 그 이후 후속 범위다. Cross-camera
+ReID와 YOLO 모델 비교는 Phase 4 필수 범위가 아니다.
 
-- 1차 공모전 신청기간: 8/1 ~ 8/29 16시
-- 제출물: 개발보고서, 제작설계서, 시연 동영상
-- 1차 평가는 단순 접수가 아니라 시상 후보 여부를 결정하는 핵심 단계다.
+### 일정 기준
+
+2026년 공식 공고는 프로젝트 수행 기간을 4월 1일-10월 30일로 안내하고,
+공모전 상세 일정은 추후 별도 공지한다고 명시한다. 따라서 8월 28일과 29일은
+각각 팀 내부 제출일과 잠정 관리일이며 공식 마감으로 표현하지 않는다.
 
 ### 산출물
 
-- 1차 공모전 제출물
-- 시연 동영상
-- 모델 / 추적 성능 비교표
-- 실험 결과 문서
+- `Phase 4 Contract v1`과 평가 fixture
+- 낙상·cause·tracking·Homography 결과표
+- 실제 촬영 manifest·annotation·재현 명령
+- Zone Settings·Report 실제 연동
+- 공모전 개발보고서·제작설계서·시연 영상
+
+구현 계약은 `docs/api_contract.md`, `docs/interfaces.md`,
+`docs/fall_evaluation.md`, `docs/data_sources.md`에 책임별로 기록한다.
 
 ---
 
@@ -511,7 +531,7 @@ Phase 3 Open·계약 문서 PR
 
 ### 한이음 일정 참고
 
-- 2차 평가 신청기간: 9/11 ~ 10/14
+- 2차 평가 신청기간: 9/11-10/14
 - 제출물: 개발보고서, 제작설계서 최종본, GitHub
 - 평가 방식: 실시간 현장 시연 및 PT 발표
 - 2차 평가에서는 기능 수보다 실시간 시연 안정성이 중요하다.
@@ -525,7 +545,7 @@ Phase 3 Open·계약 문서 PR
 
 ---
 
-## 10월~ — Final: 제출·시연
+## 10월 이후 — Final: 제출·시연
 
 **목표**: 최종 제출과 발표, 외부 제출을 안정적으로 마무리한다.
 
@@ -575,9 +595,12 @@ Phase 3 Open·계약 문서 PR
 
 RTSP / IP 카메라 연결은 네트워크, 코덱, 지연시간, 끊김 문제가 발생할 수 있다. 웹캠 입력을 먼저 안정화한 뒤 RTSP / IP 카메라로 확장한다.
 
-### ReID / Cross-Camera 범위 조절
+### Tracker / ReID 범위 조절
 
-ReID와 cross-camera는 구현 난이도가 높으므로 8월 중순까지 PoC 결과를 보고 범위를 조절한다. 최소 목표는 단일 카메라 ReID 또는 ID switch 감소 실험으로 둔다.
+ByteTrack과 기존 handoff를 기본으로 유지한다. 실제 촬영에서 ID switch가 Event
+오류를 유발한 경우에만 BoT-SORT를 비교한다. StrongSORT·ReID는 BoT-SORT
+이후에도 오류가 남을 때 후속 검토하며, cross-camera ReID는 Phase 4 범위에서
+제외한다.
 
 ### 시연 안정성 우선
 

@@ -1,0 +1,3 @@
+run_id,video_id,event_frame,victim_track_id,victim_actor_id,predicted_cause_track_id,predicted_cause_actor_id,related_switch_ids,id_switch_relation,event_error_type,review_status,notes
+run_fixture,P4_S01_A01_fall_backward_01_cam01,87,3,A01,,,,none,none,reviewed,cause null 정답
+run_fixture,P4_S01_A01_fall_backward_01_cam01,150,7,A01,,,switch_001,caused,duplicate_fall,reviewed,alias 재생으로 중복 해소
