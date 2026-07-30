@@ -81,7 +81,7 @@ def test_event_query_fixture_uses_aware_half_open_range_and_valid_filters():
     assert 1 <= payload["limit"] <= 500
     assert payload["offset"] >= 0
     assert payload["event_type"] == "FALL_SUSPECT"
-    assert payload["zone_id"]
+    assert payload["zone_id"] == "__global__"
 
 
 def test_event_page_fixtures_keep_pagination_envelope_and_stable_order():
@@ -91,6 +91,10 @@ def test_event_page_fixtures_keep_pagination_envelope_and_stable_order():
     data = payload["data"]
     assert data["count"] == len(data["items"])
     assert data["total"] >= data["count"]
+    fall_event = next(
+        item for item in data["items"] if item["event_type"] == "FALL_SUSPECT"
+    )
+    assert fall_event["zone_id"] == "__global__"
     sort_keys = [
         (item["created_at"], item["id"])
         for item in data["items"]
@@ -116,6 +120,7 @@ def test_zone_get_and_put_fixtures_define_versioned_full_replacement():
     empty_payload = _load_json("zones_get_empty.json")
     put_request = _load_json("zones_put_request.json")
     put_payload = _load_json("zones_put_success.json")
+    runtime_payload = _load_json("zones_runtime_saved.json")
 
     for payload in (get_payload, empty_payload, put_payload):
         _assert_success_envelope(payload)
@@ -126,6 +131,16 @@ def test_zone_get_and_put_fixtures_define_versioned_full_replacement():
     assert put_request["zones"] == put_payload["data"]["zones"]
     assert put_payload["data"]["version"] != put_request["expected_version"]
     assert empty_payload["data"]["zones"] == []
+    expected_runtime_zones = [
+        {
+            **zone,
+            "name": zone["zone_name"],
+        }
+        for zone in put_request["zones"]
+    ]
+    for zone in expected_runtime_zones:
+        del zone["zone_name"]
+    assert runtime_payload == expected_runtime_zones
 
     for zone in put_request["zones"]:
         assert zone["type"] == "polygon"
@@ -197,6 +212,8 @@ def test_homography_acceptance_fixture_is_pending_before_holdout():
     assert payload["min_event_error_reduction_ratio"] == 0.30
     assert payload["max_added_latency_ms_per_frame"] == 1.0
     assert payload["max_fps_drop_ratio"] == 0.05
+    assert payload["min_zone_accuracy_gain_percentage_point"] == 5.0
+    assert payload["max_calibration_minutes"] == 15
 
 
 def test_recording_manifest_fixture_uses_deidentified_contract():
