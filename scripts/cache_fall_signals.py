@@ -164,6 +164,8 @@ def main() -> None:
         "conf": args.conf,
         "tracker_config": "bytetrack.yaml",
         "tracker_config_sha256": cache.sha256_file("bytetrack.yaml"),
+        "requested_device": args.device,
+        "resolved_device": getattr(tracker, "_device", args.device),
     }
 
     auxiliary_model = None
@@ -179,6 +181,10 @@ def main() -> None:
             "model_path": args.fall_model_path,
             "model_sha256": cache.sha256_file(args.fall_model_path),
             "conf": args.fall_model_conf,
+            "requested_device": args.fall_model_device,
+            "resolved_device": getattr(
+                auxiliary_model, "_device", args.fall_model_device
+            ),
         }
 
     manifest = cache.build_manifest(

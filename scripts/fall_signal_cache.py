@@ -111,9 +111,11 @@ def write_video_cache(
     """캐시 파일 하나(영상 하나)를 쓴다.
 
     tracker_meta 예시: {"model_path", "model_sha256", "conf", "tracker_config",
-        "tracker_config_sha256"(파일로 확인 못 하면 None), "tracker_type"}.
+        "tracker_config_sha256"(파일로 확인 못 하면 None), "tracker_type",
+        "requested_device", "resolved_device"}.
     auxiliary_meta: 보조 모델을 안 썼으면 None, 썼으면
-        {"model_path", "model_sha256", "conf"}.
+        {"model_path", "model_sha256", "conf", "requested_device",
+        "resolved_device"}.
     video_path: 원본 영상의 resolve()된 경로 문자열(선택) — 재생 시점에
         holdout 여부를 다시 확인하거나(scripts/evaluate_fall_from_cache.py)
         캐시가 어느 영상에서 왔는지 감사하는 데 쓴다.
