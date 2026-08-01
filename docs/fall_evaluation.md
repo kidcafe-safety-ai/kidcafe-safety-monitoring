@@ -884,3 +884,29 @@ Holdout 열람 후 평가 규칙이나 threshold를 변경하지 않는다. 치�
 오류를 수정해야 하면 protocol version을 올리고 기존 결과를 보존한 뒤
 Development와 S7-8을 전체 재평가한다. 수정된 S9-10 결과에는
 `post-hoc protocol correction`을 표시하며 모델 선택에 사용하지 않는다.
+
+### 13.5 공식 평가 실행
+
+현재 `scripts/evaluate_fall.py`와 `scripts/evaluate_fall_from_cache.py`의
+공식 모드는 CAUCAFall E0 및 CAUCAFall 회귀 평가 전용이다. 결과는 live
+evaluator 또는 Signal Cache replay에 다음 옵션을 명시해 생성한다.
+
+```text
+--evaluation-protocol-version phase4_fall_eval_v1
+```
+
+이 옵션을 사용하면 CAUCAFall annotation V2, reviewed-only, early tolerance
+0.2초, timely window 2.0초를 강제한다. CSV 전체의 상태·구조를 먼저 검증하고,
+reviewed fall 행에는 원본 라벨 프레임과 onset·impact·lying 시점을 모두 요구한다.
+결과 JSON root에는 13.1의 provenance와 `evaluator_git_dirty`를 함께 기록한다.
+`evaluator_git_dirty=true`인 결과는 개발 중 확인용이며, 공식 기준선은 변경 사항을
+커밋한 evaluator로 다시 생성한다.
+
+공식 cache replay는 tracker와 보조 모델의 실제 inference device 및 각 모델의
+SHA-256을 가진 새 Signal Cache만 허용한다. 이 정보가 없는 Phase 3 legacy cache는
+비공식 비교에는 계속 사용할 수 있지만 `phase4_fall_eval_v1` 결과에는 사용할 수
+없다. Subject 9-10 cache는 최종 동결 전 생성하지 않는다.
+
+직접 촬영 데이터의 `phase4_fall_cause_v1`·Cause·Track 평가는 촬영 후 전용
+annotation loader와 evaluator에서 구현하며, CAUCAFall 전용 CLI가 해당 schema를
+처리한다고 해석하지 않는다.
