@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import fall_signal_cache as cache  # noqa: E402
+from scripts import fall_evaluation_protocol as evaluation_protocol  # noqa: E402
 from evaluate_fall import (  # noqa: E402
     _AnnotationRow,
     _VideoResult,
@@ -178,6 +179,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="캐시 manifest의 split/videos_dir이 holdout이어도 명시적으로 허용한다.",
     )
+    evaluation_protocol.add_cli_argument(parser)
     return parser.parse_args()
 
 
@@ -357,6 +359,25 @@ def _evaluate_row_from_cache(
     )
 
 
+def _build_cache_protocol_metadata(
+    args, annotation_schema_version: str, manifest: dict
+) -> dict:
+    tracker_meta = manifest["tracker"]
+    auxiliary_meta = manifest["auxiliary_model"]
+    return evaluation_protocol.build_metadata(
+        annotation_schema_version=annotation_schema_version,
+        model_sha256=auxiliary_meta["model_sha256"],
+        config_path=args.config,
+        tracker=tracker_meta["tracker_type"],
+        tracker_config=tracker_meta,
+        device={
+            "tracker": tracker_meta["resolved_device"],
+            "auxiliary_model": auxiliary_meta["resolved_device"],
+            "evaluation": "cache_replay",
+        },
+    )
+
+
 def main() -> None:
     args = parse_args()
 
@@ -367,6 +388,16 @@ def main() -> None:
     try:
         validate_auxiliary_inference_interval_frames(args.fall_model_interval_frames)
     except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    try:
+        annotation_schema_version = evaluation_protocol.validate_protocol_request(
+            args.evaluation_protocol_version,
+            args.annotations,
+            args.early_tolerance_sec,
+            args.timely_window_sec,
+            args.include_unreviewed,
+        )
+    except (OSError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
 
     config = FallDetectorConfig.from_file(args.config)
@@ -390,6 +421,11 @@ def main() -> None:
             "만든 캐시 디렉터리인지 확인하세요(holdout 가드를 다시 적용하려면 "
             "manifest의 split/videos_dir이 필요합니다)."
         )
+    if annotation_schema_version is not None:
+        try:
+            evaluation_protocol.validate_official_cache_manifest(manifest)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
     if args.split and args.split != manifest["split"]:
         raise SystemExit(
             f"--split={args.split!r}가 캐시 manifest의 split={manifest['split']!r}와 "
@@ -399,6 +435,15 @@ def main() -> None:
     # holdout 가드도 manifest에 기록된 split/videos_dir로 매번 다시 확인한다
     # 캐시를 복사하거나 재사용해도 holdout 접근 정책이 유지되어야 한다.
     guard_holdout(Path(manifest["videos_dir"]), manifest["split"], rows, args.allow_holdout)
+
+    protocol_metadata = {}
+    if annotation_schema_version is not None:
+        try:
+            protocol_metadata = _build_cache_protocol_metadata(
+                args, annotation_schema_version, manifest
+            )
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
 
     print(f"[{args.split or cache_dir.name}] 캐시 {len(rows)}개 영상 재생 평가 시작")
 
@@ -430,6 +475,7 @@ def main() -> None:
             pose_gate_stats_by_video[row.video_id] = video_pose_gate_stats.to_dict()
 
     summary = _summarize(results)
+    summary.update(protocol_metadata)
     summary["split"] = args.split or cache_dir.name
     summary["run_config"] = {
         "source": "cache",

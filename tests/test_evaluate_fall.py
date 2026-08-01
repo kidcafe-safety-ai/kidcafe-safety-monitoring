@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +19,50 @@ from src.safety.fall_detector import FallDetectorConfig
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import evaluate_fall as ef  # noqa: E402
+
+
+def test_live_protocol_metadata_uses_resolved_devices_and_file_hashes(
+    tmp_path, monkeypatch
+):
+    tracker_model = tmp_path / "pose.pt"
+    fall_model = tmp_path / "fall.pt"
+    config = tmp_path / "fall.json"
+    tracker_model.write_bytes(b"pose")
+    fall_model.write_bytes(b"fall")
+    config.write_text("{}", encoding="utf-8")
+    args = SimpleNamespace(
+        tracker="pose",
+        conf=0.5,
+        fall_model_path=str(fall_model),
+        config=str(config),
+        device="auto",
+        fall_model_device="auto",
+    )
+    tracker = SimpleNamespace(_device="mps", tracker_config="bytetrack.yaml")
+    auxiliary_model = SimpleNamespace(_device="mps")
+    monkeypatch.setattr(
+        ef.evaluation_protocol,
+        "_git_state",
+        lambda: ("1" * 40, False),
+    )
+
+    payload = ef._build_live_protocol_metadata(
+        args,
+        ef.evaluation_protocol.CAUCAFALL_ANNOTATION_VERSION,
+        tracker,
+        str(tracker_model),
+        auxiliary_model,
+    )
+
+    assert payload["model_sha256"] == ef.evaluation_protocol.sha256_file(fall_model)
+    assert payload["tracker_config"]["model_sha256"] == (
+        ef.evaluation_protocol.sha256_file(tracker_model)
+    )
+    assert payload["device"] == {
+        "tracker": "mps",
+        "auxiliary_model": "mps",
+        "evaluation": "live",
+    }
 
 
 def _row(**overrides) -> ef._AnnotationRow:
