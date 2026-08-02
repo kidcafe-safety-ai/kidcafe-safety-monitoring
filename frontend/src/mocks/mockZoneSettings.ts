@@ -1,43 +1,40 @@
-import type { AlertZoneSetting } from "../types/zoneSettings";
+import type { ZoneConfig } from "../types/zoneSettings";
 
-export const mockZoneSettings: AlertZoneSetting[] = [
-  {
-    zone_id: "exit_area",
-    zone_name: "출입구 위험구역",
-    zone_type: "위험구역",
-    dwell_threshold_sec: 10,
-    alert_enabled: true,
-    points: [
-      [72, 18],
-      [94, 20],
-      [92, 52],
-      [70, 48],
-    ],
-  },
-  {
-    zone_id: "slide_zone",
-    zone_name: "미끄럼틀 주의구역",
-    zone_type: "주의구역",
-    dwell_threshold_sec: 15,
-    alert_enabled: true,
-    points: [
-      [12, 55],
-      [42, 50],
-      [48, 78],
-      [16, 86],
-    ],
-  },
-  {
-    zone_id: "play_area",
-    zone_name: "일반 놀이구역",
-    zone_type: "관찰구역",
-    dwell_threshold_sec: 0,
-    alert_enabled: false,
-    points: [
-      [50, 56],
-      [78, 58],
-      [82, 88],
-      [52, 90],
-    ],
-  },
-];
+export const mockZoneConfig: ZoneConfig = {
+  version: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  updated_at: "2026-08-07T01:30:00Z",
+  zones: [
+    {
+      zone_id: "danger_door",
+      zone_name: "출입문 위험구역",
+      type: "polygon",
+      zone_type: "danger",
+      points: [
+        [0.1, 0.2],
+        [0.32, 0.2],
+        [0.32, 0.52],
+        [0.1, 0.52],
+      ],
+      rules: {
+        enter_alert: true,
+        dwell_threshold_sec: 5,
+      },
+    },
+    {
+      zone_id: "slide_restricted",
+      zone_name: "미끄럼틀 하단 제한구역",
+      type: "polygon",
+      zone_type: "restricted",
+      points: [
+        [0.55, 0.58],
+        [0.86, 0.58],
+        [0.82, 0.9],
+        [0.52, 0.86],
+      ],
+      rules: {
+        enter_alert: true,
+        dwell_threshold_sec: 3,
+      },
+    },
+  ],
+};

@@ -612,6 +612,11 @@ button {
   background: var(--card-bg);
 }
 
+.state-banner.success {
+  color: #027a48;
+  background: #d1fadf;
+}
+
 .bar-chart {
   display: grid;
   gap: 18px;
@@ -853,6 +858,91 @@ tbody tr:hover {
   margin-bottom: 16px;
 }
 
+.zone-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(140px, 0.8fr) auto;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 18px;
+}
+
+.zone-toolbar > div:not(.zone-toolbar-actions) {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--panel-bg);
+}
+
+.zone-toolbar span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.zone-toolbar strong {
+  overflow: hidden;
+  color: var(--text-main);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zone-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.zone-toolbar button,
+.zone-table-card button,
+.zone-points-card button {
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-main);
+  background: var(--card-bg);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.zone-toolbar-actions button:last-child,
+.zone-points-card .panel-header button {
+  color: #ffffff;
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.zone-toolbar button:disabled,
+.zone-table-card button:disabled,
+.zone-points-card button:disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
+}
+
+.zone-state-panel {
+  display: grid;
+  gap: 6px;
+}
+
+.zone-state-panel button {
+  justify-self: start;
+  min-height: 34px;
+  margin-top: 4px;
+  padding: 7px 12px;
+  border: 1px solid currentColor;
+  border-radius: 9px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 800;
+}
+
 .zone-preview-card,
 .zone-config-card,
 .zone-table-card {
@@ -1070,6 +1160,13 @@ tbody tr:hover {
   background: var(--panel-bg);
 }
 
+.editable-zone-form label.invalid input,
+.editable-zone-form label.invalid select,
+.zone-point-row.invalid input {
+  border-color: #f04438;
+  background: rgba(240, 68, 56, 0.06);
+}
+
 .zone-form-preview select:disabled {
   opacity: 1;
 }
@@ -1111,6 +1208,32 @@ tbody tr:hover {
   background: #2563eb;
 }
 
+.zone-checkbox-row {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.zone-checkbox-row input {
+  width: 18px;
+  height: 18px;
+  min-height: auto;
+  accent-color: #2563eb;
+}
+
+.zone-field-errors {
+  display: grid;
+  gap: 6px;
+  min-height: 18px;
+}
+
+.zone-field-errors span {
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .zone-type-pill {
   display: inline-flex;
   align-items: center;
@@ -1134,6 +1257,67 @@ tbody tr:hover {
 .zone-type-pill.zone-watch {
   color: #0f766e;
   background: #ccfbf1;
+}
+
+.zone-table-card tbody tr {
+  cursor: pointer;
+}
+
+.zone-table-card tbody tr.selected-row {
+  background: var(--table-hover-bg);
+}
+
+.zone-table-card td button {
+  min-height: 32px;
+  padding: 6px 10px;
+  color: #b42318;
+}
+
+.zone-points-card {
+  margin-top: 16px;
+}
+
+.zone-points-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.zone-point-row {
+  display: grid;
+  grid-template-columns: 52px repeat(2, minmax(120px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--panel-bg);
+}
+
+.zone-point-row > strong {
+  align-self: center;
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.zone-point-row label {
+  display: grid;
+  gap: 6px;
+}
+
+.zone-point-row label span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.zone-point-row input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-main);
+  background: var(--card-bg);
 }
 
 .alert-filter-card {
@@ -2203,8 +2387,17 @@ tbody tr:hover {
   .events-grid,
   .alert-filter-card,
   .alert-history-grid,
+  .zone-settings-grid,
   .report-layout {
     grid-template-columns: 1fr;
+  }
+
+  .zone-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .zone-toolbar-actions {
+    justify-content: flex-start;
   }
 
   .report-control-stack {
@@ -2229,7 +2422,8 @@ tbody tr:hover {
   }
 
   .settings-row,
-  .settings-rule-row {
+  .settings-rule-row,
+  .zone-point-row {
     grid-template-columns: 1fr;
   }
 
