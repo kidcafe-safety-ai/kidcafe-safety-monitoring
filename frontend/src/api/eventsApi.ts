@@ -12,6 +12,7 @@ import type {
   ZoneType,
 } from "../types/event";
 import type { CurrentStatus, ZoneOccupancy } from "../types/status";
+import { parseUtcTimestamp } from "../utils/eventDateTime";
 
 export interface ApiResponse<T> {
   status: "success" | "error";
@@ -21,6 +22,23 @@ export interface ApiResponse<T> {
 
 interface PaginatedResponse<T> {
   items?: T[];
+}
+
+export interface GetEventsParams {
+  limit?: number;
+  offset?: number;
+  event_type?: string;
+  zone_id?: string;
+  created_from?: string;
+  created_to?: string;
+}
+
+export interface EventListData {
+  items: SafetyEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+  count: number;
 }
 
 interface SummaryStats {
@@ -121,8 +139,14 @@ function fallbackResponse<T>(data: T, message: string): ApiResponse<T> {
   };
 }
 
-async function fetchApi<T>(path: string): Promise<T | null> {
-  const response = await fetch(`${API_BASE_URL}${path}`);
+async function fetchApi<T>(
+  path: string,
+  options?: RequestInit,
+): Promise<T | null> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    cache: "no-store",
+  });
 
   if (!response.ok) {
     throw new Error(`API request failed: ${response.status}`);
@@ -155,9 +179,10 @@ async function loadApiData<T>(
   path: string,
   normalize: (value: unknown) => T,
   fallback: T,
+  options?: RequestInit,
 ): Promise<LoadedApiData<T>> {
   try {
-    const data = await fetchApi<unknown>(path);
+    const data = await fetchApi<unknown>(path, options);
     return {
       data: normalize(data),
       errorMessage: null,
@@ -255,16 +280,26 @@ function readOptionalEventConfidence(value: unknown): number | null {
 
 /** 필드가 하나라도 유효하지 않으면 cause 전체를 안전하게 null로 취급한다 (부분 cause 금지). */
 function normalizeEventCause(value: unknown): EventCause | null {
-  if (!isRecord(value)) {
+  let causeValue = value;
+
+  if (typeof causeValue === "string" && causeValue.trim().length > 0) {
+    try {
+      causeValue = JSON.parse(causeValue) as unknown;
+    } catch {
+      return null;
+    }
+  }
+
+  if (!isRecord(causeValue)) {
     return null;
   }
 
-  if (!isOneOf(EVENT_CAUSE_TYPES, value.type)) {
+  if (!isOneOf(EVENT_CAUSE_TYPES, causeValue.type)) {
     return null;
   }
 
-  const trackId = readOptionalNumber(value.track_id);
-  const score = readOptionalNumber(value.score);
+  const trackId = readOptionalNumber(causeValue.track_id);
+  const score = readOptionalNumber(causeValue.score);
   if (trackId === undefined || trackId < 0) {
     return null;
   }
@@ -272,7 +307,7 @@ function normalizeEventCause(value: unknown): EventCause | null {
     return null;
   }
 
-  const evidenceValue = isRecord(value.evidence) ? value.evidence : {};
+  const evidenceValue = isRecord(causeValue.evidence) ? causeValue.evidence : {};
   const minDistanceNorm = readOptionalNumber(evidenceValue.min_distance_norm);
   const closingSpeedNorm = readOptionalNumber(evidenceValue.closing_speed_norm);
   const timeToFallSec = readOptionalNumber(evidenceValue.time_to_fall_sec);
@@ -288,7 +323,7 @@ function normalizeEventCause(value: unknown): EventCause | null {
   }
 
   return {
-    type: value.type,
+    type: causeValue.type,
     track_id: trackId,
     score,
     evidence: {
@@ -361,6 +396,56 @@ function normalizeSafetyEvents(data: unknown): SafetyEvent[] {
   );
 }
 
+function createEmptyEventListData(params?: GetEventsParams): EventListData {
+  return {
+    items: [],
+    total: 0,
+    limit: normalizeEventsLimit(params?.limit),
+    offset: normalizeEventsOffset(params?.offset),
+    count: 0,
+  };
+}
+
+function normalizeEventsLimit(value: unknown) {
+  const parsed = readOptionalNumber(value);
+  return Math.min(500, Math.max(1, Math.floor(parsed ?? 50)));
+}
+
+function normalizeEventsOffset(value: unknown) {
+  const parsed = readOptionalNumber(value);
+  return Math.max(0, Math.floor(parsed ?? 0));
+}
+
+function normalizeEventListData(
+  data: unknown,
+  params?: GetEventsParams,
+): EventListData {
+  if (Array.isArray(data)) {
+    const items = data.map((event, index) => normalizeSafetyEvent(event, index));
+
+    return {
+      items,
+      total: items.length,
+      limit: normalizeEventsLimit(params?.limit ?? (items.length || 50)),
+      offset: normalizeEventsOffset(params?.offset),
+      count: items.length,
+    };
+  }
+
+  const eventList = isRecord(data) ? data : {};
+  const items = unwrapArray<unknown>(eventList.items).map((event, index) =>
+    normalizeSafetyEvent(event, index),
+  );
+
+  return {
+    items,
+    total: Math.max(0, Math.floor(readNumber(eventList.total, items.length))),
+    limit: normalizeEventsLimit(eventList.limit ?? params?.limit),
+    offset: normalizeEventsOffset(eventList.offset ?? params?.offset),
+    count: Math.max(0, Math.floor(readNumber(eventList.count, items.length))),
+  };
+}
+
 function normalizeSummaryStats(value: unknown): SummaryStats {
   const summary = isRecord(value) ? value : {};
 
@@ -412,12 +497,142 @@ function buildDashboardSummary(summary: SummaryStats): DashboardSummary {
   };
 }
 
+function buildEventsQuery(params: GetEventsParams = {}) {
+  const searchParams = new URLSearchParams();
+
+  if (params.limit !== undefined) {
+    searchParams.set("limit", String(normalizeEventsLimit(params.limit)));
+  }
+
+  if (params.offset !== undefined) {
+    searchParams.set("offset", String(normalizeEventsOffset(params.offset)));
+  }
+
+  if (params.event_type && params.event_type.trim().length > 0) {
+    searchParams.set("event_type", params.event_type.trim());
+  }
+
+  if (params.zone_id && params.zone_id.trim().length > 0) {
+    searchParams.set("zone_id", params.zone_id.trim());
+  }
+
+  if (params.created_from && params.created_from.trim().length > 0) {
+    searchParams.set("created_from", params.created_from.trim());
+  }
+
+  if (params.created_to && params.created_to.trim().length > 0) {
+    searchParams.set("created_to", params.created_to.trim());
+  }
+
+  const query = searchParams.toString();
+
+  return query.length > 0 ? `?${query}` : "";
+}
+
+function getMockEventCreatedAtTime(event: SafetyEvent) {
+  const createdAtDate = parseUtcTimestamp(event.created_at);
+
+  return createdAtDate?.getTime() ?? null;
+}
+
+function getBoundaryTime(value: string | undefined) {
+  if (value === undefined || value.trim().length === 0) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
+function filterMockEvents(params: GetEventsParams = {}) {
+  const createdFrom = getBoundaryTime(params.created_from);
+  const createdTo = getBoundaryTime(params.created_to);
+  const eventType = params.event_type?.trim();
+  const zoneId = params.zone_id?.trim();
+
+  return mockEvents
+    .filter((event) => {
+      if (eventType && event.event_type !== eventType) {
+        return false;
+      }
+
+      if (zoneId && event.zone_id !== zoneId) {
+        return false;
+      }
+
+      const eventTime = getMockEventCreatedAtTime(event);
+
+      if (createdFrom !== null && (eventTime === null || eventTime < createdFrom)) {
+        return false;
+      }
+
+      if (createdTo !== null && (eventTime === null || eventTime >= createdTo)) {
+        return false;
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      const bTime = getMockEventCreatedAtTime(b) ?? 0;
+      const aTime = getMockEventCreatedAtTime(a) ?? 0;
+
+      if (bTime !== aTime) {
+        return bTime - aTime;
+      }
+
+      return b.event_id.localeCompare(a.event_id);
+    });
+}
+
+function buildMockEventListData(params: GetEventsParams = {}): EventListData {
+  const limit = normalizeEventsLimit(params.limit);
+  const offset = normalizeEventsOffset(params.offset);
+  const filteredEvents = filterMockEvents(params);
+  const items = filteredEvents.slice(offset, offset + limit);
+
+  return {
+    items,
+    total: filteredEvents.length,
+    limit,
+    offset,
+    count: items.length,
+  };
+}
+
+export function isEventsApiMode() {
+  return isApiMode();
+}
+
 export async function getEvents(): Promise<ApiResponse<SafetyEvent[]>> {
   if (!isApiMode()) {
     return successResponse(mockEvents);
   }
 
   const result = await loadApiData("/events", normalizeSafetyEvents, []);
+
+  if (result.errorMessage !== null) {
+    return fallbackResponse(result.data, result.errorMessage);
+  }
+
+  return successResponse(result.data);
+}
+
+export async function getEventsPage(
+  params: GetEventsParams = {},
+  options?: { signal?: AbortSignal },
+): Promise<ApiResponse<EventListData>> {
+  if (!isApiMode()) {
+    return successResponse(buildMockEventListData(params));
+  }
+
+  const fallback = createEmptyEventListData(params);
+  const result = await loadApiData(
+    `/events${buildEventsQuery(params)}`,
+    (data) => normalizeEventListData(data, params),
+    fallback,
+    options,
+  );
 
   if (result.errorMessage !== null) {
     return fallbackResponse(result.data, result.errorMessage);

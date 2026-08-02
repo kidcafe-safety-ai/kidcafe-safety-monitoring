@@ -26,6 +26,11 @@ type Theme = "light" | "dark";
 
 const THEME_STORAGE_KEY = "kidcafe-dashboard-theme";
 
+interface DashboardNavigationEventDetail {
+  page?: PageKey;
+  eventId?: string;
+}
+
 function getInitialTheme(): Theme {
   const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
   return savedTheme === "dark" ? "dark" : "light";
@@ -39,6 +44,28 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    const handleDashboardNavigation = (event: Event) => {
+      const detail = (event as CustomEvent<DashboardNavigationEventDetail>).detail;
+
+      if (
+        detail?.page === "monitoring" ||
+        detail?.page === "alert-history" ||
+        detail?.page === "events" ||
+        detail?.page === "report" ||
+        detail?.page === "zone-settings"
+      ) {
+        setPage(detail.page);
+      }
+    };
+
+    window.addEventListener("kidcafe:navigate", handleDashboardNavigation);
+
+    return () => {
+      window.removeEventListener("kidcafe:navigate", handleDashboardNavigation);
+    };
+  }, []);
 
   const isDarkMode = theme === "dark";
   const ThemeIcon = isDarkMode ? Sun : Moon;
