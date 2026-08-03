@@ -1,0 +1,382 @@
+"""Homography PoC 비교 지표와 채택 판정 (`homography_acceptance_v1`).
+
+촬영 전에 지표 정의와 판정 로직을 고정해 두고, 촬영 후에는 측정값만 넣는다.
+허용값을 동결하지 않은 상태에서는 판정 자체를 거부해 holdout 결과를 보고
+기준을 완화하는 경로를 막는다 (ADR-023).
+
+기준·정의: docs/homography_calibration.md 6절, docs/interfaces.md `Homography 평가`
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List, Optional, Sequence
+
+PROTOCOL_VERSION = "homography_acceptance_v1"
+
+REQUIRED_ACCEPTANCE_FIELDS = (
+    "protocol_version",
+    "camera_id",
+    "calibration_version",
+    "max_mean_error_m",
+    "max_p95_error_m",
+    "min_zone_error_reduction_ratio",
+    "min_zone_accuracy_gain_percentage_point",
+    "min_event_error_reduction_ratio",
+    "max_added_latency_ms_per_frame",
+    "max_fps_drop_ratio",
+    "max_calibration_minutes",
+    "frozen_at",
+    "review_status",
+)
+
+
+class AcceptanceError(ValueError):
+    """Acceptance 설정이 계약을 만족하지 않거나 아직 동결되지 않음."""
+
+
+@dataclass(frozen=True)
+class ZoneDecisionSummary:
+    """Zone inside/outside 판정 요약.
+
+    분모는 판정 가능한 reviewed holdout 관측 전체다.
+    """
+
+    total: int
+    errors: int
+
+    @property
+    def accuracy(self) -> float:
+        """0.0-1.0. 관측이 없으면 판정 불가이므로 예외를 던진다."""
+        if self.total <= 0:
+            raise ValueError("zone decision summary has no reviewed observations")
+        return (self.total - self.errors) / self.total
+
+    @property
+    def accuracy_percentage(self) -> float:
+        return self.accuracy * 100.0
+
+
+@dataclass(frozen=True)
+class EventErrorSummary:
+    """reviewed interval 대비 ENTER·EXIT Event 오류."""
+
+    missed: int
+    false_events: int
+    extra: int
+
+    @property
+    def total(self) -> int:
+        return self.missed + self.false_events + self.extra
+
+
+@dataclass(frozen=True)
+class Criterion:
+    name: str
+    passed: bool
+    detail: str
+
+
+@dataclass
+class AcceptanceResult:
+    criteria: List[Criterion] = field(default_factory=list)
+
+    @property
+    def passed(self) -> bool:
+        """모든 기준을 만족할 때만 채택한다."""
+        return bool(self.criteria) and all(c.passed for c in self.criteria)
+
+    @property
+    def failed_criteria(self) -> List[Criterion]:
+        return [c for c in self.criteria if not c.passed]
+
+
+def summarize_zone_decisions(
+    predicted: Sequence[bool],
+    expected: Sequence[bool],
+) -> ZoneDecisionSummary:
+    """예측·정답 inside/outside 판정을 비교해 요약."""
+    if len(predicted) != len(expected):
+        raise ValueError(
+            f"predicted ({len(predicted)}) and expected ({len(expected)}) "
+            f"must have the same length"
+        )
+    if not predicted:
+        raise ValueError("zone decisions must not be empty")
+
+    errors = sum(1 for p, e in zip(predicted, expected) if bool(p) != bool(e))
+    return ZoneDecisionSummary(total=len(predicted), errors=errors)
+
+
+def reduction_ratio(baseline: int, candidate: int) -> Optional[float]:
+    """기존 대비 감소 비율. 기존 오류가 0이면 판정 불가라 `None`을 반환한다."""
+    if baseline < 0 or candidate < 0:
+        raise ValueError("counts must not be negative")
+    if baseline == 0:
+        return None
+    return (baseline - candidate) / baseline
+
+
+def parse_acceptance(data: dict) -> dict:
+    """Acceptance 설정을 검증한다.
+
+    Raises:
+        AcceptanceError: 필수 필드 누락, protocol version 불일치, 또는 타입 오류
+    """
+    if not isinstance(data, dict):
+        raise AcceptanceError("acceptance config must be a JSON object")
+
+    for field_name in REQUIRED_ACCEPTANCE_FIELDS:
+        if field_name not in data:
+            raise AcceptanceError(f"missing required field: '{field_name}'")
+
+    if data["protocol_version"] != PROTOCOL_VERSION:
+        raise AcceptanceError(
+            f"protocol_version must be '{PROTOCOL_VERSION}': got '{data['protocol_version']}'"
+        )
+
+    for field_name in ("camera_id", "calibration_version", "review_status"):
+        value = data[field_name]
+        if not isinstance(value, str) or not value.strip():
+            raise AcceptanceError(f"'{field_name}' must be a non-empty string")
+
+    for field_name in (
+        "min_zone_error_reduction_ratio",
+        "min_zone_accuracy_gain_percentage_point",
+        "min_event_error_reduction_ratio",
+        "max_added_latency_ms_per_frame",
+        "max_fps_drop_ratio",
+        "max_calibration_minutes",
+    ):
+        value = data[field_name]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise AcceptanceError(f"'{field_name}' must be a number")
+
+    for field_name in ("max_mean_error_m", "max_p95_error_m"):
+        value = data[field_name]
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+            raise AcceptanceError(f"'{field_name}' must be a positive number or null")
+
+    return data
+
+
+def load_acceptance(json_path: str) -> dict:
+    """Acceptance 설정 파일을 로드해 검증.
+
+    Raises:
+        FileNotFoundError: 파일이 없음
+        AcceptanceError: JSON 형식 오류 또는 계약 위반
+    """
+    path = Path(json_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Acceptance file not found: {json_path}")
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise AcceptanceError(f"Invalid JSON in {json_path}: {e}")
+
+    return parse_acceptance(data)
+
+
+def require_frozen(acceptance: dict) -> None:
+    """holdout 결과를 보기 전에 허용값이 동결됐는지 확인.
+
+    절대 오차 허용값은 8월 7일 실측 이후·holdout 확인 이전에 동결한다. 동결
+    전에 판정을 시도하면 기준을 결과에 맞춰 고르는 것과 같으므로 막는다.
+
+    Raises:
+        AcceptanceError: 허용값 또는 `frozen_at`이 비어 있음
+    """
+    for field_name in ("max_mean_error_m", "max_p95_error_m"):
+        if acceptance.get(field_name) is None:
+            raise AcceptanceError(
+                f"'{field_name}' is not frozen yet; freeze absolute error limits from the "
+                f"2026-08-07 site measurements before looking at holdout results"
+            )
+
+    frozen_at = acceptance.get("frozen_at")
+    if not isinstance(frozen_at, str) or not frozen_at.strip():
+        raise AcceptanceError("'frozen_at' must be set before evaluating holdout results")
+
+
+def evaluate_acceptance(
+    acceptance: dict,
+    *,
+    mean_error_m: float,
+    p95_error_m: float,
+    baseline_zone: ZoneDecisionSummary,
+    homography_zone: ZoneDecisionSummary,
+    baseline_event_errors: EventErrorSummary,
+    homography_event_errors: EventErrorSummary,
+    baseline_fast_reversals: int,
+    homography_fast_reversals: int,
+    added_latency_ms_per_frame: float,
+    fps_drop_ratio: float,
+    calibration_minutes: float,
+) -> AcceptanceResult:
+    """채택 기준을 하나씩 판정해 결과를 모은다.
+
+    모든 기준을 만족할 때만 `passed`가 True다. 하나라도 실패하면 기존 image
+    polygon을 유지하고 미채택 사유로 기록한다.
+
+    Raises:
+        AcceptanceError: 허용값이 동결되지 않음
+    """
+    parse_acceptance(acceptance)
+    require_frozen(acceptance)
+
+    criteria: List[Criterion] = []
+
+    criteria.append(
+        _threshold(
+            "mean_position_error",
+            mean_error_m,
+            acceptance["max_mean_error_m"],
+            unit="m",
+        )
+    )
+    criteria.append(
+        _threshold(
+            "p95_position_error",
+            p95_error_m,
+            acceptance["max_p95_error_m"],
+            unit="m",
+        )
+    )
+
+    baseline_accuracy = baseline_zone.accuracy_percentage
+    homography_accuracy = homography_zone.accuracy_percentage
+    criteria.append(
+        Criterion(
+            name="zone_accuracy_improved",
+            passed=homography_accuracy > baseline_accuracy,
+            detail=(
+                f"{baseline_accuracy:.2f}%p baseline -> {homography_accuracy:.2f}%p homography"
+            ),
+        )
+    )
+
+    criteria.append(
+        _zone_error_criterion(
+            acceptance,
+            baseline_zone=baseline_zone,
+            homography_zone=homography_zone,
+            accuracy_gain=homography_accuracy - baseline_accuracy,
+        )
+    )
+
+    criteria.append(
+        _event_error_criterion(
+            acceptance,
+            baseline=baseline_event_errors,
+            candidate=homography_event_errors,
+        )
+    )
+
+    criteria.append(
+        Criterion(
+            name="no_new_fast_reversals",
+            passed=homography_fast_reversals <= baseline_fast_reversals,
+            detail=f"{baseline_fast_reversals} baseline -> {homography_fast_reversals} homography",
+        )
+    )
+
+    criteria.append(
+        _threshold(
+            "added_latency_per_frame",
+            added_latency_ms_per_frame,
+            acceptance["max_added_latency_ms_per_frame"],
+            unit="ms",
+        )
+    )
+    criteria.append(
+        _threshold("fps_drop_ratio", fps_drop_ratio, acceptance["max_fps_drop_ratio"], unit="")
+    )
+    criteria.append(
+        _threshold(
+            "calibration_time",
+            calibration_minutes,
+            acceptance["max_calibration_minutes"],
+            unit="min",
+        )
+    )
+
+    return AcceptanceResult(criteria=criteria)
+
+
+def _threshold(name: str, value: float, limit: float, *, unit: str) -> Criterion:
+    suffix = f" {unit}" if unit else ""
+    return Criterion(
+        name=name,
+        passed=value <= limit,
+        detail=f"{value:.4f}{suffix} (limit {limit}{suffix})",
+    )
+
+
+def _zone_error_criterion(
+    acceptance: dict,
+    *,
+    baseline_zone: ZoneDecisionSummary,
+    homography_zone: ZoneDecisionSummary,
+    accuracy_gain: float,
+) -> Criterion:
+    """Zone 오류 30% 이상 감소 **또는** 정확도 5%p 이상 개선."""
+    min_reduction = acceptance["min_zone_error_reduction_ratio"]
+    min_gain = acceptance["min_zone_accuracy_gain_percentage_point"]
+
+    ratio = reduction_ratio(baseline_zone.errors, homography_zone.errors)
+    if ratio is None:
+        return Criterion(
+            name="zone_error_reduction_or_accuracy_gain",
+            passed=False,
+            detail=(
+                "baseline had 0 zone errors; homography is not adopted when the existing "
+                "path produces no errors"
+            ),
+        )
+
+    passed = ratio >= min_reduction or accuracy_gain >= min_gain
+    return Criterion(
+        name="zone_error_reduction_or_accuracy_gain",
+        passed=passed,
+        detail=(
+            f"errors {baseline_zone.errors} -> {homography_zone.errors} "
+            f"(reduction {ratio:.4f}, limit {min_reduction}); "
+            f"accuracy gain {accuracy_gain:.2f}%p (limit {min_gain}%p)"
+        ),
+    )
+
+
+def _event_error_criterion(
+    acceptance: dict,
+    *,
+    baseline: EventErrorSummary,
+    candidate: EventErrorSummary,
+) -> Criterion:
+    min_reduction = acceptance["min_event_error_reduction_ratio"]
+    ratio = reduction_ratio(baseline.total, candidate.total)
+
+    if ratio is None:
+        return Criterion(
+            name="event_error_reduction",
+            passed=False,
+            detail=(
+                "baseline had 0 ENTER/EXIT event errors; homography is not adopted when the "
+                "existing path produces no errors"
+            ),
+        )
+
+    return Criterion(
+        name="event_error_reduction",
+        passed=ratio >= min_reduction,
+        detail=(
+            f"errors {baseline.total} -> {candidate.total} "
+            f"(reduction {ratio:.4f}, limit {min_reduction})"
+        ),
+    )
