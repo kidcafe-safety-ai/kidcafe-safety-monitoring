@@ -10,13 +10,17 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 
 PROTOCOL_VERSION = "homography_acceptance_v1"
+# 동결 상태값. docs/interfaces.md가 `review_status=reviewed`로 정의한다.
+FROZEN_REVIEW_STATUS = "reviewed"
 
 REQUIRED_ACCEPTANCE_FIELDS = (
     "protocol_version",
@@ -49,11 +53,21 @@ class ZoneDecisionSummary:
     total: int
     errors: int
 
-    @property
-    def accuracy(self) -> float:
-        """0.0-1.0. 관측이 없으면 판정 불가이므로 예외를 던진다."""
+    def __post_init__(self) -> None:
+        if not isinstance(self.total, int) or isinstance(self.total, bool):
+            raise ValueError("zone decision total must be an integer")
+        if not isinstance(self.errors, int) or isinstance(self.errors, bool):
+            raise ValueError("zone decision errors must be an integer")
         if self.total <= 0:
             raise ValueError("zone decision summary has no reviewed observations")
+        if not (0 <= self.errors <= self.total):
+            raise ValueError(
+                f"zone decision errors must be in [0, {self.total}]: got {self.errors}"
+            )
+
+    @property
+    def accuracy(self) -> float:
+        """0.0-1.0."""
         return (self.total - self.errors) / self.total
 
     @property
@@ -68,6 +82,14 @@ class EventErrorSummary:
     missed: int
     false_events: int
     extra: int
+
+    def __post_init__(self) -> None:
+        for name in ("missed", "false_events", "extra"):
+            value = getattr(self, name)
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise ValueError(f"event error '{name}' must be an integer")
+            if value < 0:
+                raise ValueError(f"event error '{name}' must not be negative: got {value}")
 
     @property
     def total(self) -> int:
@@ -193,7 +215,7 @@ def require_frozen(acceptance: dict) -> None:
     전에 판정을 시도하면 기준을 결과에 맞춰 고르는 것과 같으므로 막는다.
 
     Raises:
-        AcceptanceError: 허용값 또는 `frozen_at`이 비어 있음
+        AcceptanceError: 허용값·`frozen_at`·`review_status`가 동결 상태가 아님
     """
     for field_name in ("max_mean_error_m", "max_p95_error_m"):
         if acceptance.get(field_name) is None:
@@ -205,6 +227,52 @@ def require_frozen(acceptance: dict) -> None:
     frozen_at = acceptance.get("frozen_at")
     if not isinstance(frozen_at, str) or not frozen_at.strip():
         raise AcceptanceError("'frozen_at' must be set before evaluating holdout results")
+    _require_rfc3339_with_timezone(frozen_at)
+
+    review_status = acceptance.get("review_status")
+    if review_status != FROZEN_REVIEW_STATUS:
+        raise AcceptanceError(
+            f"'review_status' must be '{FROZEN_REVIEW_STATUS}' before evaluating holdout "
+            f"results: got {review_status!r}"
+        )
+
+
+def _require_rfc3339_with_timezone(value: str) -> None:
+    """`frozen_at`은 timezone을 포함한 RFC 3339여야 한다.
+
+    동결 시각이 모호하면 "holdout 확인 전에 동결했다"를 사후에 증명할 수 없다.
+    """
+    try:
+        parsed = datetime.fromisoformat(value.strip())
+    except ValueError:
+        raise AcceptanceError(
+            f"'frozen_at' must be an RFC 3339 datetime: got {value!r}"
+        )
+    if parsed.tzinfo is None:
+        raise AcceptanceError(f"'frozen_at' must include a timezone: got {value!r}")
+
+
+def _require_finite_non_negative(name: str, value: float) -> float:
+    """측정값이 finite이고 음수가 아닌지 확인한다.
+
+    음수 오차·시간은 물리적으로 불가능하므로 측정·기록 오류다. 조용히 통과시키면
+    모든 임계값 비교를 자동으로 만족해 채택 판정이 무의미해진다.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise AcceptanceError(f"'{name}' must be a number: got {value!r}")
+    if not math.isfinite(value):
+        raise AcceptanceError(f"'{name}' must be finite: got {value!r}")
+    if value < 0:
+        raise AcceptanceError(f"'{name}' must not be negative: got {value}")
+    return float(value)
+
+
+def _require_non_negative_count(name: str, value: int) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise AcceptanceError(f"'{name}' must be an integer: got {value!r}")
+    if value < 0:
+        raise AcceptanceError(f"'{name}' must not be negative: got {value}")
+    return value
 
 
 def evaluate_acceptance(
@@ -228,10 +296,40 @@ def evaluate_acceptance(
     polygon을 유지하고 미채택 사유로 기록한다.
 
     Raises:
-        AcceptanceError: 허용값이 동결되지 않음
+        AcceptanceError: 허용값이 동결되지 않았거나 측정값이 유효 범위를 벗어남
     """
     parse_acceptance(acceptance)
     require_frozen(acceptance)
+
+    mean_error_m = _require_finite_non_negative("mean_error_m", mean_error_m)
+    p95_error_m = _require_finite_non_negative("p95_error_m", p95_error_m)
+    added_latency_ms_per_frame = _require_finite_non_negative(
+        "added_latency_ms_per_frame", added_latency_ms_per_frame
+    )
+    fps_drop_ratio = _require_finite_non_negative("fps_drop_ratio", fps_drop_ratio)
+    calibration_minutes = _require_finite_non_negative(
+        "calibration_minutes", calibration_minutes
+    )
+    baseline_fast_reversals = _require_non_negative_count(
+        "baseline_fast_reversals", baseline_fast_reversals
+    )
+    homography_fast_reversals = _require_non_negative_count(
+        "homography_fast_reversals", homography_fast_reversals
+    )
+
+    if p95_error_m < mean_error_m:
+        raise AcceptanceError(
+            f"p95_error_m ({p95_error_m}) must not be smaller than "
+            f"mean_error_m ({mean_error_m})"
+        )
+
+    # 두 방식은 동일 frame·Track·foot point 입력으로 비교한다. 관측 수가 다르면
+    # 같은 조건에서 잰 것이 아니므로 정확도·오류 수 비교가 성립하지 않는다.
+    if baseline_zone.total != homography_zone.total:
+        raise AcceptanceError(
+            f"zone observation counts must match: baseline {baseline_zone.total} "
+            f"vs homography {homography_zone.total}"
+        )
 
     criteria: List[Criterion] = []
 

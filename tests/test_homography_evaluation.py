@@ -36,7 +36,7 @@ def frozen(acceptance_data):
     data["max_mean_error_m"] = 0.15
     data["max_p95_error_m"] = 0.30
     data["frozen_at"] = "2026-08-07T14:00:00Z"
-    data["review_status"] = "frozen"
+    data["review_status"] = "reviewed"
     return data
 
 
@@ -136,6 +136,150 @@ def test_evaluate_refuses_before_freeze(acceptance_data):
         evaluate_acceptance(acceptance_data, **passing_measurements())
 
 
+@pytest.mark.parametrize("status", ["pending", "needs_review", "frozen", "", None])
+def test_require_frozen_rejects_non_reviewed_status(frozen, status):
+    """동결 상태는 계약대로 `reviewed`여야 한다 (docs/interfaces.md)."""
+    data = copy.deepcopy(frozen)
+    data["review_status"] = status
+
+    with pytest.raises(AcceptanceError, match="review_status"):
+        require_frozen(data)
+
+
+@pytest.mark.parametrize(
+    "frozen_at",
+    ["아무말이나", "2026-08-07", "2026-08-07T14:00:00", "14:00:00", "2026-13-07T00:00:00Z"],
+)
+def test_require_frozen_rejects_bad_frozen_at_format(frozen, frozen_at):
+    """`frozen_at`은 timezone을 포함한 RFC 3339여야 한다."""
+    data = copy.deepcopy(frozen)
+    data["frozen_at"] = frozen_at
+
+    with pytest.raises(AcceptanceError, match="frozen_at"):
+        require_frozen(data)
+
+
+@pytest.mark.parametrize(
+    "frozen_at", ["2026-08-07T14:00:00Z", "2026-08-07T23:00:00+09:00"]
+)
+def test_require_frozen_accepts_rfc3339_with_timezone(frozen, frozen_at):
+    data = copy.deepcopy(frozen)
+    data["frozen_at"] = frozen_at
+
+    require_frozen(data)
+
+
+# ============ 측정값 유효 범위 ============
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "mean_error_m",
+        "p95_error_m",
+        "added_latency_ms_per_frame",
+        "fps_drop_ratio",
+        "calibration_minutes",
+    ],
+)
+def test_negative_measurement_is_rejected(frozen, field):
+    """음수 오차·시간은 물리적으로 불가능하다. 통과시키면 모든 임계값을 만족한다."""
+    measurements = passing_measurements()
+    measurements[field] = -1.0
+
+    with pytest.raises(AcceptanceError, match=field):
+        evaluate_acceptance(frozen, **measurements)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_non_finite_measurement_is_rejected(frozen, bad):
+    measurements = passing_measurements()
+    measurements["mean_error_m"] = bad
+
+    with pytest.raises(AcceptanceError, match="mean_error_m"):
+        evaluate_acceptance(frozen, **measurements)
+
+
+@pytest.mark.parametrize(
+    "field", ["baseline_fast_reversals", "homography_fast_reversals"]
+)
+def test_negative_reversal_count_is_rejected(frozen, field):
+    measurements = passing_measurements()
+    measurements[field] = -1
+
+    with pytest.raises(AcceptanceError, match=field):
+        evaluate_acceptance(frozen, **measurements)
+
+
+def test_p95_smaller_than_mean_is_rejected(frozen):
+    """p95는 정의상 평균보다 작을 수 없다."""
+    measurements = passing_measurements()
+    measurements.update(mean_error_m=0.10, p95_error_m=0.05)
+
+    with pytest.raises(AcceptanceError, match="p95_error_m"):
+        evaluate_acceptance(frozen, **measurements)
+
+
+def test_mismatched_zone_observation_counts_are_rejected(frozen):
+    """두 방식은 동일 입력으로 비교해야 하므로 관측 수가 같아야 한다."""
+    measurements = passing_measurements()
+    measurements["homography_zone"] = ZoneDecisionSummary(total=7, errors=0)
+
+    with pytest.raises(AcceptanceError, match="zone observation counts"):
+        evaluate_acceptance(frozen, **measurements)
+
+
+def test_fail_open_regression_is_closed(frozen):
+    """리뷰에서 지적된 fail-open 조합이 더 이상 통과하지 않는다.
+
+    이전에는 `review_status="pending"`, 잘못된 `frozen_at`, 음수 오차·시간,
+    서로 다른 Zone 관측 수를 함께 넣어도 `passed == True`가 나왔다.
+    """
+    data = copy.deepcopy(frozen)
+    data["review_status"] = "pending"
+    data["frozen_at"] = "아무말이나"
+    measurements = passing_measurements()
+    measurements.update(
+        mean_error_m=-5.0,
+        p95_error_m=-1.0,
+        homography_zone=ZoneDecisionSummary(total=7, errors=0),
+        added_latency_ms_per_frame=-1.0,
+        fps_drop_ratio=-0.5,
+        calibration_minutes=-99.0,
+    )
+
+    with pytest.raises(AcceptanceError):
+        evaluate_acceptance(data, **measurements)
+
+
+# ============ 관측 요약 범위 ============
+
+
+def test_zone_summary_rejects_errors_above_total():
+    with pytest.raises(ValueError, match=r"\[0, 10\]"):
+        ZoneDecisionSummary(total=10, errors=11)
+
+
+def test_zone_summary_rejects_negative_errors():
+    with pytest.raises(ValueError, match=r"\[0, 10\]"):
+        ZoneDecisionSummary(total=10, errors=-1)
+
+
+@pytest.mark.parametrize("total", [0, -1])
+def test_zone_summary_rejects_non_positive_total(total):
+    with pytest.raises(ValueError, match="no reviewed observations"):
+        ZoneDecisionSummary(total=total, errors=0)
+
+
+@pytest.mark.parametrize("field", ["missed", "false_events", "extra"])
+def test_event_error_summary_rejects_negative(field):
+    kwargs = {"missed": 1, "false_events": 1, "extra": 1}
+    kwargs[field] = -1
+
+    with pytest.raises(ValueError, match=field):
+        EventErrorSummary(**kwargs)
+
+
 # ============ 지표 계산 ============
 
 
@@ -197,7 +341,8 @@ def test_all_criteria_pass(frozen):
 @pytest.mark.parametrize(
     "override,failed_name",
     [
-        ({"mean_error_m": 0.20}, "mean_position_error"),
+        # p95 >= mean을 유지하면서 평균만 허용값을 넘긴다.
+        ({"mean_error_m": 0.20, "p95_error_m": 0.25}, "mean_position_error"),
         ({"p95_error_m": 0.40}, "p95_position_error"),
         ({"added_latency_ms_per_frame": 1.5}, "added_latency_per_frame"),
         ({"fps_drop_ratio": 0.09}, "fps_drop_ratio"),
