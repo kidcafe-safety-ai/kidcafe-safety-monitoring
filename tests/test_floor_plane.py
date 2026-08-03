@@ -12,8 +12,6 @@ from src.geofencing.floor_plane import (
     FloorPlaneTransformer,
     load_calibration,
     parse_calibration,
-    position_errors_m,
-    summarize_errors_m,
 )
 
 FIXTURE_PATH = "tests/fixtures/phase4_contract/calibration_runtime.json"
@@ -175,6 +173,42 @@ def test_collinear_floor_points_rejected(config_data):
         parse_calibration(data)
 
 
+def test_three_collinear_image_points_rejected(config_data):
+    """image 기준점 3개가 한 직선 위면 homography가 퇴화한다.
+
+    벽 선을 따라 마커를 놓으면 실제로 나올 수 있는 배치다. 전체 4점이 직선은
+    아니라서 점 단위 검증은 통과하지만, 행렬은 역조건수 2e-16으로 특이하고
+    fit point가 자기 floor 좌표로 돌아오지 않는다.
+
+    행렬식 절대값은 2.2e12라 크기 기반 임계값으로는 걸러지지 않는다.
+    """
+    data = copy.deepcopy(config_data)
+    data["image_points_px"] = [[100.0, 100.0], [200.0, 200.0], [300.0, 300.0], [500.0, 100.0]]
+    data["floor_points"] = [[0.0, 0.0], [6.0, 0.0], [6.0, 4.0], [0.0, 4.0]]
+
+    # 점 단위 검증은 통과한다.
+    parse_calibration(data)
+
+    with pytest.raises(CalibrationError, match="singular"):
+        FloorPlaneTransformer(parse_calibration(data))
+
+
+def test_singularity_check_is_scale_invariant(config_data):
+    """좌표 단위를 바꿔도 정상 calibration은 계속 통과해야 한다.
+
+    행렬식은 좌표 크기에 따라 몇 자릿수씩 움직이므로 절대 임계값을 쓰면
+    고해상도·소규모 구역 조합에서 정상 배치가 거부될 수 있다.
+    """
+    data = copy.deepcopy(config_data)
+    data["frame_size"] = {"width": 3840, "height": 2160}
+    data["image_points_px"] = [[x * 2, y * 2] for x, y in data["image_points_px"]]
+    data["floor_points"] = [[x * 0.25, y * 0.25] for x, y in data["floor_points"]]
+
+    transformer = FloorPlaneTransformer(parse_calibration(data))
+
+    assert max(transformer.fit_residuals_m()) < 1e-6
+
+
 def test_malformed_point_pair_rejected(config_data):
     data = copy.deepcopy(config_data)
     data["image_points_px"][0] = [120.0, 900.0, 0.0]
@@ -333,49 +367,3 @@ def test_mismatch_error_is_calibration_error(transformer):
     """호출자가 CalibrationError 하나로 잡아도 fallback 없이 실패한다."""
     with pytest.raises(CalibrationError):
         transformer.verify_source("cam02", 1920, 1080)
-
-
-# ============ 오차 지표 ============
-
-
-def test_position_errors_are_euclidean():
-    errors = position_errors_m([[3.0, 4.0], [1.0, 1.0]], [[0.0, 0.0], [1.0, 1.0]])
-
-    assert errors == pytest.approx([5.0, 0.0])
-
-
-def test_position_errors_length_mismatch():
-    with pytest.raises(ValueError, match="same length"):
-        position_errors_m([[0.0, 0.0]], [[0.0, 0.0], [1.0, 1.0]])
-
-
-def test_summarize_errors_matches_numpy_linear_percentile():
-    errors = [0.01 * i for i in range(1, 21)]
-
-    mean, p95 = summarize_errors_m(errors)
-
-    assert mean == pytest.approx(float(np.mean(errors)))
-    assert p95 == pytest.approx(float(np.percentile(errors, 95, method="linear")))
-
-
-def test_summarize_errors_rejects_empty():
-    with pytest.raises(ValueError, match="must not be empty"):
-        summarize_errors_m([])
-
-
-def test_holdout_fixture_has_contract_minimum():
-    """holdout은 서로 다른 위치 10개·총 20회 이상 관측이어야 한다."""
-    import csv
-
-    with open(
-        "tests/fixtures/phase4_contract/calibration_points.csv", "r", encoding="utf-8"
-    ) as f:
-        rows = list(csv.DictReader(f))
-
-    holdout = [row for row in rows if row["point_role"] == "holdout"]
-    fit = [row for row in rows if row["point_role"] == "fit"]
-
-    assert len({row["point_id"] for row in holdout}) >= 10
-    assert len(holdout) >= 20
-    assert len(fit) >= 4
-    assert not {row["point_id"] for row in holdout} & {row["point_id"] for row in fit}

@@ -3,6 +3,7 @@
 import copy
 import json
 
+import numpy as np
 import pytest
 
 from src.geofencing.homography_evaluation import (
@@ -12,8 +13,10 @@ from src.geofencing.homography_evaluation import (
     evaluate_acceptance,
     load_acceptance,
     parse_acceptance,
+    position_errors_m,
     reduction_ratio,
     require_frozen,
+    summarize_errors_m,
     summarize_zone_decisions,
 )
 
@@ -309,3 +312,49 @@ def test_criteria_details_are_reportable(frozen):
 
     assert all(c.detail for c in result.criteria)
     assert len({c.name for c in result.criteria}) == len(result.criteria)
+
+
+# ============ 위치 오차 지표 ============
+
+
+def test_position_errors_are_euclidean():
+    errors = position_errors_m([[3.0, 4.0], [1.0, 1.0]], [[0.0, 0.0], [1.0, 1.0]])
+
+    assert errors == pytest.approx([5.0, 0.0])
+
+
+def test_position_errors_length_mismatch():
+    with pytest.raises(ValueError, match="same length"):
+        position_errors_m([[0.0, 0.0]], [[0.0, 0.0], [1.0, 1.0]])
+
+
+def test_summarize_errors_matches_numpy_linear_percentile():
+    errors = [0.01 * i for i in range(1, 21)]
+
+    mean, p95 = summarize_errors_m(errors)
+
+    assert mean == pytest.approx(float(np.mean(errors)))
+    assert p95 == pytest.approx(float(np.percentile(errors, 95, method="linear")))
+
+
+def test_summarize_errors_rejects_empty():
+    with pytest.raises(ValueError, match="must not be empty"):
+        summarize_errors_m([])
+
+
+def test_holdout_fixture_has_contract_minimum():
+    """holdout은 서로 다른 위치 10개·총 20회 이상 관측이어야 한다."""
+    import csv
+
+    with open(
+        "tests/fixtures/phase4_contract/calibration_points.csv", "r", encoding="utf-8"
+    ) as f:
+        rows = list(csv.DictReader(f))
+
+    holdout = [row for row in rows if row["point_role"] == "holdout"]
+    fit = [row for row in rows if row["point_role"] == "fit"]
+
+    assert len({row["point_id"] for row in holdout}) >= 10
+    assert len(holdout) >= 20
+    assert len(fit) >= 4
+    assert not {row["point_id"] for row in holdout} & {row["point_id"] for row in fit}

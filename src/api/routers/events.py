@@ -1,11 +1,9 @@
 """Event API routes."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
-from typing_extensions import Annotated
-
 from pydantic import AfterValidator
 
 from src.api import repositories

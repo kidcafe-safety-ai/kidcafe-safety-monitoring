@@ -12,7 +12,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Tuple
+
+import numpy as np
 
 PROTOCOL_VERSION = "homography_acceptance_v1"
 
@@ -380,3 +382,35 @@ def _event_error_criterion(
             f"(reduction {ratio:.4f}, limit {min_reduction})"
         ),
     )
+
+
+def position_errors_m(
+    predicted: Sequence[Sequence[float]],
+    expected: Sequence[Sequence[float]],
+) -> List[float]:
+    """예측·실측 floor point 쌍의 meter 단위 Euclidean 오차."""
+    if len(predicted) != len(expected):
+        raise ValueError(
+            f"predicted ({len(predicted)}) and expected ({len(expected)}) "
+            f"must have the same length"
+        )
+
+    errors = []
+    for (px, py), (ex, ey) in zip(predicted, expected):
+        errors.append(float(np.hypot(float(px) - float(ex), float(py) - float(ey))))
+    return errors
+
+
+def summarize_errors_m(errors: Sequence[float]) -> Tuple[float, float]:
+    """오차 목록의 (평균, p95)를 meter로 반환.
+
+    p95는 `numpy.percentile(errors, 95, method="linear")`를 사용한다
+    (docs/interfaces.md Homography 평가).
+    """
+    if not errors:
+        raise ValueError("errors must not be empty")
+
+    array = np.asarray(errors, dtype=np.float64)
+    mean = float(array.mean())
+    p95 = float(np.percentile(array, 95, method="linear"))
+    return mean, p95

@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Sequence, Tuple
+from typing import List, Sequence
 
 import cv2
 import numpy as np
@@ -38,6 +38,9 @@ _DUPLICATE_TOL = 1e-9
 _COLLINEAR_TOL = 1e-6
 # 투영 결과 w가 0에 가까우면 바닥 평면 밖(수평선 근처)이라 변환할 수 없다.
 _PROJECTIVE_TOL = 1e-9
+# 역행렬 존재 판정 허용 오차. 행렬식은 좌표 단위(px, meter)에 따라 크기가 달라져
+# 절대 임계값으로 쓸 수 없으므로, scale과 무관한 역조건수를 사용한다.
+_RECIPROCAL_CONDITION_TOL = 1e-12
 
 
 class CalibrationError(ValueError):
@@ -245,7 +248,12 @@ class FloorPlaneTransformer:
             raise CalibrationError("failed to compute homography from the given fit points")
         if not np.isfinite(matrix).all():
             raise CalibrationError("homography matrix is not finite")
-        if abs(float(np.linalg.det(matrix))) <= _PROJECTIVE_TOL:
+
+        singular_values = np.linalg.svd(matrix, compute_uv=False)
+        largest = float(singular_values[0])
+        if largest <= 0.0:
+            raise CalibrationError("homography matrix is singular and cannot be inverted")
+        if float(singular_values[-1]) / largest <= _RECIPROCAL_CONDITION_TOL:
             raise CalibrationError("homography matrix is singular and cannot be inverted")
 
         return matrix
@@ -326,35 +334,3 @@ class FloorPlaneTransformer:
             dy = predicted[1] - expected[1]
             residuals.append(float(np.hypot(dx, dy)))
         return residuals
-
-
-def position_errors_m(
-    predicted: Sequence[Sequence[float]],
-    expected: Sequence[Sequence[float]],
-) -> List[float]:
-    """예측·실측 floor point 쌍의 meter 단위 Euclidean 오차."""
-    if len(predicted) != len(expected):
-        raise ValueError(
-            f"predicted ({len(predicted)}) and expected ({len(expected)}) "
-            f"must have the same length"
-        )
-
-    errors = []
-    for (px, py), (ex, ey) in zip(predicted, expected):
-        errors.append(float(np.hypot(float(px) - float(ex), float(py) - float(ey))))
-    return errors
-
-
-def summarize_errors_m(errors: Sequence[float]) -> Tuple[float, float]:
-    """오차 목록의 (평균, p95)를 meter로 반환.
-
-    p95는 `numpy.percentile(errors, 95, method="linear")`를 사용한다
-    (docs/interfaces.md Homography 평가).
-    """
-    if not errors:
-        raise ValueError("errors must not be empty")
-
-    array = np.asarray(errors, dtype=np.float64)
-    mean = float(array.mean())
-    p95 = float(np.percentile(array, 95, method="linear"))
-    return mean, p95
