@@ -63,7 +63,7 @@ async function loadAllEventsForReport(
   const seenEventIds = new Set<string>();
   const requestedOffsets = new Set<number>();
   let offset = 0;
-  let latestTotal = 0;
+  let referenceTotal: number | null = null;
   let pagesLoaded = 0;
   let completed = false;
 
@@ -100,8 +100,14 @@ async function loadAllEventsForReport(
     const pageItems = page.items;
     const pageCount = Math.max(page.count, pageItems.length);
     const pageLimit = Math.max(1, page.limit || REPORT_PAGE_SIZE);
+    let pageReferenceTotal: number;
 
-    latestTotal = Math.max(latestTotal, page.total);
+    if (referenceTotal === null) {
+      pageReferenceTotal = Math.max(0, page.total);
+      referenceTotal = pageReferenceTotal;
+    } else {
+      pageReferenceTotal = referenceTotal;
+    }
     pagesLoaded += 1;
 
     pageItems.forEach((event) => {
@@ -113,7 +119,7 @@ async function loadAllEventsForReport(
       accumulatedEvents.push(event);
     });
 
-    if (latestTotal === 0 || offset + pageCount >= latestTotal) {
+    if (pageReferenceTotal === 0 || offset + pageCount >= pageReferenceTotal) {
       completed = true;
       break;
     }
@@ -129,9 +135,17 @@ async function loadAllEventsForReport(
     throw new Error("이벤트 page 수가 너무 많아 조회를 중단했습니다.");
   }
 
+  const expectedTotal = referenceTotal ?? 0;
+
+  if (completed && accumulatedEvents.length !== expectedTotal) {
+    throw new Error(
+      "조회 중 이벤트 목록이 변경되어 리포트를 완성할 수 없습니다. 다시 조회해 주세요.",
+    );
+  }
+
   return {
     events: accumulatedEvents,
-    total: latestTotal,
+    total: expectedTotal,
     pagesLoaded,
   };
 }

@@ -32,11 +32,11 @@ function formatOccurredAt(event: SafetyEvent) {
   return event.timestamp ? `영상 시각 ${event.timestamp}` : "발생 시각 확인 불가";
 }
 
-function navigateToEvents(eventId: string) {
+function navigateToAlertHistory(eventId: string) {
   window.dispatchEvent(
     new CustomEvent("kidcafe:navigate", {
       detail: {
-        page: "events",
+        page: "alert-history",
         eventId,
       },
     }),
@@ -57,7 +57,7 @@ export default function RecentEventList({
   const highlightTimersRef = useRef<number[]>([]);
 
   useEffect(() => {
-    if (isLoading) {
+    if (isLoading || hasError) {
       return;
     }
 
@@ -112,7 +112,7 @@ export default function RecentEventList({
     }, HIGH_HIGHLIGHT_DURATION_MS);
 
     highlightTimersRef.current.push(timerId);
-  }, [events, isLoading]);
+  }, [events, hasError, isLoading]);
 
   useEffect(
     () => () => {
@@ -160,7 +160,7 @@ export default function RecentEventList({
                 isHighlighted ? "high-event-highlight" : ""
               }`}
               key={event.event_id}
-              onClick={() => navigateToEvents(event.event_id)}
+              onClick={() => navigateToAlertHistory(event.event_id)}
               type="button"
             >
               <div className="event-summary">

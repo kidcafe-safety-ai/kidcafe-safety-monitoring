@@ -38,6 +38,7 @@ function getInitialTheme(): Theme {
 
 export default function App() {
   const [page, setPage] = useState<PageKey>("monitoring");
+  const [focusedAlertEventId, setFocusedAlertEventId] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [isSystemSettingsOpen, setIsSystemSettingsOpen] = useState(false);
 
@@ -57,6 +58,9 @@ export default function App() {
         detail?.page === "zone-settings"
       ) {
         setPage(detail.page);
+        setFocusedAlertEventId(
+          detail.page === "alert-history" && detail.eventId ? detail.eventId : null,
+        );
       }
     };
 
@@ -69,16 +73,23 @@ export default function App() {
 
   const isDarkMode = theme === "dark";
   const ThemeIcon = isDarkMode ? Sun : Moon;
-  const ActivePage =
-    page === "monitoring"
-      ? MonitoringPage
-      : page === "alert-history"
-        ? AlertHistoryPage
-      : page === "events"
-        ? EventsPage
-      : page === "report"
-        ? ReportPage
-        : ZoneSettingsPage;
+  const activePage =
+    page === "monitoring" ? (
+      <MonitoringPage />
+    ) : page === "alert-history" ? (
+      <AlertHistoryPage focusedEventId={focusedAlertEventId} />
+    ) : page === "events" ? (
+      <EventsPage />
+    ) : page === "report" ? (
+      <ReportPage />
+    ) : (
+      <ZoneSettingsPage />
+    );
+
+  const handlePageChange = (nextPage: PageKey) => {
+    setPage(nextPage);
+    setFocusedAlertEventId(null);
+  };
 
   return (
     <div className="app-shell" data-theme={theme}>
@@ -93,7 +104,7 @@ export default function App() {
         <nav className="nav">
           <button
             className={page === "monitoring" ? "active" : ""}
-            onClick={() => setPage("monitoring")}
+            onClick={() => handlePageChange("monitoring")}
             type="button"
           >
             <Monitor size={18} strokeWidth={2.2} />
@@ -101,7 +112,7 @@ export default function App() {
           </button>
           <button
             className={page === "alert-history" ? "active" : ""}
-            onClick={() => setPage("alert-history")}
+            onClick={() => handlePageChange("alert-history")}
             type="button"
           >
             <Bell size={18} strokeWidth={2.2} />
@@ -109,7 +120,7 @@ export default function App() {
           </button>
           <button
             className={page === "events" ? "active" : ""}
-            onClick={() => setPage("events")}
+            onClick={() => handlePageChange("events")}
             type="button"
           >
             <BarChart3 size={18} strokeWidth={2.2} />
@@ -117,7 +128,7 @@ export default function App() {
           </button>
           <button
             className={page === "report" ? "active" : ""}
-            onClick={() => setPage("report")}
+            onClick={() => handlePageChange("report")}
             type="button"
           >
             <FileText size={18} strokeWidth={2.2} />
@@ -125,7 +136,7 @@ export default function App() {
           </button>
           <button
             className={page === "zone-settings" ? "active" : ""}
-            onClick={() => setPage("zone-settings")}
+            onClick={() => handlePageChange("zone-settings")}
             type="button"
           >
             <MapPinned size={18} strokeWidth={2.2} />
@@ -159,7 +170,7 @@ export default function App() {
             <Settings size={19} strokeWidth={2.2} />
           </button>
         </div>
-        <ActivePage />
+        {activePage}
       </div>
       <SystemSettingsModal
         isOpen={isSystemSettingsOpen}

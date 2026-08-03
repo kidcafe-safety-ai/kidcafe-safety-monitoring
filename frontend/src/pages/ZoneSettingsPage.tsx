@@ -156,7 +156,7 @@ export default function ZoneSettingsPage() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [config, setConfig] = useState<ZoneConfig | null>(null);
   const [draftZones, setDraftZones] = useState<Zone[]>([]);
-  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [selectedZoneIndex, setSelectedZoneIndex] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveDetails, setSaveDetails] = useState<string[]>([]);
@@ -167,12 +167,13 @@ export default function ZoneSettingsPage() {
   const originalZones = config?.zones ?? [];
   const hasUnsavedChanges =
     config !== null && serializeZones(draftZones) !== serializeZones(originalZones);
-  const selectedZoneIndex = draftZones.findIndex(
-    (zone) => zone.zone_id === selectedZoneId,
-  );
+  const safeSelectedZoneIndex =
+    draftZones.length === 0
+      ? -1
+      : Math.min(Math.max(selectedZoneIndex, 0), draftZones.length - 1);
   const selectedZone =
-    selectedZoneIndex >= 0 ? draftZones[selectedZoneIndex] : draftZones[0] ?? null;
-  const selectedIndex = selectedZoneIndex >= 0 ? selectedZoneIndex : 0;
+    safeSelectedZoneIndex >= 0 ? draftZones[safeSelectedZoneIndex] : null;
+  const selectedIndex = safeSelectedZoneIndex >= 0 ? safeSelectedZoneIndex : 0;
   const selectedZoneIssues = getIssuesForZone(validationIssues, selectedIndex);
   const isLoading = loadState === "loading";
   const isSaving = saveState === "saving";
@@ -189,7 +190,7 @@ export default function ZoneSettingsPage() {
 
     setConfig({ ...nextConfig, zones: nextZones });
     setDraftZones(cloneZones(nextZones));
-    setSelectedZoneId(nextZones[0]?.zone_id ?? null);
+    setSelectedZoneIndex(0);
     setLoadState(nextZones.length === 0 ? "empty" : "success");
     setLoadError(null);
   }, []);
@@ -214,7 +215,7 @@ export default function ZoneSettingsPage() {
 
       setConfig(null);
       setDraftZones([]);
-      setSelectedZoneId(null);
+      setSelectedZoneIndex(0);
       setLoadState("error");
       setLoadError(getSafeErrorMessage(response));
 
@@ -251,10 +252,6 @@ export default function ZoneSettingsPage() {
     field: EditableZoneField,
     value: string,
   ) => {
-    if (field === "zone_id" && zoneIndex === selectedIndex) {
-      setSelectedZoneId(value);
-    }
-
     updateZoneAt(zoneIndex, (zone) => ({
       ...zone,
       [field]: field === "zone_type" ? (value as ZoneType) : value,
@@ -311,7 +308,7 @@ export default function ZoneSettingsPage() {
     setDraftZones((zones) => {
       const nextZone = createEmptyZone(zones);
 
-      setSelectedZoneId(nextZone.zone_id);
+      setSelectedZoneIndex(zones.length);
       return [...zones, nextZone];
     });
     setSaveError(null);
@@ -331,10 +328,28 @@ export default function ZoneSettingsPage() {
 
     setDraftZones((zones) => {
       const nextZones = zones.filter((_, index) => index !== zoneIndex);
-      setSelectedZoneId(nextZones[Math.min(zoneIndex, nextZones.length - 1)]?.zone_id ?? null);
+      setSelectedZoneIndex(
+        nextZones.length === 0 ? 0 : Math.min(zoneIndex, nextZones.length - 1),
+      );
       return nextZones;
     });
     setSaveError(null);
+    setSuccessMessage(null);
+  };
+
+  const handleRestoreConflictDraft = () => {
+    if (conflictDraft === null) {
+      return;
+    }
+
+    setDraftZones(cloneZones(conflictDraft));
+    setSelectedZoneIndex(0);
+    setConflictDraft(null);
+    setSaveState("error");
+    setSaveError(
+      "보존된 미저장 draft를 다시 적용했습니다. 서버 최신 설정 기준으로 다시 확인한 뒤 저장해 주세요.",
+    );
+    setSaveDetails([]);
     setSuccessMessage(null);
   };
 
@@ -423,7 +438,12 @@ export default function ZoneSettingsPage() {
             <span key={detail}>{detail}</span>
           ))}
           {conflictDraft ? (
-            <span>보존된 미저장 draft: {conflictDraft.length}개 Zone</span>
+            <>
+              <span>보존된 미저장 draft: {conflictDraft.length}개 Zone</span>
+              <button onClick={handleRestoreConflictDraft} type="button">
+                내 변경 다시 적용
+              </button>
+            </>
           ) : null}
         </div>
       ) : null}
@@ -484,8 +504,8 @@ export default function ZoneSettingsPage() {
                 className="zone-overlay"
                 viewBox="0 0 100 100"
               >
-                {draftZones.map((zone) => (
-                  <g className={getZoneClass(zone.zone_type)} key={zone.zone_id}>
+                {draftZones.map((zone, index) => (
+                  <g className={getZoneClass(zone.zone_type)} key={`${index}-${zone.zone_id}`}>
                     <polygon points={formatPoints(zone.points)} />
                     {zone.points.map(([x, y], pointIndex) => (
                       <circle
@@ -635,9 +655,9 @@ export default function ZoneSettingsPage() {
 
                 return (
                   <tr
-                    className={selectedZoneId === zone.zone_id ? "selected-row" : ""}
-                    key={`${zone.zone_id}-${index}`}
-                    onClick={() => setSelectedZoneId(zone.zone_id)}
+                    className={selectedIndex === index ? "selected-row" : ""}
+                    key={`${index}-${zone.zone_id}`}
+                    onClick={() => setSelectedZoneIndex(index)}
                   >
                     <td>{index + 1}</td>
                     <td>{zone.zone_id || "-"}</td>
