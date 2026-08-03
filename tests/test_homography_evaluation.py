@@ -177,13 +177,11 @@ def test_require_frozen_accepts_rfc3339_with_timezone(frozen, frozen_at):
     [
         "mean_error_m",
         "p95_error_m",
-        "added_latency_ms_per_frame",
-        "fps_drop_ratio",
         "calibration_minutes",
     ],
 )
-def test_negative_measurement_is_rejected(frozen, field):
-    """음수 오차·시간은 물리적으로 불가능하다. 통과시키면 모든 임계값을 만족한다."""
+def test_negative_absolute_measurement_is_rejected(frozen, field):
+    """거리·시간은 절대량이라 음수가 불가능하다. 통과시키면 모든 임계값을 만족한다."""
     measurements = passing_measurements()
     measurements[field] = -1.0
 
@@ -211,13 +209,123 @@ def test_negative_reversal_count_is_rejected(frozen, field):
         evaluate_acceptance(frozen, **measurements)
 
 
-def test_p95_smaller_than_mean_is_rejected(frozen):
-    """p95는 정의상 평균보다 작을 수 없다."""
-    measurements = passing_measurements()
-    measurements.update(mean_error_m=0.10, p95_error_m=0.05)
+def test_p95_smaller_than_mean_is_accepted(frozen):
+    """왜곡된 분포에서는 평균이 p95보다 클 수 있다. 대소를 강제하면 안 된다.
 
-    with pytest.raises(AcceptanceError, match="p95_error_m"):
+    오차 21개가 0m 20개와 100m 1개면 평균 4.7619m, p95 0m이다.
+    """
+    errors = [0.0] * 20 + [100.0]
+    mean, p95 = summarize_errors_m(errors)
+    assert p95 < mean
+
+    measurements = passing_measurements()
+    measurements.update(mean_error_m=mean, p95_error_m=p95)
+    limits = copy.deepcopy(frozen)
+    limits["max_mean_error_m"] = 10.0
+    limits["max_p95_error_m"] = 10.0
+
+    result = evaluate_acceptance(limits, **measurements)
+
+    assert result.passed is True
+
+
+@pytest.mark.parametrize(
+    "field", ["added_latency_ms_per_frame", "fps_drop_ratio"]
+)
+def test_negative_relative_measurement_is_accepted(frozen, field):
+    """기준선 대비 차이라 후보 경로가 더 빠르면 음수가 나올 수 있다.
+
+    측정값을 그대로 보존하며 `max(0, ...)`으로 깎지 않는다. 음수는 "하락 없음"
+    이므로 임계값 비교를 자연히 통과한다.
+    """
+    measurements = passing_measurements()
+    measurements[field] = -0.5
+
+    result = evaluate_acceptance(frozen, **measurements)
+
+    assert result.passed is True
+
+
+@pytest.mark.parametrize(
+    "field", ["added_latency_ms_per_frame", "fps_drop_ratio"]
+)
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_relative_measurement_is_rejected(frozen, field, bad):
+    """음수는 허용해도 NaN·Infinity는 임계값 비교를 무의미하게 만든다."""
+    measurements = passing_measurements()
+    measurements[field] = bad
+
+    with pytest.raises(AcceptanceError, match=field):
         evaluate_acceptance(frozen, **measurements)
+
+
+# ============ 동결 임계값 변조 거부 ============
+
+
+@pytest.mark.parametrize(
+    "field,expected",
+    [
+        ("min_zone_error_reduction_ratio", 0.30),
+        ("min_zone_accuracy_gain_percentage_point", 5.0),
+        ("min_event_error_reduction_ratio", 0.30),
+        ("max_added_latency_ms_per_frame", 1.0),
+        ("max_fps_drop_ratio", 0.05),
+        ("max_calibration_minutes", 15),
+    ],
+)
+def test_frozen_thresholds_match_contract(acceptance_data, field, expected):
+    """fixture가 `docs/interfaces.md`의 동결값을 그대로 쓰는지 확인한다."""
+    assert acceptance_data[field] == expected
+
+
+@pytest.mark.parametrize(
+    "field,tampered",
+    [
+        ("min_zone_error_reduction_ratio", -1.0),
+        ("min_zone_accuracy_gain_percentage_point", 0.0),
+        ("min_event_error_reduction_ratio", 0.01),
+        ("max_added_latency_ms_per_frame", 1000.0),
+        ("max_fps_drop_ratio", 0.99),
+        ("max_calibration_minutes", 9999),
+    ],
+)
+def test_tampered_frozen_threshold_is_rejected(acceptance_data, field, tampered):
+    """최소 기준을 낮추거나 최대 기준을 키우면 악화된 측정값도 통과한다."""
+    data = copy.deepcopy(acceptance_data)
+    data[field] = tampered
+
+    with pytest.raises(AcceptanceError, match=field):
+        parse_acceptance(data)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_non_finite_frozen_threshold_is_rejected(acceptance_data, bad):
+    data = copy.deepcopy(acceptance_data)
+    data["max_fps_drop_ratio"] = bad
+
+    with pytest.raises(AcceptanceError, match="max_fps_drop_ratio"):
+        parse_acceptance(data)
+
+
+def test_tampered_threshold_blocks_evaluation(frozen):
+    """변조된 임계값으로는 채택 판정 자체가 불가능해야 한다."""
+    data = copy.deepcopy(frozen)
+    data["max_fps_drop_ratio"] = 0.99
+    measurements = passing_measurements()
+    measurements["fps_drop_ratio"] = 0.90
+
+    with pytest.raises(AcceptanceError, match="max_fps_drop_ratio"):
+        evaluate_acceptance(data, **measurements)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_non_finite_absolute_limit_is_rejected(acceptance_data, bad):
+    """촬영 당일 정하는 허용값도 finite·양수여야 한다."""
+    data = copy.deepcopy(acceptance_data)
+    data["max_mean_error_m"] = bad
+
+    with pytest.raises(AcceptanceError, match="max_mean_error_m"):
+        parse_acceptance(data)
 
 
 def test_mismatched_zone_observation_counts_are_rejected(frozen):

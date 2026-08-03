@@ -226,6 +226,40 @@ RFC 3339 동결 시각을, `review_status`를 `reviewed`로 기록한다
 - 평균·p95는 meter와 centimeter를 함께 기록한다
 - fit point는 오차 계산에서 제외한다
 
+**평균과 p95의 대소는 강제하지 않는다.** 왜곡된 분포에서는 평균이 p95보다 클 수
+있다. 오차 21개가 0m 20개와 100m 1개면 평균은 4.7619m, p95는 0m다. 두 값 모두
+finite·비음수인지만 확인한다.
+
+측정값 부호 규칙:
+
+| 측정값 | 정의 | 음수 |
+|---|---|---|
+| 평균·p95 위치 오차 | 거리 절대량 | 불가 |
+| calibration 소요 시간 | 시간 절대량 | 불가 |
+| frame당 추가 비용 | Homography 경로 − 기존 경로 | **가능** |
+| FPS 하락률 | (기존 FPS − 후보 FPS) / 기존 FPS | **가능** |
+
+뒤 두 값은 기준선 대비 차이라 후보 경로가 더 빠르면 음수가 나온다. 측정값을
+그대로 기록하며 `max(0, ...)`으로 깎지 않는다. 음수는 "하락 없음"이므로 임계값
+비교를 자연히 통과한다.
+
+### 동결된 상대 기준
+
+아래 값은 `homography_acceptance_v1`이 이미 동결했다. 촬영 당일 정하는 절대 오차
+허용값과 달리 **바꿀 수 없다.** 최소 기준을 낮추거나 최대 기준을 키우면 성능이
+악화된 측정값도 통과하기 때문이다.
+
+```text
+min_zone_error_reduction_ratio=0.30
+min_zone_accuracy_gain_percentage_point=5.0
+min_event_error_reduction_ratio=0.30
+max_added_latency_ms_per_frame=1.0
+max_fps_drop_ratio=0.05
+max_calibration_minutes=15
+```
+
+`parse_acceptance()`가 이 값들의 일치를 강제한다.
+
 ---
 
 ## 7. 측정 기록

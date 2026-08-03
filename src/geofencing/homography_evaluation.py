@@ -22,6 +22,18 @@ PROTOCOL_VERSION = "homography_acceptance_v1"
 # 동결 상태값. docs/interfaces.md가 `review_status=reviewed`로 정의한다.
 FROZEN_REVIEW_STATUS = "reviewed"
 
+# `homography_acceptance_v1`이 이미 동결한 상대 기준값이다. 촬영 당일 정하는
+# 절대 오차 허용값과 달리 이 값들은 바뀌면 안 된다. 최소 기준을 음수로, 최대
+# 기준을 큰 값으로 바꾸면 성능이 악화된 측정값도 전부 통과하기 때문이다.
+FROZEN_THRESHOLDS = {
+    "min_zone_error_reduction_ratio": 0.30,
+    "min_zone_accuracy_gain_percentage_point": 5.0,
+    "min_event_error_reduction_ratio": 0.30,
+    "max_added_latency_ms_per_frame": 1.0,
+    "max_fps_drop_ratio": 0.05,
+    "max_calibration_minutes": 15,
+}
+
 REQUIRED_ACCEPTANCE_FIELDS = (
     "protocol_version",
     "camera_id",
@@ -166,24 +178,26 @@ def parse_acceptance(data: dict) -> dict:
         if not isinstance(value, str) or not value.strip():
             raise AcceptanceError(f"'{field_name}' must be a non-empty string")
 
-    for field_name in (
-        "min_zone_error_reduction_ratio",
-        "min_zone_accuracy_gain_percentage_point",
-        "min_event_error_reduction_ratio",
-        "max_added_latency_ms_per_frame",
-        "max_fps_drop_ratio",
-        "max_calibration_minutes",
-    ):
+    for field_name, expected in FROZEN_THRESHOLDS.items():
         value = data[field_name]
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise AcceptanceError(f"'{field_name}' must be a number")
+        if not math.isfinite(value) or not math.isclose(value, expected, rel_tol=1e-9):
+            raise AcceptanceError(
+                f"'{field_name}' is frozen by {PROTOCOL_VERSION} and must stay "
+                f"{expected}: got {value!r}"
+            )
 
     for field_name in ("max_mean_error_m", "max_p95_error_m"):
         value = data[field_name]
         if value is None:
             continue
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise AcceptanceError(f"'{field_name}' must be a positive number or null")
+        if not math.isfinite(value) or value <= 0:
+            raise AcceptanceError(
+                f"'{field_name}' must be a finite positive number or null: got {value!r}"
+            )
 
     return data
 
@@ -259,19 +273,29 @@ def _require_rfc3339_with_timezone(value: str) -> None:
         raise AcceptanceError(f"'frozen_at' must include a timezone: got {value!r}")
 
 
-def _require_finite_non_negative(name: str, value: float) -> float:
-    """측정값이 finite이고 음수가 아닌지 확인한다.
+def _require_finite(name: str, value: float) -> float:
+    """측정값이 finite한 수인지 확인한다.
 
-    음수 오차·시간은 물리적으로 불가능하므로 측정·기록 오류다. 조용히 통과시키면
-    모든 임계값 비교를 자동으로 만족해 채택 판정이 무의미해진다.
+    NaN·Infinity는 임계값 비교를 무의미하게 만든다. `NaN <= limit`은 항상
+    False라 조용히 미채택이 되고, `-inf`는 항상 통과한다.
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise AcceptanceError(f"'{name}' must be a number: got {value!r}")
     if not math.isfinite(value):
         raise AcceptanceError(f"'{name}' must be finite: got {value!r}")
-    if value < 0:
-        raise AcceptanceError(f"'{name}' must not be negative: got {value}")
     return float(value)
+
+
+def _require_finite_non_negative(name: str, value: float) -> float:
+    """거리·시간처럼 절대량인 측정값을 확인한다.
+
+    음수는 물리적으로 불가능하므로 측정·기록 오류다. 조용히 통과시키면 모든
+    임계값 비교를 자동으로 만족해 채택 판정이 무의미해진다.
+    """
+    number = _require_finite(name, value)
+    if number < 0:
+        raise AcceptanceError(f"'{name}' must not be negative: got {number}")
+    return number
 
 
 def _require_non_negative_count(name: str, value: int) -> int:
@@ -308,15 +332,21 @@ def evaluate_acceptance(
     parse_acceptance(acceptance)
     require_frozen(acceptance)
 
+    # 거리·시간은 절대량이라 음수가 물리적으로 불가능하다.
     mean_error_m = _require_finite_non_negative("mean_error_m", mean_error_m)
     p95_error_m = _require_finite_non_negative("p95_error_m", p95_error_m)
-    added_latency_ms_per_frame = _require_finite_non_negative(
-        "added_latency_ms_per_frame", added_latency_ms_per_frame
-    )
-    fps_drop_ratio = _require_finite_non_negative("fps_drop_ratio", fps_drop_ratio)
     calibration_minutes = _require_finite_non_negative(
         "calibration_minutes", calibration_minutes
     )
+
+    # 반면 아래 둘은 기준선 대비 차이라 후보 경로가 더 빠르면 음수가 나올 수
+    # 있다. 측정값을 그대로 보존하고 finite만 확인한다. 음수는 "하락 없음"이라
+    # 임계값 비교를 자연히 통과한다.
+    added_latency_ms_per_frame = _require_finite(
+        "added_latency_ms_per_frame", added_latency_ms_per_frame
+    )
+    fps_drop_ratio = _require_finite("fps_drop_ratio", fps_drop_ratio)
+
     baseline_fast_reversals = _require_non_negative_count(
         "baseline_fast_reversals", baseline_fast_reversals
     )
@@ -324,11 +354,8 @@ def evaluate_acceptance(
         "homography_fast_reversals", homography_fast_reversals
     )
 
-    if p95_error_m < mean_error_m:
-        raise AcceptanceError(
-            f"p95_error_m ({p95_error_m}) must not be smaller than "
-            f"mean_error_m ({mean_error_m})"
-        )
+    # p95와 평균의 대소는 강제하지 않는다. 왜곡된 분포에서는 평균이 p95보다 클
+    # 수 있다. 예: 오차 21개가 0m 20개와 100m 1개면 평균 4.76m, p95 0m이다.
 
     # 두 방식은 동일 frame·Track·foot point 입력으로 비교한다. 관측 수가 다르면
     # 같은 조건에서 잰 것이 아니므로 정확도·오류 수 비교가 성립하지 않는다.
