@@ -27,6 +27,11 @@ class _DummyAuxiliaryModel:
         self._device = "mps" if device == "auto" else device
 
 
+class _UnresolvedDeviceProvider:
+    def __init__(self, **_kwargs):
+        pass
+
+
 def _write_annotations_csv(path: Path, video_ids) -> None:
     path.write_text(
         "video_id,label,video_path,fall_start_frame,impact_frame,lying_start_frame,"
@@ -42,6 +47,77 @@ def _no_real_tracker(monkeypatch):
 
 
 class TestManifestWrittenOnlyAfterFullSuccess:
+    def test_unresolved_tracker_device_fails_before_caching(
+        self, tmp_path, monkeypatch
+    ):
+        annotations = tmp_path / "annotations.csv"
+        _write_annotations_csv(annotations, ["v1"])
+        videos_dir = tmp_path / "videos"
+        videos_dir.mkdir()
+        cache_dir = tmp_path / "cache"
+        cache_called = False
+
+        def _unexpected_cache(*_args, **_kwargs):
+            nonlocal cache_called
+            cache_called = True
+
+        monkeypatch.setattr(cfs, "PoseTracker", _UnresolvedDeviceProvider)
+        monkeypatch.setattr(cfs, "_cache_one_video", _unexpected_cache)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "cache_fall_signals.py",
+                "--annotations", str(annotations),
+                "--videos-dir", str(videos_dir),
+                "--split", "development",
+                "--cache-dir", str(cache_dir),
+            ],
+        )
+
+        with pytest.raises(SystemExit, match="tracker의 실제 inference device"):
+            cfs.main()
+
+        assert cache_called is False
+        assert not cache_dir.exists()
+
+    def test_unresolved_auxiliary_device_fails_before_caching(
+        self, tmp_path, monkeypatch
+    ):
+        annotations = tmp_path / "annotations.csv"
+        _write_annotations_csv(annotations, ["v1"])
+        videos_dir = tmp_path / "videos"
+        videos_dir.mkdir()
+        cache_dir = tmp_path / "cache"
+        fall_model = tmp_path / "fall.pt"
+        fall_model.write_bytes(b"fall")
+        cache_called = False
+
+        def _unexpected_cache(*_args, **_kwargs):
+            nonlocal cache_called
+            cache_called = True
+
+        monkeypatch.setattr(cfs, "AuxiliaryFallModel", _UnresolvedDeviceProvider)
+        monkeypatch.setattr(cfs, "_cache_one_video", _unexpected_cache)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "cache_fall_signals.py",
+                "--annotations", str(annotations),
+                "--videos-dir", str(videos_dir),
+                "--split", "development",
+                "--cache-dir", str(cache_dir),
+                "--fall-model-path", str(fall_model),
+            ],
+        )
+
+        with pytest.raises(SystemExit, match="auxiliary model의 실제 inference device"):
+            cfs.main()
+
+        assert cache_called is False
+        assert not cache_dir.exists()
+
     def test_manifest_absent_if_caching_raises_partway(self, tmp_path, monkeypatch):
         annotations = tmp_path / "annotations.csv"
         _write_annotations_csv(annotations, ["v1", "v2", "v3"])

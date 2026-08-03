@@ -284,6 +284,16 @@ def test_official_cache_manifest_rejects_non_device_values(device):
         protocol.validate_official_cache_manifest(manifest)
 
 
+def test_normalize_resolved_device_strips_whitespace():
+    assert protocol.normalize_resolved_device(" mps ", "tracker") == "mps"
+
+
+@pytest.mark.parametrize("device", ["", "   ", "auto", " AUTO ", 1, None])
+def test_normalize_resolved_device_rejects_unknown_values(device):
+    with pytest.raises(ValueError, match="tracker"):
+        protocol.normalize_resolved_device(device, "tracker")
+
+
 def test_build_metadata_records_hashes_rules_and_git_state(tmp_path):
     model = tmp_path / "model.pt"
     config = tmp_path / "config.json"

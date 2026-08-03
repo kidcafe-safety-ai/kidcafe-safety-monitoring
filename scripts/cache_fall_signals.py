@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import fall_signal_cache as cache  # noqa: E402
+import fall_evaluation_protocol as evaluation_protocol  # noqa: E402
 from evaluate_fall import (  # noqa: E402
     guard_holdout,
     load_annotations,
@@ -46,6 +47,21 @@ from evaluate_fall import (  # noqa: E402
 from src.safety.auxiliary_fall_model import AuxiliaryFallModel  # noqa: E402
 from src.tracking.bytetrack_wrapper import ByteTracker  # noqa: E402
 from src.tracking.pose_tracker import PoseTracker  # noqa: E402
+
+
+def _resolved_device_or_exit(component_name: str, provider, requested_device: str) -> str:
+    """장시간 캐싱 전에 실제 inference device provenance를 fail-fast 검증한다."""
+    resolved_device = getattr(provider, "_device", requested_device)
+    try:
+        return evaluation_protocol.normalize_resolved_device(
+            resolved_device, component_name
+        )
+    except ValueError as exc:
+        raise SystemExit(
+            f"{exc}. cache 생성을 시작하지 않습니다. "
+            "명시적 --device/--fall-model-device를 사용하거나 wrapper가 "
+            "실제 device를 노출하도록 수정하세요."
+        ) from exc
 
 
 def parse_args() -> argparse.Namespace:
@@ -157,6 +173,9 @@ def main() -> None:
     default_model = "yolo26n-pose.pt" if args.tracker == "pose" else "yolo26n.pt"
     model_path = args.model or default_model
     tracker = tracker_cls(model_path=model_path, conf=args.conf, fps=30.0, device=args.device)
+    tracker_resolved_device = _resolved_device_or_exit(
+        "tracker", tracker, args.device
+    )
     tracker_meta = {
         "tracker_type": args.tracker,
         "model_path": model_path,
@@ -165,7 +184,7 @@ def main() -> None:
         "tracker_config": "bytetrack.yaml",
         "tracker_config_sha256": cache.sha256_file("bytetrack.yaml"),
         "requested_device": args.device,
-        "resolved_device": getattr(tracker, "_device", args.device),
+        "resolved_device": tracker_resolved_device,
     }
 
     auxiliary_model = None
@@ -177,14 +196,15 @@ def main() -> None:
             device=args.fall_model_device,
             enabled=True,
         )
+        auxiliary_resolved_device = _resolved_device_or_exit(
+            "auxiliary model", auxiliary_model, args.fall_model_device
+        )
         auxiliary_meta = {
             "model_path": args.fall_model_path,
             "model_sha256": cache.sha256_file(args.fall_model_path),
             "conf": args.fall_model_conf,
             "requested_device": args.fall_model_device,
-            "resolved_device": getattr(
-                auxiliary_model, "_device", args.fall_model_device
-            ),
+            "resolved_device": auxiliary_resolved_device,
         }
 
     manifest = cache.build_manifest(

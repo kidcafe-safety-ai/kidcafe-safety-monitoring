@@ -234,6 +234,16 @@ def _is_resolved_device(value) -> bool:
     return bool(normalized) and normalized != "auto"
 
 
+def normalize_resolved_device(value, component_name: str) -> str:
+    """실제 inference device를 검증하고 manifest용 문자열로 정규화한다."""
+    if not _is_resolved_device(value):
+        raise ValueError(
+            f"{component_name}의 실제 inference device를 확인할 수 없습니다: "
+            f"{value!r}"
+        )
+    return value.strip()
+
+
 def _git_state(repo_root: Path = _REPO_ROOT) -> tuple[str, bool]:
     try:
         commit = subprocess.run(
