@@ -210,7 +210,17 @@ def list_events(
     offset: int,
     event_type: Optional[str] = None,
     zone_id: Optional[str] = None,
+    created_from: Optional[datetime] = None,
+    created_to: Optional[datetime] = None,
 ) -> Dict[str, Any]:
+    """이벤트 목록을 조회한다.
+
+    `created_from`/`created_to`는 timezone을 포함한 datetime이며 UTC로 변환해
+    SQLite `created_at`과 비교한다. 시작은 포함, 종료는 미포함이다. 영상 상대
+    시각 `timestamp`는 기간 조회에 사용하지 않는다.
+
+    `total`은 필터 적용 후, pagination 적용 전 전체 개수다.
+    """
     clauses: List[str] = []
     params: List[Any] = []
     if event_type is not None:
@@ -219,6 +229,12 @@ def list_events(
     if zone_id is not None:
         clauses.append("zone_id = ?")
         params.append(zone_id)
+    if created_from is not None:
+        clauses.append("created_at >= ?")
+        params.append(_sqlite_timestamp(created_from))
+    if created_to is not None:
+        clauses.append("created_at < ?")
+        params.append(_sqlite_timestamp(created_to))
 
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
@@ -228,7 +244,8 @@ def list_events(
             params,
         ).fetchone()["count"]
         rows = connection.execute(
-            f"SELECT * FROM events {where_sql} ORDER BY id DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM events {where_sql} "
+            f"ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
             [*params, limit, offset],
         ).fetchall()
 
