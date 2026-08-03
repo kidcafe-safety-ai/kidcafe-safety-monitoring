@@ -4,7 +4,9 @@
 """
 
 import json
+import os
 import re
+import stat
 from pathlib import Path
 
 import pytest
@@ -386,6 +388,140 @@ def test_validation_failure_does_not_modify_file(client, runtime_path):
     )
 
     assert runtime_path.read_bytes() == before
+
+
+# ============ 타입 엄격 검증 ============
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [
+        {"enter_alert": "false", "dwell_threshold_sec": 5},
+        {"enter_alert": "true", "dwell_threshold_sec": 5},
+        {"enter_alert": 1, "dwell_threshold_sec": 5},
+        {"enter_alert": True, "dwell_threshold_sec": "5"},
+        {"enter_alert": True, "dwell_threshold_sec": 5.0},
+        {"enter_alert": True, "dwell_threshold_sec": True},
+    ],
+    ids=["str_false", "str_true", "int_flag", "str_dwell", "float_dwell", "bool_dwell"],
+)
+def test_rules_type_coercion_is_rejected(client, runtime_path, rules):
+    """`enter_alert`는 boolean, `dwell_threshold_sec`은 integer여야 한다.
+
+    Pydantic 기본 coercion은 `"false"`를 `False`로, `"5"`를 `5`로 바꿔 저장한다.
+    동결 계약은 타입을 명시하므로 잘못된 타입은 `422`여야 한다.
+    """
+    put_invalid(client, runtime_path, {"rules": rules})
+
+
+@pytest.mark.parametrize(
+    "points",
+    [
+        [["0.1", "0.2"], [0.3, 0.2], [0.3, 0.5]],
+        [[0.1, 0.2], [0.3, "0.2"], [0.3, 0.5]],
+        [[True, 0.2], [0.3, 0.2], [0.3, 0.5]],
+        [[0.1, 0.2], [0.3, 0.2], [0.3, False]],
+    ],
+    ids=["str_pair", "str_single", "bool_first", "bool_last"],
+)
+def test_coordinate_type_coercion_is_rejected(client, runtime_path, points):
+    """문자열·boolean 좌표를 number로 자동 변환하지 않는다."""
+    put_invalid(client, runtime_path, {"points": points})
+
+
+def test_integer_coordinates_are_accepted(client, runtime_path):
+    """JSON 정수 좌표는 유효한 number다 (`[0, 1]`)."""
+    version = seed_and_get_version(client, runtime_path)
+    zone = {**VALID_ZONE, "points": [[0, 0], [1, 0], [1, 1]]}
+
+    response = client.put(
+        "/zones", json={"expected_version": version, "zones": [zone]}
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["zones"][0]["points"] == [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"zone_id": 1},
+        {"zone_name": 1},
+        {"type": 1},
+        {"zone_type": 1},
+    ],
+    ids=["zone_id", "zone_name", "type", "zone_type"],
+)
+def test_non_string_identifier_is_rejected(client, runtime_path, overrides):
+    put_invalid(client, runtime_path, overrides)
+
+
+def test_non_string_expected_version_is_rejected(client, runtime_path):
+    write_runtime(runtime_path, [runtime_zone()])
+
+    response = client.put("/zones", json={"expected_version": 123, "zones": [VALID_ZONE]})
+
+    assert response.status_code == 422
+
+
+def test_type_rejection_does_not_modify_file(client, runtime_path):
+    """타입 오류로 거부될 때 runtime 파일이 바뀌지 않아야 한다."""
+    version = seed_and_get_version(client, runtime_path)
+    before = runtime_path.read_bytes()
+
+    response = client.put(
+        "/zones",
+        json={
+            "expected_version": version,
+            "zones": [
+                {
+                    **VALID_ZONE,
+                    "rules": {"enter_alert": "false", "dwell_threshold_sec": "5"},
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    assert runtime_path.read_bytes() == before
+
+
+# ============ 파일 권한 ============
+
+
+def test_put_preserves_runtime_file_mode(client, runtime_path):
+    """저장 후에도 기존 권한이 유지돼야 한다.
+
+    `tempfile.mkstemp()`는 `0600`으로 만든다. 그대로 교체하면 Docker Backend가
+    쓴 파일을 host Vision AI가 읽지 못한다.
+    """
+    version = seed_and_get_version(client, runtime_path)
+    os.chmod(runtime_path, 0o644)
+
+    response = client.put(
+        "/zones", json={"expected_version": version, "zones": [VALID_ZONE]}
+    )
+
+    assert response.status_code == 200
+    assert stat.S_IMODE(runtime_path.stat().st_mode) == 0o644
+
+
+def test_put_preserves_group_readable_mode(client, runtime_path):
+    version = seed_and_get_version(client, runtime_path)
+    os.chmod(runtime_path, 0o664)
+
+    client.put("/zones", json={"expected_version": version, "zones": [VALID_ZONE]})
+
+    assert stat.S_IMODE(runtime_path.stat().st_mode) == 0o664
+
+
+def test_seed_copy_is_readable_by_other_processes(runtime_path):
+    """setup이 만든 파일도 Vision AI가 읽을 수 있어야 한다."""
+    zone_store.ensure_runtime_file()
+
+    mode = stat.S_IMODE(runtime_path.stat().st_mode)
+
+    assert mode & stat.S_IROTH, f"other-readable 권한이 없다: {mode:o}"
 
 
 def test_put_on_missing_runtime_file_returns_500(client, runtime_path):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.geofencing.polygon_rules import validate_polygon_points
 
@@ -182,12 +182,22 @@ VERSION_PATTERN = r"^sha256:[0-9a-f]{64}$"
 
 
 class ZoneRulesPayload(BaseModel):
+    # strict: Pydantic 기본 coercion은 "false"를 False로, "5"를 5로 바꾼다.
+    # 동결 계약은 boolean·integer를 요구하므로 잘못된 타입은 422여야 한다.
+    model_config = ConfigDict(strict=True)
+
     enter_alert: bool
     dwell_threshold_sec: int = Field(ge=0, le=3600)
 
 
 class ZonePayload(BaseModel):
-    """`PUT /zones` 요청과 응답의 Zone 표현. API는 `zone_name`을 사용한다."""
+    """`PUT /zones` 요청과 응답의 Zone 표현. API는 `zone_name`을 사용한다.
+
+    strict 모드라 문자열·boolean 좌표를 number로 자동 변환하지 않는다. JSON 정수
+    좌표(`[0, 1]`)는 float으로 받아들인다.
+    """
+
+    model_config = ConfigDict(strict=True)
 
     zone_id: str = Field(min_length=1)
     zone_name: str = Field(min_length=1)
@@ -224,6 +234,8 @@ class ZonesResponse(BaseModel):
 
 class PutZonesRequest(BaseModel):
     """전체 Zone 목록을 교체한다. 누락한 Zone은 삭제 대상으로 해석한다."""
+
+    model_config = ConfigDict(strict=True)
 
     expected_version: str = Field(pattern=VERSION_PATTERN)
     zones: List[ZonePayload]

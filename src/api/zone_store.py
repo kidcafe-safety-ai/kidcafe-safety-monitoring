@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import tempfile
 import threading
 from dataclasses import dataclass
@@ -29,6 +30,10 @@ NORMALIZED_RANGE = (0.0, 1.0)
 UNAVAILABLE_MESSAGE = "zone configuration is unavailable"
 CONFLICT_MESSAGE = "zone configuration version conflict"
 SAVE_FAILED_MESSAGE = "failed to save zone configuration"
+
+# runtime 파일을 새로 만들 때 적용할 권한. Docker Backend가 쓰고 host Vision AI가
+# 읽는 공유 파일이라 소유자 외에도 읽을 수 있어야 한다.
+DEFAULT_RUNTIME_FILE_MODE = 0o644
 
 # 단일 Backend process 기준 계약이다. version 확인·검증·임시 파일 작성·os.replace()를
 # 하나의 임계 구역에서 수행해 lost update를 막는다.
@@ -279,8 +284,17 @@ def _atomic_write(path: Path, data: bytes) -> None:
 
     교체가 실패해도 기존 파일은 그대로 남는다. 임시 파일은 같은 파일시스템에
     두어야 `os.replace()`가 원자적으로 동작한다.
+
+    권한은 기존 파일 것을 그대로 물려준다. `tempfile.mkstemp()`가 만드는 파일은
+    `0600`이라 교체만 하면 Docker Backend가 쓴 파일을 host Vision AI가 읽지
+    못하게 된다. 두 프로세스가 같은 runtime 파일을 공유하는 구조라 치명적이다.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
+    mode = (
+        stat.S_IMODE(path.stat().st_mode)
+        if path.is_file()
+        else DEFAULT_RUNTIME_FILE_MODE
+    )
 
     descriptor, temp_name = tempfile.mkstemp(
         dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp"
@@ -291,6 +305,7 @@ def _atomic_write(path: Path, data: bytes) -> None:
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
+        os.chmod(temp_path, mode)
         os.replace(temp_path, path)
     except BaseException:
         temp_path.unlink(missing_ok=True)
