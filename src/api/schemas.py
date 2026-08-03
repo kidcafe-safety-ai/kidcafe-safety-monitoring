@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from src.geofencing.polygon_rules import validate_polygon_points
+
 
 EventType = Literal[
     "ENTER",
@@ -174,10 +176,67 @@ class CurrentStatusResponse(BaseModel):
     message: None = None
 
 
+ZoneTypeName = Literal["play", "exit", "restricted", "danger"]
+
+VERSION_PATTERN = r"^sha256:[0-9a-f]{64}$"
+
+
+class ZoneRulesPayload(BaseModel):
+    enter_alert: bool
+    dwell_threshold_sec: int = Field(ge=0, le=3600)
+
+
+class ZonePayload(BaseModel):
+    """`PUT /zones` 요청과 응답의 Zone 표현. API는 `zone_name`을 사용한다."""
+
+    zone_id: str = Field(min_length=1)
+    zone_name: str = Field(min_length=1)
+    type: Literal["polygon"]
+    zone_type: ZoneTypeName
+    points: List[List[float]]
+    rules: ZoneRulesPayload
+
+    @field_validator("zone_id", "zone_name")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be blank")
+        return value
+
+    @field_validator("points")
+    @classmethod
+    def _valid_polygon(cls, value: List[List[float]]) -> List[List[float]]:
+        # Vision AI의 floor Zone과 같은 규칙을 쓴다 (src/geofencing/polygon_rules.py).
+        return validate_polygon_points(value, coordinate_range=(0.0, 1.0))
+
+
+class ZoneConfigData(BaseModel):
+    version: str = Field(pattern=VERSION_PATTERN)
+    updated_at: str
+    zones: List[ZonePayload]
+
+
 class ZonesResponse(BaseModel):
     status: Literal["success"]
-    data: List[Dict[str, Any]]
+    data: ZoneConfigData
     message: None = None
+
+
+class PutZonesRequest(BaseModel):
+    """전체 Zone 목록을 교체한다. 누락한 Zone은 삭제 대상으로 해석한다."""
+
+    expected_version: str = Field(pattern=VERSION_PATTERN)
+    zones: List[ZonePayload]
+
+    @field_validator("zones")
+    @classmethod
+    def _unique_zone_ids(cls, value: List[ZonePayload]) -> List[ZonePayload]:
+        seen = set()
+        for zone in value:
+            if zone.zone_id in seen:
+                raise ValueError(f"duplicate zone_id: {zone.zone_id}")
+            seen.add(zone.zone_id)
+        return value
 
 
 class ErrorResponse(BaseModel):
