@@ -190,8 +190,9 @@ image_x_px,image_y_px,floor_x_m,floor_y_m,review_status,notes
 | 촬영 해상도 (px) | 픽셀당 실거리 환산 |
 | 카메라 높이 (m)·각도 | 원근 왜곡 정도 확인 |
 
-동결 시 `homography_acceptance_<camera_id>.json`의 `frozen_at`에 동결 시각을,
-`review_status`를 `frozen`으로 기록한다. holdout 결과를 확인한 뒤에는 허용값을
+동결 시 `homography_acceptance_<camera_id>.json`의 `frozen_at`에 timezone을 포함한
+RFC 3339 동결 시각을, `review_status`를 `reviewed`로 기록한다
+(`docs/interfaces.md`의 정의를 따른다). holdout 결과를 확인한 뒤에는 허용값을
 완화하지 않는다.
 
 ---

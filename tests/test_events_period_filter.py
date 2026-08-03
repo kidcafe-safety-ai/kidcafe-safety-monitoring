@@ -179,28 +179,44 @@ def test_empty_range_returns_empty_envelope(seeded):
     assert data["count"] == 0
 
 
-def test_subsecond_input_is_truncated_to_seconds(client):
-    """`created_at`이 초 단위 저장이라 소수점 이하 초는 버린다.
+def test_subsecond_created_from_excludes_that_second(client):
+    """`created_from=00:00:00.500`이면 `00:00:00` 저장 이벤트는 시작 이전이라 빠진다.
 
-    `created_to=00:00:00.999`는 `00:00:00`으로 취급되며, 종료가 미포함이므로
-    `00:00:00`에 저장된 이벤트는 빠진다. 그 초까지 포함하려면 다음 초를 준다.
+    저장 정밀도가 초 단위라 소수점을 버리면 경계 의미가 뒤집힌다. 다음 초로
+    올려서 비교해야 `created_from` 이상 의미가 유지된다.
     """
     seed_events(client, [("2026-08-06 15:00:00", {})])
 
-    truncated = get_events(client, created_to="2026-08-07T00:00:00.999+09:00")
-    next_second = get_events(client, created_to="2026-08-07T00:00:01+09:00")
-
-    assert truncated["total"] == 0
-    assert next_second["total"] == 1
+    assert get_events(client, created_from="2026-08-07T00:00:00.500+09:00")["total"] == 0
+    assert get_events(client, created_from="2026-08-07T00:00:00+09:00")["total"] == 1
 
 
-def test_subsecond_created_from_includes_that_second(client):
-    """`created_from`도 절삭되므로 해당 초에 저장된 이벤트가 포함된다."""
+def test_subsecond_created_to_includes_that_second(client):
+    """`created_to=00:00:00.999`면 `00:00:00` 저장 이벤트는 종료 이전이라 포함된다."""
     seed_events(client, [("2026-08-06 15:00:00", {})])
 
-    data = get_events(client, created_from="2026-08-07T00:00:00.500+09:00")
+    assert get_events(client, created_to="2026-08-07T00:00:00.999+09:00")["total"] == 1
+    assert get_events(client, created_to="2026-08-07T00:00:00+09:00")["total"] == 0
 
-    assert data["total"] == 1
+
+def test_subsecond_range_keeps_inclusive_exclusive_meaning(client):
+    """양쪽 경계를 함께 줘도 포함·미포함 의미가 유지된다."""
+    seed_events(
+        client,
+        [
+            ("2026-08-06 15:00:00", {}),
+            ("2026-08-06 15:00:01", {}),
+            ("2026-08-06 15:00:02", {}),
+        ],
+    )
+
+    data = get_events(
+        client,
+        created_from="2026-08-07T00:00:00.500+09:00",
+        created_to="2026-08-07T00:00:02.500+09:00",
+    )
+
+    assert data["total"] == 2
 
 
 def test_video_timestamp_does_not_affect_period_filter(client):
