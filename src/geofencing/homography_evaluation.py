@@ -241,9 +241,16 @@ def _require_rfc3339_with_timezone(value: str) -> None:
     """`frozen_at`은 timezone을 포함한 RFC 3339여야 한다.
 
     동결 시각이 모호하면 "holdout 확인 전에 동결했다"를 사후에 증명할 수 없다.
+
+    `datetime.fromisoformat`은 Python 3.10까지 `Z` suffix를 파싱하지 못한다.
+    CI가 3.10이므로 UTC offset으로 바꿔서 넘긴다.
     """
+    text = value.strip()
+    if text.endswith(("Z", "z")):
+        text = f"{text[:-1]}+00:00"
+
     try:
-        parsed = datetime.fromisoformat(value.strip())
+        parsed = datetime.fromisoformat(text)
     except ValueError:
         raise AcceptanceError(
             f"'frozen_at' must be an RFC 3339 datetime: got {value!r}"
