@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -177,3 +178,23 @@ def test_existing_output_requires_force(tmp_path):
 
     with pytest.raises(analyzer.AnalysisError, match="force"):
         analyzer.write_outputs(output, [], {}, {}, 1.0, False)
+
+
+def test_module_entrypoint_help_works():
+    repository_root = Path(__file__).resolve().parent.parent
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.analyze_omnifall_false_events",
+            "--help",
+        ],
+        cwd=repository_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--evaluation" in result.stdout

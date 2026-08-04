@@ -15,12 +15,15 @@ import io
 import json
 import math
 import os
+import sys
 import tempfile
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Sequence
 
-from select_omnifall_hard_negatives import LABEL_NAMES, POSITIVE_LABELS
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from select_omnifall_hard_negatives import LABEL_NAMES, POSITIVE_LABELS  # noqa: E402
 
 
 ANALYSIS_SCHEMA_VERSION = "omnifall_false_event_analysis_v1"
