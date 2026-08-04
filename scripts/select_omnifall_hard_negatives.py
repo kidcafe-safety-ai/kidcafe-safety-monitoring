@@ -449,6 +449,8 @@ def write_selection(
                 "source manifest archive_sha256은 소문자 SHA-256이어야 합니다."
             )
 
+    csv_content = _csv_text(selected)
+    csv_sha256 = hashlib.sha256(csv_content.encode("utf-8")).hexdigest()
     selected_counts: Dict[str, int] = defaultdict(int)
     for segment in selected:
         selected_counts[segment.activity] += 1
@@ -488,10 +490,11 @@ def write_selection(
         "selection": {
             "segment_count": len(selected),
             "unique_video_count": len({segment.path for segment in selected}),
+            "csv_sha256": csv_sha256,
             "by_activity": dict(sorted(selected_counts.items())),
         },
     }
-    _atomic_write_text(csv_path, _csv_text(selected))
+    _atomic_write_text(csv_path, csv_content)
     _atomic_write_text(
         json_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
     )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -244,6 +245,9 @@ def test_write_selection_records_source_and_policy(tmp_path):
     assert manifest["policy"]["max_segments_per_activity"] == 100
     assert manifest["selection"]["segment_count"] == 2
     assert len(selection_rows) == 2
+    assert manifest["selection"]["csv_sha256"] == hashlib.sha256(
+        (output / selector.OUTPUT_CSV).read_bytes()
+    ).hexdigest()
     assert {row["archive_member"] for row in selection_rows} == {
         "sit_down/a.mp4",
         "crawl/b.mp4",
