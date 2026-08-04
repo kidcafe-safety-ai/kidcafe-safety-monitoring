@@ -45,6 +45,20 @@ def _seoul_day_utc_bounds(now_utc: datetime) -> tuple[str, str]:
     )
 
 
+def _sqlite_timestamp_ceil(value: datetime) -> str:
+    """소수점 이하 초를 올려 저장 가능한 초 단위 시각으로 만든다.
+
+    `created_at`은 초 단위로 저장되므로 소수점을 버리면 경계 의미가 뒤집힌다.
+    `created_from=00:00:00.500`은 `00:00:00`에 저장된 이벤트를 제외해야 하고,
+    `created_to=00:00:00.999`는 포함해야 한다. 양쪽 모두 올림하면 `created_from`
+    포함·`created_to` 미포함 의미가 그대로 유지된다.
+    """
+    normalized = value.astimezone(timezone.utc)
+    if normalized.microsecond:
+        normalized = normalized.replace(microsecond=0) + timedelta(seconds=1)
+    return _sqlite_timestamp(normalized)
+
+
 def _recent_utc_bounds(now_utc: datetime, minutes: int) -> tuple[str, str]:
     """Return an inclusive recent window in SQLite UTC text format."""
     normalized_now = now_utc.astimezone(timezone.utc).replace(microsecond=0)
@@ -210,7 +224,21 @@ def list_events(
     offset: int,
     event_type: Optional[str] = None,
     zone_id: Optional[str] = None,
+    created_from: Optional[datetime] = None,
+    created_to: Optional[datetime] = None,
 ) -> Dict[str, Any]:
+    """이벤트 목록을 조회한다.
+
+    `created_from`/`created_to`는 timezone을 포함한 datetime이며 UTC로 변환해
+    SQLite `created_at`과 비교한다. 시작은 포함, 종료는 미포함이다. 영상 상대
+    시각 `timestamp`는 기간 조회에 사용하지 않는다.
+
+    `created_at`은 초 단위로 저장되므로 기간 입력의 소수점 이하 초는 다음 초로
+    올려서 비교한다. 이렇게 해야 `created_from` 이상·`created_to` 미만 의미가
+    유지된다 (`_sqlite_timestamp_ceil` 참고).
+
+    `total`은 필터 적용 후, pagination 적용 전 전체 개수다.
+    """
     clauses: List[str] = []
     params: List[Any] = []
     if event_type is not None:
@@ -219,6 +247,12 @@ def list_events(
     if zone_id is not None:
         clauses.append("zone_id = ?")
         params.append(zone_id)
+    if created_from is not None:
+        clauses.append("created_at >= ?")
+        params.append(_sqlite_timestamp_ceil(created_from))
+    if created_to is not None:
+        clauses.append("created_at < ?")
+        params.append(_sqlite_timestamp_ceil(created_to))
 
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
@@ -228,7 +262,8 @@ def list_events(
             params,
         ).fetchone()["count"]
         rows = connection.execute(
-            f"SELECT * FROM events {where_sql} ORDER BY id DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM events {where_sql} "
+            f"ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
             [*params, limit, offset],
         ).fetchall()
 
