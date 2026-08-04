@@ -70,6 +70,7 @@ TARGET_LABELS = {
     14: "crawl",
 }
 POSITIVE_LABELS = {1, 2}
+POSITIVE_PRIMARY_CATEGORIES = {"fall", "fallen"}
 REQUIRED_LABEL_COLUMNS = {
     "path",
     "label",
@@ -117,6 +118,7 @@ class AuditResult:
     positive_video_count: int
     target_segment_count: int
     excluded_positive_target_segment_count: int
+    excluded_positive_primary_target_segment_count: int
     eligible_target_segment_count: int
     deduplicated_candidate_count: int
     eligible_by_activity: Dict[str, int]
@@ -258,6 +260,7 @@ def audit_candidates(
 
     target_segment_count = 0
     excluded_positive_target_segment_count = 0
+    excluded_positive_primary_target_segment_count = 0
     eligible_target_segment_count = 0
     best_by_video_activity: Dict[Tuple[str, int], Segment] = {}
     for row_number, row, path, label, start, end, duration in parsed_rows:
@@ -266,6 +269,10 @@ def audit_candidates(
         target_segment_count += 1
         if path in positive_paths:
             excluded_positive_target_segment_count += 1
+            continue
+        primary_category = path.split("/", 1)[0]
+        if primary_category in POSITIVE_PRIMARY_CATEGORIES:
+            excluded_positive_primary_target_segment_count += 1
             continue
         eligible_target_segment_count += 1
         segment = Segment(
@@ -305,6 +312,9 @@ def audit_candidates(
         target_segment_count=target_segment_count,
         excluded_positive_target_segment_count=(
             excluded_positive_target_segment_count
+        ),
+        excluded_positive_primary_target_segment_count=(
+            excluded_positive_primary_target_segment_count
         ),
         eligible_target_segment_count=eligible_target_segment_count,
         deduplicated_candidate_count=len(candidates),
@@ -478,6 +488,7 @@ def write_selection(
             "split": "of-syn random train",
             "target_labels": TARGET_LABELS,
             "excluded_video_labels": sorted(POSITIVE_LABELS),
+            "excluded_primary_categories": sorted(POSITIVE_PRIMARY_CATEGORIES),
             "exclude_zero_duration": True,
             "deduplicate_by": ["path", "activity"],
             "deduplicate_preference": "longest segment",

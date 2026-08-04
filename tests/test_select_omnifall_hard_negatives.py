@@ -107,6 +107,23 @@ def test_zero_duration_fall_still_excludes_entire_video(tmp_path):
     assert [segment.path for segment in candidates] == ["kneeling/pure"]
 
 
+@pytest.mark.parametrize("primary_category", ["fall", "fallen"])
+def test_positive_primary_category_is_excluded_without_positive_label(
+    tmp_path, primary_category
+):
+    rows = [
+        _row(f"{primary_category}/annotation_anomaly", 3),
+        _row("sit_down/pure", 3),
+    ]
+    paths = [row["path"] for row in rows]
+    labels, split = _inputs(tmp_path, rows, paths)
+
+    candidates, audit = selector.audit_candidates(labels, split)
+
+    assert [segment.path for segment in candidates] == ["sit_down/pure"]
+    assert audit.excluded_positive_primary_target_segment_count == 1
+
+
 def test_longest_segment_is_kept_per_video_and_activity(tmp_path):
     rows = [
         _row("sitting/a", 4, 0.0, 1.0),
