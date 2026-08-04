@@ -82,7 +82,7 @@ def test_audit_excludes_non_train_positive_mixed_and_zero_duration(tmp_path):
 
     assert [segment.path for segment in candidates] == ["sit_down/pure"]
     assert audit.total_label_rows == 5
-    assert audit.train_video_count == 3
+    assert audit.split_video_count == 3
     assert audit.positive_video_count == 1
     assert audit.target_segment_count == 2
     assert audit.excluded_positive_target_segment_count == 1
@@ -243,7 +243,8 @@ def test_write_selection_records_source_and_policy(tmp_path):
 
     selector.write_selection(
         labels_path=labels,
-        train_split_path=split,
+        split_path=split,
+        split_role="validation",
         source_manifest_path=source_manifest,
         output_dir=output,
         selected=selected,
@@ -257,8 +258,13 @@ def test_write_selection_records_source_and_policy(tmp_path):
     selection_rows = list(
         csv.DictReader((output / selector.OUTPUT_CSV).open(encoding="utf-8"))
     )
-    assert manifest["schema_version"] == "omnifall_hard_negative_selection_v1"
+    assert manifest["schema_version"] == selector.SELECTION_SCHEMA_VERSION
     assert manifest["source"]["repository_revision"] == "abc123"
+    assert manifest["source"]["split_path"] == str(split)
+    assert manifest["source"]["split_sha256"] == selector._sha256(split)
+    assert manifest["policy"]["split_family"] == "of-syn random"
+    assert manifest["policy"]["split_role"] == "validation"
+    assert "not training input" in manifest["policy"]["purpose"]
     assert manifest["policy"]["max_segments_per_activity"] == 100
     assert manifest["selection"]["segment_count"] == 2
     assert len(selection_rows) == 2
@@ -282,7 +288,8 @@ def test_existing_output_requires_force(tmp_path):
     with pytest.raises(selector.SelectionError, match="force"):
         selector.write_selection(
             labels_path=labels,
-            train_split_path=split,
+            split_path=split,
+            split_role="train",
             source_manifest_path=None,
             output_dir=output,
             selected=candidates,
@@ -312,8 +319,29 @@ def test_source_manifest_requires_valid_revision_and_sha256(tmp_path):
     with pytest.raises(selector.SelectionError, match="SHA-256"):
         selector.write_selection(
             labels_path=labels,
-            train_split_path=split,
+            split_path=split,
+            split_role="train",
             source_manifest_path=source_manifest,
+            output_dir=tmp_path / "output",
+            selected=candidates,
+            audit=audit,
+            max_per_activity=100,
+            seed=42,
+            force=False,
+        )
+
+
+def test_write_selection_rejects_unknown_split_role(tmp_path):
+    rows = [_row("crawl/a", 14)]
+    labels, split = _inputs(tmp_path, rows, ["crawl/a"])
+    candidates, audit = selector.audit_candidates(labels, split)
+
+    with pytest.raises(selector.SelectionError, match="split_role"):
+        selector.write_selection(
+            labels_path=labels,
+            split_path=split,
+            split_role="development",
+            source_manifest_path=None,
             output_dir=tmp_path / "output",
             selected=candidates,
             audit=audit,

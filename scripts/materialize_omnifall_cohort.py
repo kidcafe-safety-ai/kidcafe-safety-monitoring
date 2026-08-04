@@ -32,7 +32,12 @@ from pathlib import Path, PurePosixPath
 from typing import Dict, List, Mapping, Sequence
 
 
-SELECTION_SCHEMA_VERSION = "omnifall_hard_negative_selection_v1"
+SELECTION_SCHEMA_VERSION = "omnifall_hard_negative_selection_v2"
+SUPPORTED_SELECTION_SCHEMA_VERSIONS = {
+    "omnifall_hard_negative_selection_v1",
+    SELECTION_SCHEMA_VERSION,
+}
+SPLIT_ROLES = {"train", "validation", "test"}
 COHORT_SCHEMA_VERSION = "omnifall_e0_mining_cohort_v1"
 SELECTION_CSV = "selection.csv"
 SELECTION_JSON = "selection_manifest.json"
@@ -104,11 +109,18 @@ def _read_selection(selection_dir: Path) -> tuple[List[dict], dict]:
         )
     with open(manifest_path, "r", encoding="utf-8") as file:
         manifest = json.load(file)
-    if manifest.get("schema_version") != SELECTION_SCHEMA_VERSION:
+    schema_version = manifest.get("schema_version")
+    if schema_version not in SUPPORTED_SELECTION_SCHEMA_VERSIONS:
         raise MaterializationError(
             "selection schema_version이 다릅니다: "
-            f"{manifest.get('schema_version')!r}"
+            f"{schema_version!r}"
         )
+    if schema_version == SELECTION_SCHEMA_VERSION:
+        split_role = manifest.get("policy", {}).get("split_role")
+        if split_role not in SPLIT_ROLES:
+            raise MaterializationError(
+                "v2 selection manifest의 policy.split_role이 올바르지 않습니다."
+            )
     expected_csv_sha = manifest.get("selection", {}).get("csv_sha256")
     if not isinstance(expected_csv_sha, str) or expected_csv_sha != _sha256(csv_path):
         raise MaterializationError("selection.csv SHA-256이 manifest와 다릅니다.")
@@ -370,6 +382,11 @@ def materialize(
     index_content = _index_csv(records)
     manifest = {
         "schema_version": COHORT_SCHEMA_VERSION,
+        "split_role": (
+            selection_manifest.get("policy", {}).get("split_role")
+            if selection_manifest.get("schema_version") == SELECTION_SCHEMA_VERSION
+            else "train"
+        ),
         "archive_path": str(archive_path),
         "archive_sha256": actual_archive_sha,
         "selection_dir": str(selection_dir),

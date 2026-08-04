@@ -1,7 +1,7 @@
-"""OmniFall OF-Synthetic에서 E0 오분류 채굴용 hard-negative cohort를 고른다.
+r"""OmniFall OF-Synthetic에서 hard-negative challenge cohort를 고른다.
 
-이 단계는 영상을 추출하거나 학습 라벨을 만들지 않는다. 공식 random Train
-split의 temporal annotation만 읽어 다음 조건을 만족하는 segment 목록을 만든다.
+이 단계는 영상을 추출하거나 학습 라벨을 만들지 않는다. 공식 random split의
+temporal annotation만 읽어 다음 조건을 만족하는 segment 목록을 만든다.
 
 - 길이가 0인 annotation은 감사 기록에 남기고 제외한다.
 - 같은 영상에 ``fall`` 또는 ``fallen`` segment가 하나라도 있으면 제외한다.
@@ -9,15 +9,16 @@ split의 temporal annotation만 읽어 다음 조건을 만족하는 segment 목
 - 한 행동의 대량 샘플이 cohort를 지배하지 않도록 행동별 상한을 둔다.
 - 연령대와 환경 조합을 round-robin해 가능한 범위에서 다양성을 유지한다.
 
-출력 cohort는 학습 데이터 자체가 아니다. 다음 단계에서 기존 E0 모델을 실행해
-실제로 고신뢰 ``fall`` 오분류가 발생한 구간만 채굴한 뒤 nofall 학습 프레임으로
-materialize한다.
+출력 cohort는 학습 데이터 자체가 아니다. Train split 출력은 E0 오분류를
+채굴하는 데 사용하고, validation/test split 출력은 E0와 후보 모델을 독립적으로
+비교하는 데만 사용한다.
 
 Usage:
     python scripts/select_omnifall_hard_negatives.py \
         --labels /content/phase4_a2/datasets/omnifall/labels/of-syn.csv \
-        --train-split \
+        --split-file \
             /content/phase4_a2/datasets/omnifall/splits/syn/random/train.csv \
+        --split-role train \
         --source-manifest \
             /content/drive/MyDrive/kidcafe-data/phase4/source_manifests/\
 omnifall_of_syn_source.json \
@@ -81,6 +82,8 @@ REQUIRED_LABEL_COLUMNS = {
 }
 OUTPUT_CSV = "selection.csv"
 OUTPUT_JSON = "selection_manifest.json"
+SELECTION_SCHEMA_VERSION = "omnifall_hard_negative_selection_v2"
+SPLIT_ROLES = ("train", "validation", "test")
 
 
 class SelectionError(ValueError):
@@ -113,7 +116,7 @@ class Segment:
 @dataclass(frozen=True)
 class AuditResult:
     total_label_rows: int
-    train_video_count: int
+    split_video_count: int
     zero_duration_rows: List[dict]
     positive_video_count: int
     target_segment_count: int
@@ -130,8 +133,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--labels", required=True, help="OmniFall labels/of-syn.csv")
     parser.add_argument(
-        "--train-split", required=True, help="OmniFall splits/syn/random/train.csv"
+        "--split-file",
+        "--train-split",
+        dest="split_file",
+        required=True,
+        help=(
+            "OmniFall splits/syn/random/{train,validation,test}.csv "
+            "(--train-split은 이전 실행 호환 alias)"
+        ),
     )
+    parser.add_argument("--split-role", choices=SPLIT_ROLES, default="train")
     parser.add_argument(
         "--source-manifest",
         help="다운로드 revision과 archive SHA-256을 기록한 JSON",
@@ -199,7 +210,7 @@ def _optional_text(row: Mapping[str, str], field: str) -> str:
     return (row.get(field) or "unknown").strip() or "unknown"
 
 
-def _load_train_paths(path: Path) -> List[str]:
+def _load_split_paths(path: Path) -> List[str]:
     rows, fieldnames = _read_csv(path)
     if "path" not in fieldnames:
         raise SelectionError(f"{path}에 path 컬럼이 없습니다.")
@@ -214,12 +225,12 @@ def _load_train_paths(path: Path) -> List[str]:
         seen.add(value)
         paths.append(value)
     if not paths:
-        raise SelectionError(f"{path}에 Train 영상이 없습니다.")
+        raise SelectionError(f"{path}에 split 영상이 없습니다.")
     return paths
 
 
 def audit_candidates(
-    labels_path: Path, train_split_path: Path
+    labels_path: Path, split_path: Path
 ) -> Tuple[List[Segment], AuditResult]:
     rows, fieldnames = _read_csv(labels_path)
     missing = REQUIRED_LABEL_COLUMNS - set(fieldnames)
@@ -227,7 +238,7 @@ def audit_candidates(
         raise SelectionError(
             f"{labels_path}에 필수 컬럼이 없습니다: {sorted(missing)}"
         )
-    train_paths = set(_load_train_paths(train_split_path))
+    split_paths = set(_load_split_paths(split_path))
 
     parsed_rows = []
     zero_duration_rows = []
@@ -243,7 +254,7 @@ def audit_candidates(
                 f"labels:{row_number}의 시간 순서가 역전됐습니다: "
                 f"path={path!r}, start={start}, end={end}"
             )
-        if path in train_paths and label in POSITIVE_LABELS:
+        if path in split_paths and label in POSITIVE_LABELS:
             positive_paths.add(path)
         if duration == 0:
             zero_duration_rows.append(
@@ -264,7 +275,7 @@ def audit_candidates(
     eligible_target_segment_count = 0
     best_by_video_activity: Dict[Tuple[str, int], Segment] = {}
     for row_number, row, path, label, start, end, duration in parsed_rows:
-        if path not in train_paths or label not in TARGET_LABELS:
+        if path not in split_paths or label not in TARGET_LABELS:
             continue
         target_segment_count += 1
         if path in positive_paths:
@@ -306,7 +317,7 @@ def audit_candidates(
         counts[segment.activity] += 1
     return candidates, AuditResult(
         total_label_rows=len(rows),
-        train_video_count=len(train_paths),
+        split_video_count=len(split_paths),
         zero_duration_rows=zero_duration_rows,
         positive_video_count=len(positive_paths),
         target_segment_count=target_segment_count,
@@ -418,7 +429,8 @@ def _csv_text(segments: Sequence[Segment]) -> str:
 
 def write_selection(
     labels_path: Path,
-    train_split_path: Path,
+    split_path: Path,
+    split_role: str,
     source_manifest_path: Optional[Path],
     output_dir: Path,
     selected: Sequence[Segment],
@@ -427,6 +439,10 @@ def write_selection(
     seed: int,
     force: bool,
 ) -> None:
+    if split_role not in SPLIT_ROLES:
+        raise SelectionError(
+            f"split_role은 {list(SPLIT_ROLES)} 중 하나여야 합니다: {split_role!r}"
+        )
     csv_path = output_dir / OUTPUT_CSV
     json_path = output_dir / OUTPUT_JSON
     existing = [path for path in (csv_path, json_path) if path.exists()]
@@ -465,12 +481,12 @@ def write_selection(
     for segment in selected:
         selected_counts[segment.activity] += 1
     manifest = {
-        "schema_version": "omnifall_hard_negative_selection_v1",
+        "schema_version": SELECTION_SCHEMA_VERSION,
         "source": {
             "labels_path": str(labels_path),
             "labels_sha256": _sha256(labels_path),
-            "train_split_path": str(train_split_path),
-            "train_split_sha256": _sha256(train_split_path),
+            "split_path": str(split_path),
+            "split_sha256": _sha256(split_path),
             "download_manifest_path": (
                 str(source_manifest_path) if source_manifest_path else None
             ),
@@ -485,7 +501,8 @@ def write_selection(
             ),
         },
         "policy": {
-            "split": "of-syn random train",
+            "split_family": "of-syn random",
+            "split_role": split_role,
             "target_labels": TARGET_LABELS,
             "excluded_video_labels": sorted(POSITIVE_LABELS),
             "excluded_primary_categories": sorted(POSITIVE_PRIMARY_CATEGORIES),
@@ -495,7 +512,13 @@ def write_selection(
             "balance_strata": ["age_group", "environment_category"],
             "max_segments_per_activity": max_per_activity,
             "seed": seed,
-            "purpose": "E0 false-positive mining; not direct training input",
+            "purpose": {
+                "train": "E0 false-positive mining; not direct training input",
+                "validation": (
+                    "independent E0/E1 model comparison; not training input"
+                ),
+                "test": "final external evaluation; not training or model selection",
+            }[split_role],
         },
         "audit": asdict(audit),
         "selection": {
@@ -514,13 +537,13 @@ def write_selection(
 def main() -> None:
     args = parse_args()
     labels_path = Path(args.labels)
-    train_split_path = Path(args.train_split)
+    split_path = Path(args.split_file)
     source_manifest_path = (
         Path(args.source_manifest) if args.source_manifest is not None else None
     )
     output_dir = Path(args.output_dir)
 
-    candidates, audit = audit_candidates(labels_path, train_split_path)
+    candidates, audit = audit_candidates(labels_path, split_path)
     selected = select_balanced(
         candidates,
         max_per_activity=args.max_segments_per_activity,
@@ -528,7 +551,8 @@ def main() -> None:
     )
     write_selection(
         labels_path=labels_path,
-        train_split_path=train_split_path,
+        split_path=split_path,
+        split_role=args.split_role,
         source_manifest_path=source_manifest_path,
         output_dir=output_dir,
         selected=selected,

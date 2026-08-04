@@ -29,7 +29,12 @@ FIELDS = [
 ]
 
 
-def _selection(tmp_path: Path, rows: list, archive_sha256: str) -> Path:
+def _selection(
+    tmp_path: Path,
+    rows: list,
+    archive_sha256: str,
+    schema_version: str = materializer.SELECTION_SCHEMA_VERSION,
+) -> Path:
     directory = tmp_path / "selection"
     directory.mkdir()
     output = io.StringIO(newline="")
@@ -41,8 +46,9 @@ def _selection(tmp_path: Path, rows: list, archive_sha256: str) -> Path:
         csv_content, encoding="utf-8"
     )
     manifest = {
-        "schema_version": materializer.SELECTION_SCHEMA_VERSION,
+        "schema_version": schema_version,
         "source": {"archive_sha256": archive_sha256},
+        "policy": {"split_role": "validation"},
         "selection": {
             "segment_count": len(rows),
             "csv_sha256": hashlib.sha256(csv_content.encode()).hexdigest(),
@@ -97,6 +103,7 @@ def test_materializes_unique_videos_and_writes_annotations(tmp_path):
 
     assert manifest["segment_count"] == 3
     assert manifest["video_count"] == 2
+    assert manifest["split_role"] == "validation"
     assert (output / "videos/sit_down/a.mp4").read_bytes() == b"video-a"
     annotations = list(
         csv.DictReader(
@@ -112,6 +119,43 @@ def test_materializes_unique_videos_and_writes_annotations(tmp_path):
     )
     validate_annotations(loaded)
     assert len(loaded) == 2
+
+
+def test_materializes_legacy_v1_selection(tmp_path):
+    archive = _archive(tmp_path, {"crawl/a.mp4": b"video"})
+    selection = _selection(
+        tmp_path,
+        [_row("crawl_1", "crawl/a", "crawl")],
+        materializer._sha256(archive),
+        schema_version="omnifall_hard_negative_selection_v1",
+    )
+    manifest_path = selection / materializer.SELECTION_JSON
+    selection_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    selection_manifest.pop("policy")
+    manifest_path.write_text(json.dumps(selection_manifest), encoding="utf-8")
+
+    manifest = materializer.materialize(
+        archive, selection, tmp_path / "cohort", force=False
+    )
+
+    assert manifest["video_count"] == 1
+    assert manifest["split_role"] == "train"
+
+
+def test_rejects_v2_selection_without_split_role(tmp_path):
+    archive = _archive(tmp_path, {"crawl/a.mp4": b"video"})
+    selection = _selection(
+        tmp_path,
+        [_row("crawl_1", "crawl/a", "crawl")],
+        materializer._sha256(archive),
+    )
+    manifest_path = selection / materializer.SELECTION_JSON
+    selection_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    selection_manifest["policy"].pop("split_role")
+    manifest_path.write_text(json.dumps(selection_manifest), encoding="utf-8")
+
+    with pytest.raises(materializer.MaterializationError, match="split_role"):
+        materializer.materialize(archive, selection, tmp_path / "cohort", False)
 
 
 def test_rejects_selection_csv_checksum_mismatch(tmp_path):
