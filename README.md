@@ -289,7 +289,8 @@ kidcafe-safety-monitoring/
 │   └── tracker_sweep.py
 ├── configs/                 # 낙상 상태머신·학습·데이터 분할 설정
 │   ├── fall_detection.json
-│   └── caucafall_v5_split.json
+│   ├── caucafall_v5_split.json
+│   └── camera_calibration/  # Phase 4 Homography calibration (기본 비활성)
 ├── data/
 │   ├── videos/              # 입력 영상 (.gitignore)
 │   └── zones/               # Zone JSON
@@ -301,6 +302,7 @@ kidcafe-safety-monitoring/
 │   ├── model_benchmark.md   # Phase 1.5 모델 비교 결과
 │   ├── docker_phase_2_5.md  # Docker 실행 가이드 (Phase 2.5)
 │   ├── fall_evaluation.md   # 낙상 PoC 평가·튜닝·runtime 최적화 기록
+│   ├── homography_calibration.md  # Phase 4 floor-plane 좌표계·측정 절차
 │   ├── realtime_test.md     # Phase 2-3 실시간 실험 로그
 │   └── ...
 ├── tests/
