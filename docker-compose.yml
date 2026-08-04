@@ -7,6 +7,7 @@ services:
       - "8000:8000"
     environment:
       KIDCAFE_DB_PATH: ${KIDCAFE_DB_PATH:-/app/outputs/kidcafe_events.db}
+      KIDCAFE_ZONES_PATH: ${KIDCAFE_ZONES_PATH:-/app/outputs/zones_runtime.json}
     volumes:
       - ./outputs:/app/outputs
     healthcheck:

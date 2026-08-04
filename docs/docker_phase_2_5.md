@@ -57,9 +57,13 @@ React Dashboard는 Vite 환경변수로 API mode와 API base URL을 설정한다
 
 ```env
 KIDCAFE_DB_PATH=/app/outputs/kidcafe_events.db
+KIDCAFE_ZONES_PATH=/app/outputs/zones_runtime.json
 VITE_API_MODE=api
 VITE_API_BASE_URL=http://localhost:8000
 ```
+
+Phase 4에서 `KIDCAFE_ZONES_PATH`가 추가됐다. Zone Settings 저장(`PUT /zones`)의
+대상 파일이며, seed인 `data/zones/sample.json`은 읽기 전용으로 유지한다.
 
 React 코드는 브라우저에서 실행되므로 `VITE_API_BASE_URL`은 Docker service name이 아니라 호스트에서 접근 가능한 `http://localhost:8000`을 사용한다.
 
@@ -80,6 +84,20 @@ cp .env.example .env
 `.env`는 로컬 실행 파일이므로 Git에 포함하지 않는다.
 
 ## 실행
+
+### Zone runtime 파일 초기화 (최초 1회)
+
+API는 계약상 누락된 Zone runtime 파일을 자동 생성하지 않는다. 처음 실행하기
+전에 seed를 runtime으로 복사한다. 이미 있으면 덮어쓰지 않는다.
+
+```bash
+python scripts/init_zone_runtime.py
+```
+
+호스트의 `outputs/zones_runtime.json`이 생성되고, `./outputs:/app/outputs`
+volume을 통해 컨테이너의 `/app/outputs/zones_runtime.json`과 같은 파일이 된다.
+이 단계를 건너뛰면 `GET /zones`가 `500`을 반환하고 ZoneSettingsPage에서 편집이
+비활성화된다.
 
 ```bash
 docker compose up --build
@@ -154,6 +172,20 @@ outputs/kidcafe_events.db
 ```
 
 Vision AI는 로컬에서 실행하고 Docker API 연동만 검증한다.
+
+### Zone Settings 반영 (Phase 4)
+
+Vision AI의 `--zones` 기본값은 기존 단독 실행과의 하위 호환을 위해
+`data/zones/sample.json`을 유지한다. Dashboard에서 저장한 Zone을 실제 판정에
+반영하려면 runtime 파일을 명시하고 재시작한다.
+
+```bash
+python src/main.py --zones outputs/zones_runtime.json --api-url http://localhost:8000
+```
+
+Backend 컨테이너의 `KIDCAFE_ZONES_PATH=/app/outputs/zones_runtime.json`과
+호스트의 `outputs/zones_runtime.json`은 같은 volume 파일이어야 한다. Vision AI는
+시작할 때 Zone을 읽으므로 저장 후 재시작해야 적용된다.
 
 ## 종료
 
