@@ -18,7 +18,7 @@ data/datasets/
 │  ├─ validation/    # Subject 7-8
 │  └─ holdout/       # Subject 9-10 (최종 평가 전까지 미사용)
 ├─ gmdcsa24/v2.1/
-├─ omnifall/                 # Phase 4 후보, gate 통과 후 사용
+├─ omnifall/                 # Phase 4 비상업적 진단·학습 후보
 ├─ up_fall/                  # Phase 4 후보, gate 통과 후 사용
 ├─ ur_fall/                  # 선택
 ├─ phase4_recordings/        # 2026-08-07 촬영 원본, Git 제외
@@ -104,7 +104,7 @@ checksum, CAUCAFall 중복 여부를 확인한 뒤 사용한다. 확인 전에�
 
 | 데이터 | 우선 용도 | 현재 상태 |
 |---|---|---|
-| OmniFall OF-Synthetic | sit·kneel·squat·crawl·lie-down hard-negative | 접근·라이선스·중복 확인 대기 |
+| OmniFall OF-Synthetic | sit·kneel·squat·crawl·lie-down hard-negative | 다운로드·체크섬 완료, 비상업적 진단 cohort 사용 중 |
 | UP-Fall | 실제 RGB fall·sit·pick·lay 다양성 | subject·camera 분할과 라이선스 확인 대기 |
 | GMDCSA-24 | 다른 환경의 고신뢰 false Event 선별 | 메타데이터 확인, 다운로드·checksum 대기 |
 
@@ -113,6 +113,25 @@ checksum, CAUCAFall 중복 여부를 확인한 뒤 사용한다. 확인 전에�
 - CAUCAFall 파생·중복 영상은 제외한다.
 - 외부 데이터 미확보로 8월 7일 촬영이나 E0 기준선 평가를 지연하지 않는다.
 - E1 미실행도 사유와 함께 정식 결과로 기록한다.
+
+### OmniFall OF-Synthetic 사용 기록
+
+| 항목 | 내용 |
+|---|---|
+| 공식 저장소 | https://huggingface.co/datasets/simplexsigil2/omnifall |
+| 사용 범위 | OF-Synthetic random Train split의 hard-negative 후보 |
+| 원본 archive | `data_files/omnifall-synthetic_av1.tar` (12,000개 AV1 영상) |
+| 다운로드 상태 | 2026-08-04 완료, revision·SHA-256은 팀 스토리지의 source manifest에 기록 |
+| Git 저장 | 원본·H.264 변환본·Signal Cache·검수 clip 모두 제외 |
+| 중복 방지 | positive temporal label과 `fall`·`fallen` 대표 category 영상 제외 |
+| 현재 용도 | E0 외부 challenge 진단과 검수된 hard-negative 후보 선별 |
+
+Hugging Face metadata에는 `CC BY-NC 4.0`이 표시되지만 dataset card 본문은
+annotation과 split을 `CC BY-NC-SA 4.0`으로 설명하고 영상 권리는 원 권리자에게
+있다고 명시한다. 따라서 Phase 4에서는 비상업적 연구·진단 목적으로만 사용하고,
+원본·변환 영상은 재배포하지 않는다. 외부 공개나 상업적 사용 전에는
+OF-Synthetic 영상 archive에 적용되는 정확한 라이선스 범위를 원 배포자에게
+추가 확인한다.
 
 ---
 
