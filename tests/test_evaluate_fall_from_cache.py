@@ -1,16 +1,18 @@
-"""scripts/evaluate_fall_from_cache.py의 순수 검증 로직 테스트.
+"""scripts/evaluate_fall_from_cache.py의 검증·재생 wiring 테스트.
 
-_validate_cache_metadata()는 cv2/YOLO 없이 dict/Path만으로 검증 가능하다.
+metadata 검증과 최소 cache main() 경로를 실제 cv2/YOLO 추론 없이 확인한다.
 """
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import evaluate_fall as ef  # noqa: E402
@@ -29,7 +31,43 @@ _TRACKER_META = {
     "conf": 0.5,
     "tracker_config": "bytetrack.yaml",
     "tracker_config_sha256": None,
+    "requested_device": "auto",
+    "resolved_device": "mps",
 }
+
+
+def test_cache_protocol_metadata_uses_manifest_provenance(tmp_path, monkeypatch):
+    config = tmp_path / "fall.json"
+    config.write_text("{}", encoding="utf-8")
+    manifest = {
+        "tracker": {**_TRACKER_META, "model_sha256": "b" * 64},
+        "auxiliary_model": {
+            "model_path": "fall.pt",
+            "model_sha256": "a" * 64,
+            "conf": 0.5,
+            "requested_device": "auto",
+            "resolved_device": "mps",
+        },
+    }
+    monkeypatch.setattr(
+        efc.evaluation_protocol,
+        "_git_state",
+        lambda: ("1" * 40, False),
+    )
+
+    payload = efc._build_cache_protocol_metadata(
+        SimpleNamespace(config=str(config)),
+        efc.evaluation_protocol.CAUCAFALL_ANNOTATION_VERSION,
+        manifest,
+    )
+
+    assert payload["model_sha256"] == "a" * 64
+    assert payload["tracker_config"] == manifest["tracker"]
+    assert payload["device"] == {
+        "tracker": "mps",
+        "auxiliary_model": "mps",
+        "evaluation": "cache_replay",
+    }
 
 
 def _row(**overrides) -> ef._AnnotationRow:
@@ -71,6 +109,147 @@ def _metadata(**overrides) -> dict:
     )
     defaults.update(overrides)
     return defaults
+
+
+def _write_cache_cli_fixture(tmp_path: Path, official: bool) -> dict:
+    annotations = tmp_path / "annotations_v2.csv"
+    annotations.write_text(
+        "video_id,label,video_path,dataset_fall_label_frame,fall_start_frame,"
+        "impact_frame,lying_start_frame,review_status\n"
+        "v1,no_fall,v1.avi,,,,,reviewed\n",
+        encoding="utf-8",
+    )
+    config = tmp_path / "fall.json"
+    config.write_text("{}", encoding="utf-8")
+    videos_dir = tmp_path / "videos"
+    videos_dir.mkdir()
+    video_path = videos_dir / "v1.avi"
+    video_path.write_bytes(b"video")
+    cache_dir = tmp_path / "cache"
+
+    tracker_meta = {
+        **_TRACKER_META,
+        "model_sha256": "b" * 64,
+    }
+    auxiliary_meta = {
+        "model_path": "fall.pt",
+        "model_sha256": "a" * 64,
+        "conf": 0.5,
+        "requested_device": "auto",
+        "resolved_device": "cpu",
+    }
+    if not official:
+        tracker_meta.pop("requested_device")
+        tracker_meta.pop("resolved_device")
+        auxiliary_meta.pop("requested_device")
+        auxiliary_meta.pop("resolved_device")
+
+    manifest = efc.cache.build_manifest(
+        split="development",
+        videos_dir=str(videos_dir.resolve()),
+        tracker_meta=tracker_meta,
+        auxiliary_meta=auxiliary_meta,
+    )
+    efc.cache.write_manifest(cache_dir, manifest)
+    efc.cache.write_video_cache(
+        efc.cache.cache_path_for(cache_dir, "v1"),
+        video_id="v1",
+        fps=20.0,
+        tracker_meta=tracker_meta,
+        auxiliary_meta=auxiliary_meta,
+        frames=[efc.cache.CachedFrame(0, "00:00:00.000", [], [])],
+        video_path=str(video_path.resolve()),
+        video_size_bytes=video_path.stat().st_size,
+    )
+    return {
+        "annotations": annotations,
+        "config": config,
+        "cache_dir": cache_dir,
+        "output": tmp_path / "result.json",
+    }
+
+
+def _run_cache_cli(monkeypatch, paths: dict, official: bool) -> None:
+    argv = [
+        "evaluate_fall_from_cache.py",
+        "--annotations",
+        str(paths["annotations"]),
+        "--cache-dir",
+        str(paths["cache_dir"]),
+        "--split",
+        "development",
+        "--config",
+        str(paths["config"]),
+        "--output",
+        str(paths["output"]),
+    ]
+    if official:
+        argv.extend(
+            [
+                "--evaluation-protocol-version",
+                efc.evaluation_protocol.EVALUATION_PROTOCOL_VERSION,
+            ]
+        )
+    monkeypatch.setattr(sys, "argv", argv)
+    monkeypatch.setattr(
+        efc.evaluation_protocol,
+        "_git_state",
+        lambda: ("1" * 40, False),
+    )
+    efc.main()
+
+
+def test_official_cache_cli_rejects_legacy_manifest(tmp_path, monkeypatch):
+    paths = _write_cache_cli_fixture(tmp_path, official=False)
+
+    with pytest.raises(SystemExit, match="cache provenance"):
+        _run_cache_cli(monkeypatch, paths, official=True)
+
+    assert not paths["output"].exists()
+
+
+def test_non_official_cache_cli_accepts_legacy_manifest(tmp_path, monkeypatch):
+    paths = _write_cache_cli_fixture(tmp_path, official=False)
+
+    _run_cache_cli(monkeypatch, paths, official=False)
+
+    payload = json.loads(paths["output"].read_text(encoding="utf-8"))
+    assert payload["evaluation_valid"] is True
+    assert "evaluation_protocol_version" not in payload
+
+
+def test_official_cache_cli_writes_provenance_to_result_root(tmp_path, monkeypatch):
+    paths = _write_cache_cli_fixture(tmp_path, official=True)
+
+    _run_cache_cli(monkeypatch, paths, official=True)
+
+    payload = json.loads(paths["output"].read_text(encoding="utf-8"))
+    assert payload["evaluation_valid"] is True
+    assert payload["skipped_with_error"] == 0
+    assert payload["contract_version"] == efc.evaluation_protocol.CONTRACT_VERSION
+    assert payload["evaluation_protocol_version"] == (
+        efc.evaluation_protocol.EVALUATION_PROTOCOL_VERSION
+    )
+    assert payload["annotation_schema_version"] == (
+        efc.evaluation_protocol.CAUCAFALL_ANNOTATION_VERSION
+    )
+    assert payload["evaluator_git_commit"] == "1" * 40
+    assert payload["evaluator_git_dirty"] is False
+    assert payload["model_sha256"] == "a" * 64
+    assert payload["config_sha256"] == efc.evaluation_protocol.sha256_file(
+        paths["config"]
+    )
+    assert payload["tracker_config"]["model_sha256"] == "b" * 64
+    assert payload["device"]["tracker"] == "mps"
+    assert payload["device"]["auxiliary_model"] == "cpu"
+    assert payload["device"]["evaluation"] == "cache_replay"
+    assert payload["early_tolerance_sec"] == 0.2
+    assert payload["timely_window_sec"] == 2.0
+    assert payload["event_matching_rule"] == efc.evaluation_protocol.EVENT_MATCHING_RULE
+    assert payload["duplicate_rule"] == efc.evaluation_protocol.DUPLICATE_RULE
+    assert payload["far_denominator_rule"] == (
+        efc.evaluation_protocol.FAR_DENOMINATOR_RULE
+    )
 
 
 class TestValidateCacheMetadata:

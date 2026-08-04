@@ -1,10 +1,14 @@
 """FallDetector를 CAUCAFall(또는 동일 형식) 영상 세트에 대해 평가한다.
 
 CAUCAFall 자체는 낙상 시작/충격/누운 시점 라벨을 제공하지 않으므로 팀이
-직접 검토한 annotation CSV가 필요하다. CSV 형식 (7개 컬럼 모두 필수,
-값은 비워둘 수 있음):
+직접 검토한 annotation CSV가 필요하다. legacy V1 공통 형식은 다음 7개
+컬럼이다.
 
     video_id,label,video_path,fall_start_frame,impact_frame,lying_start_frame,review_status
+
+CAUCAFall 공식 V2는 `dataset_fall_label_frame`을 추가한 8개 컬럼이며,
+`phase4_fall_eval_v1` 공식 모드에서는 reviewed fall 행의 원본 라벨 프레임과
+fall_start/impact/lying 세 시점을 모두 요구한다.
 
     - label: "fall" 또는 "no_fall" (정확히 일치해야 함)
     - video_path: --videos-dir 기준 상대 경로 (절대 경로도 허용)
@@ -54,6 +58,8 @@ import cv2
 # repo root를 sys.path에 추가한다. `src.main`과 달리 `python scripts/evaluate_fall.py`로
 # 직접 실행하는 스크립트라 `python -m` 모듈 실행처럼 자동으로 repo root가 잡히지 않는다.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts import fall_evaluation_protocol as evaluation_protocol  # noqa: E402
 
 from src.common.types import Track  # noqa: E402
 from src.safety.auxiliary_fall_model import AuxiliaryFallModel  # noqa: E402
@@ -231,6 +237,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="holdout 데이터를 사용할 때만 명시적으로 허용한다.",
     )
+    evaluation_protocol.add_cli_argument(parser)
     return parser.parse_args()
 
 
@@ -1077,6 +1084,39 @@ def _summarize(results: List[_VideoResult]) -> dict:
     }
 
 
+def _build_live_protocol_metadata(
+    args,
+    annotation_schema_version: str,
+    tracker,
+    tracker_model_path: str,
+    auxiliary_model,
+) -> dict:
+    tracker_config = {
+        "tracker_type": args.tracker,
+        "model_path": tracker_model_path,
+        "model_sha256": evaluation_protocol.sha256_file(tracker_model_path),
+        "conf": args.conf,
+        "tracker_config": getattr(tracker, "tracker_config", "bytetrack.yaml"),
+        "tracker_config_sha256": evaluation_protocol.sha256_file(
+            getattr(tracker, "tracker_config", "bytetrack.yaml")
+        ),
+    }
+    return evaluation_protocol.build_metadata(
+        annotation_schema_version=annotation_schema_version,
+        model_sha256=evaluation_protocol.sha256_file(args.fall_model_path),
+        config_path=args.config,
+        tracker=args.tracker,
+        tracker_config=tracker_config,
+        device={
+            "tracker": getattr(tracker, "_device", args.device),
+            "auxiliary_model": getattr(
+                auxiliary_model, "_device", args.fall_model_device
+            ),
+            "evaluation": "live",
+        },
+    )
+
+
 def main() -> None:
     args = parse_args()
 
@@ -1090,6 +1130,16 @@ def main() -> None:
     try:
         validate_auxiliary_inference_interval_frames(args.fall_model_interval_frames)
     except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    try:
+        annotation_schema_version = evaluation_protocol.validate_protocol_request(
+            args.evaluation_protocol_version,
+            args.annotations,
+            args.early_tolerance_sec,
+            args.timely_window_sec,
+            args.include_unreviewed,
+        )
+    except (OSError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
 
     videos_dir = Path(args.videos_dir)
@@ -1129,6 +1179,19 @@ def main() -> None:
             enabled=True,
         )
 
+    protocol_metadata = {}
+    if annotation_schema_version is not None:
+        try:
+            protocol_metadata = _build_live_protocol_metadata(
+                args,
+                annotation_schema_version,
+                tracker,
+                model_path,
+                auxiliary_model,
+            )
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+
     results: List[_VideoResult] = []
     for i, row in enumerate(rows, start=1):
         print(f"  ({i}/{len(rows)}) {row.video_id} [{row.label}] 처리 중...")
@@ -1149,6 +1212,7 @@ def main() -> None:
         results.append(result)
 
     summary = _summarize(results)
+    summary.update(protocol_metadata)
     summary["split"] = args.split or videos_dir.name
     # 재현성: 이 결과를 만든 조건을 함께 남긴다 (같은 annotation이라도 model/conf/config가
     # 다르면 다른 결과가 나올 수 있으므로).
