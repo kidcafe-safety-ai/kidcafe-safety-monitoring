@@ -19,7 +19,16 @@ from src.geofencing.zone_checker import ZoneChecker
 from src.geofencing.zone_loader import load_zones
 from src.input.base import InputSource
 from src.input.file_source import FileVideoSource
-from src.input.rtsp_source import RTSPSource
+from src.input.rtsp_source import (
+    DEFAULT_RTSP_HOST,
+    DEFAULT_RTSP_MAIN_PATH,
+    DEFAULT_RTSP_PORT,
+    DEFAULT_RTSP_SUB_PATH,
+    RTSPConnectionConfig,
+    RTSPCredentialError,
+    RTSPSource,
+    describe_rtsp_log_context,
+)
 from src.input.webcam_source import WebcamSource
 from src.integrations.async_event_dispatcher import AsyncEventDispatcher
 from src.integrations.live_frame_client import LiveFrameClient
@@ -494,7 +503,7 @@ def main() -> None:
     parser.add_argument(
         "--source",
         default=None,
-        help="소스 경로 또는 ID. webcam: 카메라 인덱스(0), rtsp: URL, file: 파일 경로.",
+        help="소스 경로 또는 ID. webcam: 카메라 인덱스(0), rtsp: 카메라 IP/host, file: 파일 경로.",
     )
     parser.add_argument(
         "--video",
@@ -612,6 +621,38 @@ def main() -> None:
         default=None,
         help="RTSP source_id 별칭. 지정 시 URL 대신 이 값이 이벤트/로그에 기록된다. 예: camera_01",
     )
+    parser.add_argument(
+        "--rtsp-host",
+        default=DEFAULT_RTSP_HOST,
+        help="RTSP 카메라 IP/host. --source-type rtsp에서 --source 미지정 시 사용.",
+    )
+    parser.add_argument(
+        "--rtsp-port",
+        type=int,
+        default=DEFAULT_RTSP_PORT,
+        help="RTSP 포트.",
+    )
+    parser.add_argument(
+        "--rtsp-stream",
+        choices=["main", "sub"],
+        default="main",
+        help="RTSP 스트림 선택. main=/media/video1, sub=/media/video2.",
+    )
+    parser.add_argument(
+        "--rtsp-path",
+        default=None,
+        help="RTSP stream path 직접 지정. 지정하면 --rtsp-stream보다 우선한다.",
+    )
+    parser.add_argument(
+        "--rtsp-username-env",
+        default="KIDCAFE_RTSP_USERNAME",
+        help="RTSP 사용자 이름을 읽을 환경변수 이름. 미설정 시 admin fallback.",
+    )
+    parser.add_argument(
+        "--rtsp-password-env",
+        default="KIDCAFE_RTSP_PASSWORD",
+        help="RTSP 비밀번호를 읽을 환경변수 이름.",
+    )
 
     # 기타
     parser.add_argument("--frames-limit", type=int, default=None)
@@ -630,7 +671,11 @@ def main() -> None:
     LOGGER.info("KidCafe Safety AI v0.3.0")
     LOGGER.info("=" * 50)
 
-    source = _build_source(args)
+    try:
+        source = _build_source(args)
+    except (RTSPCredentialError, ValueError) as exc:
+        LOGGER.error("%s", exc)
+        raise SystemExit(2) from None
 
     run_pipeline_from_source(
         source=source,
@@ -674,10 +719,49 @@ def _build_source(args) -> InputSource:
         return WebcamSource(device=device, width=args.width, height=args.height)
 
     if args.source_type == "rtsp":
-        if not args.source:
-            raise ValueError("--source-type rtsp 사용 시 --source URL을 지정해야 합니다.")
-        LOGGER.info("RTSP 입력 선택: %s (alias=%s)", args.source, args.rtsp_alias or "없음")
-        return RTSPSource(url=args.source, alias=args.rtsp_alias)
+        rtsp_path = (
+            args.rtsp_path
+            if args.rtsp_path
+            else DEFAULT_RTSP_MAIN_PATH
+            if args.rtsp_stream == "main"
+            else DEFAULT_RTSP_SUB_PATH
+        )
+
+        # 하위 호환: 이미 조립된 RTSP URL을 넘긴 경우도 동작은 유지한다.
+        # 다만 새 권장 방식은 인증정보를 환경변수에서 읽어 내부 조립하는 것이다.
+        if args.source and str(args.source).startswith("rtsp://"):
+            host, port, path, username_set, password_set = describe_rtsp_log_context(
+                args.source
+            )
+            LOGGER.info(
+                "RTSP 입력 선택: camera_ip=%s, port=%s, path=%s, "
+                "username_set=%s, password_set=%s, alias=%s",
+                host,
+                port or "기본",
+                path,
+                username_set,
+                password_set,
+                args.rtsp_alias or "없음",
+            )
+            return RTSPSource(url=args.source, alias=args.rtsp_alias)
+
+        rtsp_host = args.source if args.source else args.rtsp_host
+        LOGGER.info(
+            "RTSP 입력 선택: camera_ip=%s, path=%s, alias=%s",
+            rtsp_host,
+            rtsp_path,
+            args.rtsp_alias or "없음",
+        )
+        return RTSPSource.from_env(
+            RTSPConnectionConfig(
+                host=rtsp_host,
+                port=args.rtsp_port,
+                path=rtsp_path,
+                alias=args.rtsp_alias,
+            ),
+            username_env=args.rtsp_username_env,
+            password_env=args.rtsp_password_env,
+        )
 
     # file (default)
     path = args.source if args.source else args.video
