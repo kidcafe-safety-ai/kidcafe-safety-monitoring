@@ -28,9 +28,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import platform
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -49,6 +50,7 @@ class TrainingConfig:
     device: str
     project: str
     name: str
+    train_args: dict = field(default_factory=dict)
 
     @classmethod
     def from_file(cls, path: str) -> "TrainingConfig":
@@ -76,7 +78,80 @@ class TrainingConfig:
                 f"(fall_training_dataset.yaml의 0: nofall, 1: fall과 일치해야 함): "
                 f"{raw['classes']}"
             )
-        return cls(**{k: raw[k] for k in required})
+        allowed = required | {"train_args"}
+        unknown = set(raw) - allowed
+        if unknown:
+            raise ValueError(f"{path}에 알 수 없는 필드가 있습니다: {sorted(unknown)}")
+        if raw["task"] != "detect":
+            raise ValueError("task는 detect여야 합니다.")
+        train_args = _validate_train_args(raw.get("train_args", {}), path)
+        return cls(**{k: raw[k] for k in required}, train_args=train_args)
+
+
+_TRAIN_ARG_TYPES = {
+    "optimizer": str,
+    "batch": int,
+    "lr0": (int, float),
+    "lrf": (int, float),
+    "freeze": int,
+    "weight_decay": (int, float),
+    "warmup_epochs": (int, float),
+    "close_mosaic": int,
+    "mosaic": (int, float),
+    "mixup": (int, float),
+    "degrees": (int, float),
+    "translate": (int, float),
+    "scale": (int, float),
+    "fliplr": (int, float),
+    "deterministic": bool,
+    "amp": bool,
+    "workers": int,
+}
+
+
+def _validate_train_args(value: object, path: str) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError(f"{path}의 train_args는 객체여야 합니다.")
+    unknown = set(value) - set(_TRAIN_ARG_TYPES)
+    if unknown:
+        raise ValueError(f"{path}의 train_args에 허용되지 않은 값이 있습니다: {sorted(unknown)}")
+    validated = {}
+    for name, raw in value.items():
+        expected_type = _TRAIN_ARG_TYPES[name]
+        if isinstance(raw, bool) and expected_type is not bool:
+            raise ValueError(f"train_args.{name}의 타입이 올바르지 않습니다.")
+        if not isinstance(raw, expected_type):
+            raise ValueError(f"train_args.{name}의 타입이 올바르지 않습니다.")
+        validated[name] = raw
+
+    if "optimizer" in validated and validated["optimizer"] not in {
+        "auto",
+        "SGD",
+        "Adam",
+        "AdamW",
+        "NAdam",
+        "RAdam",
+        "RMSProp",
+    }:
+        raise ValueError("train_args.optimizer가 지원 목록에 없습니다.")
+    for name in ("batch", "workers"):
+        if name in validated and validated[name] <= 0:
+            raise ValueError(f"train_args.{name}은 0보다 커야 합니다.")
+    for name in ("freeze", "close_mosaic"):
+        if name in validated and validated[name] < 0:
+            raise ValueError(f"train_args.{name}은 0 이상이어야 합니다.")
+    for name in ("lr0", "lrf"):
+        if name in validated and not 0 < float(validated[name]) <= 1:
+            raise ValueError(f"train_args.{name}은 0보다 크고 1 이하여야 합니다.")
+    for name in ("weight_decay", "warmup_epochs", "degrees", "translate", "scale"):
+        if name in validated and (
+            not math.isfinite(float(validated[name])) or float(validated[name]) < 0
+        ):
+            raise ValueError(f"train_args.{name}은 0 이상의 유한한 값이어야 합니다.")
+    for name in ("mosaic", "mixup", "fliplr"):
+        if name in validated and not 0 <= float(validated[name]) <= 1:
+            raise ValueError(f"train_args.{name}은 0 이상 1 이하여야 합니다.")
+    return validated
 
 
 def parse_args() -> argparse.Namespace:
@@ -123,11 +198,21 @@ def _collect_split_manifest(data_yaml_path: Path) -> dict:
 
     manifest = {}
     for split in ("train", "val"):
-        images_dir = dataset_root / data_cfg[split]
-        if images_dir.is_dir():
-            manifest[split] = sorted(p.name for p in images_dir.glob("*.png"))
-        else:
-            manifest[split] = []
+        values = data_cfg.get(split, [])
+        if not isinstance(values, list):
+            values = [values]
+        split_images = []
+        for value in values:
+            path = Path(value)
+            if not path.is_absolute():
+                path = dataset_root / path
+            if path.is_dir():
+                split_images.extend(p.name for p in path.glob("*.png"))
+            elif path.is_file() and path.suffix.lower() == ".txt":
+                for line in path.read_text(encoding="utf-8").splitlines():
+                    if line.strip():
+                        split_images.append(line.strip())
+        manifest[split] = sorted(split_images)
     return manifest
 
 
@@ -160,7 +245,7 @@ def run_training(
     project = str(Path(config.project).resolve())
 
     model = YOLO(config.model)
-    results = model.train(
+    train_kwargs = dict(
         data=config.data,
         imgsz=config.imgsz,
         epochs=epochs,
@@ -170,6 +255,8 @@ def run_training(
         project=project,
         name=config.name,
     )
+    train_kwargs.update(config.train_args)
+    results = model.train(**train_kwargs)
     return model, results, epochs, device
 
 
@@ -198,6 +285,7 @@ def write_run_manifest(
             "patience": config.patience,
             "seed": config.seed,
             "device": effective_device if effective_device is not None else config.device,
+            "train_args": config.train_args,
         },
         "config_file_defaults": {
             "epochs": config.epochs,
@@ -209,7 +297,14 @@ def write_run_manifest(
             "platform": platform.platform(),
         },
         "split_manifest": _collect_split_manifest(Path(config.data)),
+        "data_yaml_sha256": _sha256(Path(config.data)),
     }
+    dataset_manifest = Path(config.data).with_name("training_dataset_manifest.json")
+    if dataset_manifest.is_file():
+        manifest["training_dataset_manifest"] = {
+            "path": str(dataset_manifest),
+            "sha256": _sha256(dataset_manifest),
+        }
     try:
         import torch
 

@@ -980,6 +980,10 @@ class TestScoreVideoEventDiagnostics:
         assert first["track_id"] == 1  # 중복 Event가 같은 Track인지 다른 Track인지 구분용
         assert first["confirm_path"] is not None
         assert first["candidate_entry_reason"] is not None
+        assert 0.0 <= first["event_confidence"] <= 1.0
+        assert first["candidate_duration_sec"] is not None
+        assert first["max_descent_score"] >= 0.0
+        assert first["confirm_aspect_ratio"] > 0.0
 
     def test_late_detection_gets_event_diagnostics_even_without_timely_match(self):
         """fall 행: timely 구간을 벗어난(late_detection) Event는 대표
@@ -1008,6 +1012,7 @@ class TestScoreVideoEventDiagnostics:
         assert len(result.event_diagnostics) == result.event_count
         assert result.event_diagnostics[0]["confirm_path"] is not None
         assert result.event_diagnostics[0]["candidate_entry_reason"] is not None
+        assert result.event_diagnostics[0]["candidate_duration_sec"] is not None
 
     def test_video_result_to_dict_includes_event_diagnostics(self):
         fps = 10.0

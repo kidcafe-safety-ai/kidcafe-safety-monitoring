@@ -71,6 +71,41 @@ class TestTrainingConfigFromFile:
         with pytest.raises(ValueError, match="nofall"):
             train.TrainingConfig.from_file(str(path))
 
+    def test_loads_valid_e1_train_args(self, tmp_path):
+        path = tmp_path / "config.json"
+        _write_config(
+            path,
+            train_args={
+                "optimizer": "AdamW",
+                "lr0": 0.0001,
+                "freeze": 10,
+                "mosaic": 0.0,
+                "deterministic": True,
+            },
+        )
+
+        config = train.TrainingConfig.from_file(str(path))
+
+        assert config.train_args["optimizer"] == "AdamW"
+        assert config.train_args["freeze"] == 10
+
+    @pytest.mark.parametrize(
+        "train_args",
+        [
+            {"data": "other.yaml"},
+            {"lr0": 0.0},
+            {"freeze": -1},
+            {"mosaic": 1.1},
+            {"batch": True},
+        ],
+    )
+    def test_rejects_unsafe_or_invalid_train_args(self, tmp_path, train_args):
+        path = tmp_path / "config.json"
+        _write_config(path, train_args=train_args)
+
+        with pytest.raises(ValueError, match="train_args"):
+            train.TrainingConfig.from_file(str(path))
+
 
 class TestCollectSplitManifest:
     def test_lists_png_files_per_split(self, tmp_path):
@@ -105,6 +140,24 @@ class TestCollectSplitManifest:
         manifest = train._collect_split_manifest(data_yaml)
 
         assert manifest == {"train": [], "val": []}
+
+    def test_reads_absolute_image_lists(self, tmp_path):
+        train_list = tmp_path / "train.txt"
+        val_list = tmp_path / "val.txt"
+        train_list.write_text("/dataset/train/a.png\n/dataset/train/b.png\n")
+        val_list.write_text("/dataset/val/c.png\n")
+        data_yaml = tmp_path / "dataset.yaml"
+        data_yaml.write_text(
+            f"path: /\ntrain: {train_list}\nval: {val_list}\n"
+            "names:\n  0: nofall\n  1: fall\n"
+        )
+
+        manifest = train._collect_split_manifest(data_yaml)
+
+        assert manifest == {
+            "train": ["/dataset/train/a.png", "/dataset/train/b.png"],
+            "val": ["/dataset/val/c.png"],
+        }
 
 
 class TestWriteRunManifest:
@@ -281,3 +334,33 @@ class TestRunTrainingProjectPath:
         assert captured["device"] == "0"
         assert effective_epochs == 1
         assert effective_device == "0"
+
+    def test_e1_train_args_are_passed_through(self, monkeypatch):
+        captured: dict = {}
+        self._install_fake_ultralytics(monkeypatch, captured)
+        config = train.TrainingConfig(
+            model="outputs/fall_training/models/fall_detector_v1.pt",
+            task="detect",
+            data="outputs/fall_training/e1_real_rgb_dataset/dataset.yaml",
+            classes=["nofall", "fall"],
+            imgsz=640,
+            epochs=25,
+            patience=7,
+            seed=42,
+            device="",
+            project="outputs/fall_training/runs",
+            name="fall_detector_e1_real_rgb",
+            train_args={
+                "optimizer": "AdamW",
+                "lr0": 0.0001,
+                "freeze": 10,
+                "mosaic": 0.0,
+            },
+        )
+
+        train.run_training(config, epochs_override=None, device_override="0")
+
+        assert captured["optimizer"] == "AdamW"
+        assert captured["lr0"] == 0.0001
+        assert captured["freeze"] == 10
+        assert captured["mosaic"] == 0.0

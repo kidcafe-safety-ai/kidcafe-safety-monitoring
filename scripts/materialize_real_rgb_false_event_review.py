@@ -1,64 +1,58 @@
-"""OmniFall false Event를 사람이 검수할 짧은 H.264 clip으로 만든다.
-
-``analyze_omnifall_false_events.py``의 결과와 검증된 H.264 cohort를 입력으로
-받아 Event 전후 구간만 다시 인코딩한다. 출력 ``review.csv``는 검수 전용이며,
-``review_status=reviewed``와 ``selected_for_training=true``가 되기 전에는 학습
-입력으로 사용하지 않는다.
-
-Usage:
-    python scripts/materialize_omnifall_false_event_review.py \
-        --analysis-dir /content/drive/MyDrive/kidcafe-data/phase4/results/\
-omnifall_e1_false_event_analysis \
-        --cohort-dir /content/phase4_a2/omnifall_e1_cohort_h264 \
-        --output-dir /content/drive/MyDrive/kidcafe-data/phase4/review/\
-omnifall_e1_false_events
-"""
+"""실제 RGB false Event를 사람이 검수할 짧은 H.264 clip으로 만든다."""
 
 from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import io
 import json
 import math
-import os
-import re
 import shutil
 import subprocess
 import tempfile
-from pathlib import Path, PurePosixPath
-from typing import Dict, List, Sequence
+from pathlib import Path
+from typing import Sequence
+
+from analyze_real_rgb_false_events import (
+    ANALYSIS_SCHEMA_VERSION,
+    OUTPUT_CSV as ANALYSIS_CSV,
+    OUTPUT_JSON as ANALYSIS_JSON,
+)
+from real_rgb_cohort import (
+    COHORT_MANIFEST,
+    COHORT_SCHEMA_VERSION,
+    CohortError,
+    replace_output,
+    safe_relative_video_path,
+    sha256_file,
+    write_json,
+    write_text,
+)
 
 
-ANALYSIS_SCHEMA_VERSION = "omnifall_false_event_analysis_v1"
-TRANSCODE_SCHEMA_VERSION = "video_cohort_transcode_v1"
-REVIEW_SCHEMA_VERSION = "omnifall_false_event_review_v1"
-ANALYSIS_CSV = "false_events.csv"
-ANALYSIS_JSON = "false_event_analysis.json"
-TRANSCODE_MANIFEST = "transcode_manifest.json"
+REVIEW_SCHEMA_VERSION = "real_rgb_false_event_review_v1"
 REVIEW_CSV = "review.csv"
 REVIEW_MANIFEST = "review_manifest.json"
 CLIPS_DIR = "clips"
 REVIEW_DECISIONS = {
     "hard_negative",
-    "synthetic_artifact",
     "tracking_error",
     "label_error",
     "ambiguous",
 }
 REQUIRED_COLUMNS = {
     "review_id",
+    "source_dataset",
     "video_id",
     "event_frame",
     "event_sec",
     "review_start_sec",
     "review_end_sec",
+    "active_labels",
     "confirm_path",
     "candidate_entry_reason",
-    "active_labels",
+    "diagnostic_route",
 }
-_SAFE_REVIEW_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 
 class ReviewPackageError(ValueError):
@@ -77,14 +71,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as file:
-        for chunk in iter(lambda: file.read(8 * 1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _load_json(path: Path, description: str) -> dict:
     if not path.is_file():
         raise ReviewPackageError(f"{description} 파일이 없습니다: {path}")
@@ -98,32 +84,15 @@ def _load_json(path: Path, description: str) -> dict:
     return payload
 
 
-def _safe_video_path(value: object) -> Path:
-    if not isinstance(value, str) or not value or "\\" in value:
-        raise ReviewPackageError(f"video_path가 올바르지 않습니다: {value!r}")
-    pure = PurePosixPath(value)
-    if (
-        pure.is_absolute()
-        or ".." in pure.parts
-        or "." in pure.parts
-        or not pure.parts
-        or pure.parts[0] != "videos"
-        or pure.suffix.lower() != ".mp4"
-    ):
-        raise ReviewPackageError(f"안전하지 않은 video_path입니다: {value!r}")
-    return Path(*pure.parts)
-
-
-def load_analysis(analysis_dir: Path) -> tuple[List[dict], dict]:
+def load_analysis(analysis_dir: Path) -> tuple[list[dict], dict]:
     csv_path = analysis_dir / ANALYSIS_CSV
     manifest = _load_json(analysis_dir / ANALYSIS_JSON, "analysis manifest")
     if manifest.get("schema_version") != ANALYSIS_SCHEMA_VERSION:
         raise ReviewPackageError("지원하지 않는 analysis schema_version입니다.")
     if not csv_path.is_file():
         raise ReviewPackageError(f"analysis CSV가 없습니다: {csv_path}")
-    if manifest.get("false_events_csv_sha256") != _sha256(csv_path):
+    if manifest.get("false_events_csv_sha256") != sha256_file(csv_path):
         raise ReviewPackageError("false_events.csv SHA-256이 manifest와 다릅니다.")
-
     with open(csv_path, "r", encoding="utf-8", newline="") as file:
         reader = csv.DictReader(file)
         missing = REQUIRED_COLUMNS - set(reader.fieldnames or [])
@@ -133,12 +102,9 @@ def load_analysis(analysis_dir: Path) -> tuple[List[dict], dict]:
             )
         rows = list(reader)
     if not rows:
-        raise ReviewPackageError("false_events.csv가 비어 있습니다.")
+        raise ReviewPackageError("false Event가 없어 검수 clip을 만들 필요가 없습니다.")
     summary = manifest.get("summary")
-    if (
-        not isinstance(summary, dict)
-        or summary.get("false_event_count") != len(rows)
-    ):
+    if not isinstance(summary, dict) or summary.get("false_event_count") != len(rows):
         raise ReviewPackageError(
             "analysis summary의 false_event_count가 CSV 행 수와 다릅니다."
         )
@@ -148,7 +114,7 @@ def load_analysis(analysis_dir: Path) -> tuple[List[dict], dict]:
     for row_number, row in enumerate(rows, start=2):
         review_id = (row.get("review_id") or "").strip()
         video_id = (row.get("video_id") or "").strip()
-        if not _SAFE_REVIEW_ID.fullmatch(review_id):
+        if not review_id or "/" in review_id or "\\" in review_id or ".." in review_id:
             raise ReviewPackageError(
                 f"false_events.csv {row_number}행 review_id가 안전하지 않습니다."
             )
@@ -194,32 +160,34 @@ def load_analysis(analysis_dir: Path) -> tuple[List[dict], dict]:
     return normalized, manifest
 
 
-def load_cohort(cohort_dir: Path) -> tuple[Dict[str, dict], Path]:
-    manifest_path = cohort_dir / TRANSCODE_MANIFEST
-    manifest = _load_json(manifest_path, "transcode manifest")
-    if manifest.get("schema_version") != TRANSCODE_SCHEMA_VERSION:
-        raise ReviewPackageError("지원하지 않는 transcode schema_version입니다.")
+def load_cohort(cohort_dir: Path) -> tuple[dict[str, dict], dict, Path]:
+    manifest_path = cohort_dir / COHORT_MANIFEST
+    manifest = _load_json(manifest_path, "cohort manifest")
+    if manifest.get("schema_version") != COHORT_SCHEMA_VERSION:
+        raise ReviewPackageError("지원하지 않는 cohort schema_version입니다.")
     records = manifest.get("videos")
     if not isinstance(records, list) or manifest.get("video_count") != len(records):
-        raise ReviewPackageError("transcode manifest videos/video_count가 올바르지 않습니다.")
-
+        raise ReviewPackageError("cohort manifest videos/video_count가 올바르지 않습니다.")
     by_id = {}
     seen_paths = set()
     for record in records:
         if not isinstance(record, dict):
-            raise ReviewPackageError("transcode video record가 객체가 아닙니다.")
+            raise ReviewPackageError("cohort video record가 객체가 아닙니다.")
         video_id = record.get("video_id")
         if not isinstance(video_id, str) or not video_id or video_id in by_id:
             raise ReviewPackageError(f"video_id가 비었거나 중복됩니다: {video_id!r}")
-        relative_path = _safe_video_path(record.get("video_path"))
+        try:
+            relative_path = safe_relative_video_path(record.get("video_path"))
+        except CohortError as exc:
+            raise ReviewPackageError(str(exc)) from exc
         if relative_path in seen_paths:
             raise ReviewPackageError(f"video_path가 중복됩니다: {relative_path}")
         seen_paths.add(relative_path)
         source_path = cohort_dir / relative_path
         if not source_path.is_file():
-            raise ReviewPackageError(f"H.264 cohort 영상이 없습니다: {source_path}")
-        if record.get("output_sha256") != _sha256(source_path):
-            raise ReviewPackageError(f"H.264 영상 SHA-256이 다릅니다: {source_path}")
+            raise ReviewPackageError(f"cohort 영상이 없습니다: {source_path}")
+        if record.get("output_sha256") != sha256_file(source_path):
+            raise ReviewPackageError(f"cohort 영상 SHA-256이 다릅니다: {source_path}")
         probe = record.get("output_probe")
         duration = probe.get("duration_sec") if isinstance(probe, dict) else None
         if (
@@ -233,10 +201,10 @@ def load_cohort(cohort_dir: Path) -> tuple[Dict[str, dict], Path]:
             "relative_path": relative_path.as_posix(),
             "duration_sec": float(duration),
         }
-    return by_id, manifest_path
+    return by_id, manifest, manifest_path
 
 
-def _run_clip(
+def run_clip(
     source: Path,
     destination: Path,
     start_sec: float,
@@ -246,12 +214,14 @@ def _run_clip(
     preset: str,
 ) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.stem}.part.mp4")
     command = [
         ffmpeg,
         "-nostdin",
         "-hide_banner",
         "-loglevel",
         "error",
+        "-y",
         "-i",
         str(source),
         "-ss",
@@ -271,11 +241,13 @@ def _run_clip(
         "yuv420p",
         "-movflags",
         "+faststart",
-        str(destination),
+        str(temporary),
     ]
     try:
         subprocess.run(command, check=True, capture_output=True, text=True)
+        temporary.replace(destination)
     except subprocess.CalledProcessError as exc:
+        temporary.unlink(missing_ok=True)
         raise ReviewPackageError(
             f"검수 clip 생성 실패: {source}: {(exc.stderr or '').strip()}"
         ) from exc
@@ -284,49 +256,34 @@ def _run_clip(
 
 
 def _review_csv(records: Sequence[dict]) -> str:
-    source_fields = [
+    fields = [
         "review_id",
+        "source_dataset",
         "video_id",
+        "subject_id",
+        "activity_name",
+        "active_labels",
         "event_frame",
         "event_sec",
         "review_start_sec",
         "review_end_sec",
         "event_offset_sec",
-        "active_labels",
         "confirm_path",
         "candidate_entry_reason",
         "diagnostic_route",
         "clip_path",
-    ]
-    review_fields = [
         "review_status",
         "review_decision",
         "selected_for_training",
         "reviewer_id",
         "notes",
     ]
-    fields = source_fields + review_fields
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=fields, lineterminator="\n")
     writer.writeheader()
     for record in records:
         writer.writerow({field: record.get(field, "") for field in fields})
     return output.getvalue()
-
-
-def _replace_output(staging_dir: Path, output_dir: Path, force: bool) -> None:
-    if output_dir.exists() and not force:
-        raise ReviewPackageError(f"{output_dir}가 이미 있습니다 (--force로 전체 교체).")
-    backup = output_dir.with_name(f".{output_dir.name}.backup-{os.getpid()}")
-    if output_dir.exists():
-        output_dir.rename(backup)
-    try:
-        staging_dir.rename(output_dir)
-    except Exception:
-        if backup.exists() and not output_dir.exists():
-            backup.rename(output_dir)
-        raise
-    shutil.rmtree(backup, ignore_errors=True)
 
 
 def materialize_review(
@@ -345,7 +302,7 @@ def materialize_review(
     if output_dir.exists() and not force:
         raise ReviewPackageError(f"{output_dir}가 이미 있습니다 (--force로 전체 교체).")
     records, analysis_manifest = load_analysis(analysis_dir)
-    cohort, transcode_manifest_path = load_cohort(cohort_dir)
+    cohort, cohort_manifest, cohort_manifest_path = load_cohort(cohort_dir)
 
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     staging_dir = Path(
@@ -358,7 +315,11 @@ def materialize_review(
             source = cohort.get(record["video_id"])
             if source is None:
                 raise ReviewPackageError(
-                    f"H.264 cohort에 video_id가 없습니다: {record['video_id']}"
+                    f"cohort에 video_id가 없습니다: {record['video_id']}"
+                )
+            if record["source_dataset"] != cohort_manifest["source_dataset"]:
+                raise ReviewPackageError(
+                    f"analysis/cohort source_dataset이 다릅니다: {record['review_id']}"
                 )
             if record["review_end_sec"] > source["duration_sec"] + 0.05:
                 raise ReviewPackageError(
@@ -366,12 +327,11 @@ def materialize_review(
                 )
             relative_clip = Path(CLIPS_DIR) / f"{record['review_id']}.mp4"
             clip_path = staging_dir / relative_clip
-            duration_sec = record["review_end_sec"] - record["review_start_sec"]
-            _run_clip(
+            run_clip(
                 source["path"],
                 clip_path,
                 record["review_start_sec"],
-                duration_sec,
+                record["review_end_sec"] - record["review_start_sec"],
                 ffmpeg,
                 crf,
                 preset,
@@ -388,24 +348,25 @@ def materialize_review(
                     "selected_for_training": "false",
                     "reviewer_id": "",
                     "notes": "",
-                    "clip_sha256": _sha256(clip_path),
+                    "clip_sha256": sha256_file(clip_path),
                     "source_video_path": source["relative_path"],
                 }
             )
             if index % 20 == 0 or index == total:
-                print(f"검수 clip 생성 {index}/{total}")
+                print(f"실제 RGB 검수 clip 생성 {index}/{total}")
 
         review_content = _review_csv(output_records)
         review_path = staging_dir / REVIEW_CSV
-        review_path.write_text(review_content, encoding="utf-8", newline="")
+        write_text(review_path, review_content)
         manifest = {
             "schema_version": REVIEW_SCHEMA_VERSION,
             "purpose": "manual review; not direct training input",
-            "analysis_manifest_sha256": _sha256(analysis_dir / ANALYSIS_JSON),
+            "source_dataset": cohort_manifest["source_dataset"],
+            "analysis_manifest_sha256": sha256_file(analysis_dir / ANALYSIS_JSON),
             "analysis_csv_sha256": analysis_manifest["false_events_csv_sha256"],
-            "transcode_manifest_sha256": _sha256(transcode_manifest_path),
+            "cohort_manifest_sha256": sha256_file(cohort_manifest_path),
             "clip_count": len(output_records),
-            "review_csv_sha256": _sha256(review_path),
+            "review_csv_sha256": sha256_file(review_path),
             "review_decisions": sorted(REVIEW_DECISIONS),
             "encoder": "libx264",
             "pixel_format": "yuv420p",
@@ -422,14 +383,10 @@ def materialize_review(
                 for record in output_records
             ],
         }
-        manifest_path = staging_dir / REVIEW_MANIFEST
-        manifest_path.write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        _replace_output(staging_dir, output_dir, force)
+        write_json(staging_dir / REVIEW_MANIFEST, manifest)
+        replace_output(staging_dir, output_dir, force)
         return manifest
-    except Exception:
+    except BaseException:
         shutil.rmtree(staging_dir, ignore_errors=True)
         raise
 
@@ -449,8 +406,8 @@ def main() -> None:
     except ReviewPackageError as exc:
         raise SystemExit(str(exc)) from exc
     print(
-        f"OmniFall false Event 검수 패키지: {manifest['clip_count']} clips "
-        f"-> {args.output_dir}"
+        f"실제 RGB false Event 검수 패키지: {manifest['clip_count']} clips -> "
+        f"{args.output_dir}"
     )
 
 

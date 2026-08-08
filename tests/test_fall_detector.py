@@ -466,15 +466,24 @@ class TestDiagnostics:
             )
 
         assert len(confirmed) == 1
-        assert diagnostics == [
-            {
-                "video_source": "cam1",
-                "track_id": 1,
-                "frame_number": 10,
-                "confirm_path": "bbox",
-                "candidate_entry_reason": "dynamic",
-            }
-        ]
+        assert len(diagnostics) == 1
+        diagnostic = diagnostics[0]
+        assert diagnostic["video_source"] == "cam1"
+        assert diagnostic["track_id"] == 1
+        assert diagnostic["frame_number"] == 10
+        assert diagnostic["confirm_path"] == "bbox"
+        assert diagnostic["candidate_entry_reason"] == "dynamic"
+        assert 0.0 <= diagnostic["event_confidence"] <= 1.0
+        assert diagnostic["track_avg_confidence"] == pytest.approx(0.9)
+        assert diagnostic["candidate_duration_sec"] == pytest.approx(0.5)
+        assert diagnostic["max_descent_score"] == pytest.approx(1.0)
+        assert diagnostic["horizontal_duration_sec"] == pytest.approx(0.5)
+        assert diagnostic["pose_duration_sec"] == pytest.approx(0.0)
+        assert diagnostic["model_duration_sec"] == pytest.approx(0.0)
+        assert diagnostic["confirm_aspect_ratio"] > 1.0
+        assert diagnostic["confirm_height_change_rate"] == pytest.approx(0.0)
+        assert diagnostic["confirm_center_vertical_velocity"] == pytest.approx(0.0)
+        assert diagnostic["confirm_foot_point_vertical_velocity"] == pytest.approx(0.0)
 
     def test_model_only_confirm_records_model_entry_and_model_path(self):
         """서 있는 자세(dynamic 근거 없음)에서 보조 모델의 fall 라벨만으로
