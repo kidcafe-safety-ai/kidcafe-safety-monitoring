@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -418,17 +419,39 @@ def test_get_summary_returns_zero_when_seoul_today_has_no_events(
     assert data["today_event_count"] == 0
 
 
-def test_get_zones_returns_common_response(client):
+def test_get_zones_returns_common_response(client, tmp_path, monkeypatch):
+    """Phase 4에서 `data`가 list에서 version envelope로 바뀌었다.
+
+    상세 계약 검증은 tests/test_zones_api.py에 있고 여기서는 공통 envelope만 본다.
+    """
+    runtime_path = tmp_path / "zones_runtime.json"
+    runtime_path.write_text(
+        json.dumps(
+            [
+                {
+                    "zone_id": "danger_door",
+                    "name": "출입문 위험구역",
+                    "type": "polygon",
+                    "zone_type": "danger",
+                    "points": [[0.1, 0.2], [0.3, 0.2], [0.3, 0.5], [0.1, 0.5]],
+                    "rules": {"enter_alert": True, "dwell_threshold_sec": 5},
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("KIDCAFE_ZONES_PATH", str(runtime_path))
+
     response = client.get("/zones")
 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "success"
     assert body["message"] is None
-    assert isinstance(body["data"], list)
-    assert body["data"]
-    zone = body["data"][0]
-    assert zone["zone_name"] == zone["name"]
+    assert set(body["data"]) == {"version", "updated_at", "zones"}
+    zone = body["data"]["zones"][0]
+    assert zone["zone_name"] == "출입문 위험구역"
+    assert "name" not in zone
     assert "rules" in zone
 
 
