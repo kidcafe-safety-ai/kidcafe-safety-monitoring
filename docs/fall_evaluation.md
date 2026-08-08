@@ -910,3 +910,199 @@ SHA-256을 가진 새 Signal Cache만 허용한다. 이 정보가 없는 Phase 3
 직접 촬영 데이터의 `phase4_fall_cause_v1`·Cause·Track 평가는 촬영 후 전용
 annotation loader와 evaluator에서 구현하며, CAUCAFall 전용 CLI가 해당 schema를
 처리한다고 해석하지 않는다.
+
+## 14. Phase 4 A2 실제 RGB 데이터 전환
+
+### 14.1 OF-Synthetic 진단 결과와 종료
+
+OF-Synthetic는 실제 학습 전에 E0 취약점을 넓게 찾는 stress test로 사용했다.
+
+| split | 영상 | false Event | FAR | confirm 경로 |
+| --- | ---: | ---: | ---: | --- |
+| random Train mining cohort | 569 | 125 | 2.6037/min | bbox 84, model 38, pose 3 |
+| 독립 synthetic validation | 187 | 41 | 2.5985/min | bbox 26, model 15 |
+
+Train false Event 125건을 사람이 검수한 결과는 hard-negative 111건, 시각적 합성
+artifact 13건, 판단 보류 1건이었다. 별도 validation에서도 41건 중 37건이
+`lie_down` 또는 `lying`에서 발생했다. 따라서 눕기 동작 취약점은 재현됐지만,
+실제 RGB 일반화 성능을 증명한 결과는 아니다.
+
+또한 synthetic validation의 model confirm 15건을 전부 제거한다고 가정해도
+rule/bbox 경로 26건이 남아 FAR는 약 1.65/min이다. 보조 모델 재학습 하나만으로
+운영 목표 0.2/min을 달성할 수 있다는 가설도 이 결과로 기각한다.
+
+OF-Synthetic는 학습에 넣지 않고 진단을 종료한다. 산출물은 stress-test 이력으로
+보존하되 production model 선택에는 사용하지 않는다.
+
+### 14.2 외부 실제 RGB 분할과 판정
+
+실제 RGB 개선 경로는 다음처럼 subject 단위로 고정한다.
+
+| 데이터 | train-candidate | validation | 용도 |
+| --- | --- | --- | --- |
+| UP-Fall | Subject 1-8, ADL 24개 | Subject 9-10, ADL 6개 | sit·pick·lay FAR |
+| GMDCSA24 | Subject 1-3, 123개 | Subject 4, 37개 | 외부 진단 전용, §14.6 이후 미채택 |
+
+`train_candidate`에서만 E0 false Event를 mining하고 사람이 `hard_negative`로
+확정한 Event 중 `confirm_path=model` 또는 `candidate_entry_reason=model`인
+구간만 보조 모델 학습 후보로 만든다. rule-only Event는 보조 모델 학습으로
+해결됐다고 주장하지 않고 별도 temporal/state-machine 분석으로 보낸다.
+
+Validation Subject의 영상을 hard-negative로 추출하거나 학습에 넣지 않는다.
+E1 후보와 학습 설정을 동결한 뒤 E0와 E1을 같은 validation에 비교한다.
+CAUCAFall Subject 9-10 최종 holdout은 이 외부 validation과 별개로 계속
+열람하지 않는다.
+
+### 14.3 실행 도구와 채택 순서
+
+```text
+materialize_up_fall_cohort.py
+-> train-candidate E0 Signal Cache
+-> analyze_real_rgb_false_events.py
+-> materialize_real_rgb_false_event_review.py
+-> 사람이 검수한 model-involved hard-negative만 E1 후보화
+-> CAUCAFall positive replay를 유지해 재학습
+-> CAUCAFall Development·S7-8 회귀
+-> 실제 RGB validation 비교
+-> 설정 동결 후 CAUCAFall S9-10 최종 1회 평가
+```
+
+UP-Fall·GMDCSA24 평가는 외부 진단/validation이며 CAUCAFall 전용 공식 모드
+`phase4_fall_eval_v1`을 붙이지 않는다. 평가 규칙의 시간 창과 FAR 계산 의미는
+동일하게 유지하되, 결과에는 데이터셋·cohort manifest·모델·config checksum을
+함께 기록한다.
+
+### 14.4 E1 학습 설계
+
+E1은 실제 RGB 영상 전체를 프레임 단위로 대량 추가하는 실험이 아니다. 먼저
+E0로 `train_candidate` Subject를 실행한 뒤 사람이 실제 오탐으로 확정한 Event
+중 보조 모델이 후보 진입 또는 확정에 관여한 구간만 사용한다. 쉬운 frame에
+학습이 지배되지 않게 실제 오류를 만든 sample을 우선하는 방식은
+[OHEM](https://arxiv.org/abs/1604.03540)의 hard-example 선별 원칙과 같다.
+
+학습 데이터 구성:
+
+- CAUCAFall Subject 1-5의 fall frame 전량 positive replay
+- CAUCAFall nofall은 Subject·활동별 동일 quota와 시간 간격으로 축소
+- UP-Fall `train_candidate`의 reviewed hard-negative
+- 직접 촬영 데이터의 train split에서 검수된 model-involved hard-negative
+- Event 전후 1초 안에서 실제 auxiliary `fall` detection이 Track에 매칭된 frame
+- 최대 3 FPS, Event당 최대 7 frame
+- 실제 RGB supplement에는 class 0 `nofall`만 허용
+- CAUCAFall Subject 6 validation은 변경하지 않음
+
+`fall_detector_v1.pt`에서 시작해 낮은 learning rate와 초기 layer freeze를 적용한다.
+인접 frame 대량 투입, S7-8 학습, 외부 validation 학습, synthetic 혼합은 하지
+않는다. UP-Fall과 직접 촬영 데이터는 모두 통제된 성인 재연 데이터이므로,
+아동이 있는 실제 키즈카페 운영 성능으로 일반화하지 않는다.
+[UP-Fall 원 논문](https://pmc.ncbi.nlm.nih.gov/articles/PMC6539235/)
+
+E1 채택 조건:
+
+- CAUCAFall Development Recall 83.3% 이상
+- CAUCAFall Development timely Recall 66.7% 이상
+- CAUCAFall Development FAR 0.0/min 유지
+- S7-8 Recall 100%, timely Recall 90% 유지
+- S7-8 FAR 1.75/min 이하
+- 실제 RGB validation의 false Event 30% 이상 감소
+- 실제 RGB validation fall Recall 감소 없음
+- 중복 Event 증가 없음
+- 평균 감지 지연 증가는 0.2초 이내
+
+Fall 라벨을 가진 외부 실제 RGB validation은 GMDCSA24가 유일했으나 §14.6에서
+카메라 구도 불일치로 미채택했다(`docs/data_sources.md` GMDCSA24 진단 종료
+판정 참고). 위 두 실제 RGB validation 조건은 8월 7일 직접 촬영 데이터의
+manifest·annotation·split을 동결한 뒤 재평가한다.
+
+E1이 auxiliary-model 경로를 줄였지만 실제 RGB 전체 FAR가 남으면 그 결과를
+실패로 덮지 않는다. `rule_or_temporal` 경로를 별도 cohort로 고정하고 Pose·bbox
+시계열을 쓰는 경량 verifier를 E2로 비교한다. 영상 기반 Pose 시계열이 단일
+frame 외형보다 동작 전이를 구분하는 근거는 다음 선행 연구와도 일치한다.
+[Video Based Fall Detection Using Human Poses](https://arxiv.org/abs/2107.14633/),
+[Falls Prediction Based on Body Keypoints and Seq2Seq](https://openaccess.thecvf.com/content_ICCVW_2019/papers/HBU/Hua_Falls_Prediction_Based_on_Body_Keypoints_and_Seq2Seq_Architecture_ICCVW_2019_paper.pdf)
+
+### 14.5 E1 산출물 흐름
+
+```text
+실제 RGB cohort
+-> E0 Signal Cache와 split별 평가
+-> false Event 원인 분석
+-> 짧은 검수 clip과 완료 CSV
+-> 검수본 SHA-256 동결
+-> model-involved train_candidate frame supplement
+-> CAUCA positive replay 학습 목록
+-> 낮은 learning rate fine-tuning
+-> CAUCA·S7-8·실제 RGB validation 동일 조건 비교
+```
+
+관련 도구:
+
+- `freeze_real_rgb_false_event_review.py`: 완료 검수본·clip 무결성 검증과 동결
+- `materialize_real_rgb_e1_frames.py`: 승인된 model-involved nofall frame 생성
+- `build_fall_e1_training_dataset.py`: CAUCA replay와 supplement 학습 목록 생성
+- `train_fall_detector.py`: 동결 학습 설정과 dataset provenance 기록
+
+실제 RGB 원본, cohort, cache, 검수 clip, frame supplement, 학습 run은 모두
+`outputs/` 또는 외부 스토리지에 두고 Git에 포함하지 않는다.
+
+### 14.6 Rule motion gate 실험과 미채택
+
+실제 RGB 검수에서 GMDCSA24 false Event 14건 중 13건이 `bbox` 또는 `pose`
+confirm으로 확정됐다. 최근 0.8초 Track 이력의 순 center 이동, 하강 step 비율,
+방향 반전을 Cache에서 분석해, bbox 높이의 25% 이상 위로 이동한 Track의 rule
+confirm을 막는 후보를 시험했다. 분석 window는 `MultiTrackHistory`와 같은 시간
+비교를 사용해 runtime과 경계 sample이 일치하도록 고정했다.
+
+후보 gate는 `model` confirm에는 적용하지 않고, 충분한 Track 관측이 없는 경우에는
+기존 경로를 유지했다. 단일 Event의 사전 분석에서는 GMDCSA24 train의 false Event
+3건과 validation의 1건을 걸러낼 수 있어 보였다. 그러나 상태머신 Cache 재생 결과는
+다음과 같았다.
+
+| 데이터 | E0 false Event / FAR | 후보 gate false Event / FAR | Recall / timely Recall 변화 |
+| --- | --- | --- | --- |
+| GMDCSA24 train-candidate | 9 / 0.9809 min | 9 / 0.9809 min | 56.9% / 53.4% 유지 |
+| GMDCSA24 validation | 5 / 1.5507 min | 4 / 1.2405 min | 73.3% / 66.7% 유지 |
+| CAUCAFall Development | 0 / 0.0 min | 0 / 0.0 min | 83.3% / 66.7% 유지 |
+| CAUCAFall S7-8 diagnostic | 3 / 1.7518 min | 3 / 1.7518 min | 100% / 90% 유지 |
+
+train의 세 후보는 첫 confirm만 취소된 뒤 0.7-1.0초 후 다시 `bbox` 또는 `model`
+경로로 확정됐다. 재진입을 막기 위해 cooldown으로 강제 전이하면 이후 실제 낙상까지
+숨길 수 있으며, 더 강한 순이동 임계값은 GMDCSA24 validation의 실제 fall Event를
+함께 잃었다. validation false Event 감소도 20%라 Phase 4의 30% 최소 채택 기준에
+미달한다.
+
+따라서 이 scalar motion gate는 production config에 추가하지 않는다. Cache 기반
+`analyze_fall_motion_coherence.py`는 E2 데이터 진단 도구로 유지한다. 결론은 bbox
+방향이나 jitter가 전혀 쓸모없다는 뜻이 아니라, 이 값 하나로는 의도적인 눕기와
+실제 낙상을 안전하게 분리할 수 없다는 것이다. 다음 단계는 동일 Track의 bbox와
+17개 Pose keypoint 시퀀스를 함께 쓰는 경량 temporal verifier를 E2 후보로
+분리해 검증하는 것이다.
+
+### 14.7 GMDCSA24 카메라 구도 불일치와 진단 종료
+
+위 실험 이후 원본 프레임을 직접 확인한 결과, GMDCSA24는 근접 정면(눈높이)
+구도로 촬영됐다. 반면 실 배포 예정 카메라와 같은 구도로 확인된 CAUCAFall은
+천장 구석·하향각·광각 CCTV 구도다. 현재 낙상 규칙·보조 모델 임계값은 모두
+CAUCAFall 기반으로 튜닝돼 있으므로, GMDCSA24에서 유독 낮았던 Recall(56.9%/
+73.3%)과 rule-path 의존(false Event 14건 중 13건)은 모델 일반화 실패가
+아니라 이 카메라 구도 차이의 증상일 가능성이 크다.
+
+따라서 GMDCSA24는 production 판단 데이터로 채택하지 않고 진단을 종료한다.
+§14.4의 실제 RGB validation 채택 기준은 8월 7일 직접 촬영 데이터로 대체한다.
+원본·가공 영상·Signal Cache·검수 결과는
+재생성 가능하므로 로컬에서 삭제하고, 이 문서의 진단 결과만 이력으로
+보존한다. 상세 판정은 `docs/data_sources.md`의 GMDCSA24 진단 종료 판정을
+따른다.
+
+### 14.8 촬영 전 실험 종료 상태
+
+2026-08-07 실제 촬영 전까지 OF-Synthetic stress test, UP-Fall 실제 RGB cohort,
+GMDCSA24 외부 진단과 scalar motion gate 비교를 완료했다. OF-Synthetic와
+GMDCSA24는 학습 또는 production 판단 데이터로 미채택했고, scalar motion
+gate도 최소 개선 기준에 미달해 production 동작에 포함하지 않는다.
+
+따라서 이 단계에서 새 낙상 모델·임계값·runtime 정책은 채택하지 않았으며,
+Phase 3 기준선의 Recall·timely Recall·FAR는 그대로 유지한다. 8월 7일 촬영은
+완료됐지만 원본 무결성 확인, manifest·annotation·split 동결과 E0 기준선 평가는
+후속 촬영 데이터 평가 브랜치에서 수행한다. 해당 결과 전에는 E1 재학습이나
+E2 temporal verifier를 production 개선으로 시작하지 않는다.
