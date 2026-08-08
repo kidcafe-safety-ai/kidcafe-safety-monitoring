@@ -137,24 +137,37 @@ Signal Cache·검수 결과는 삭제하고 이 진단 결과만 이력으로 �
 |---|---|
 | 데이터셋명 | UP-Fall Detection Dataset |
 | 공식 URL | https://sites.google.com/up.edu.mx/har-up/ |
-| 용도 | 실제 RGB sitting·picking-up·laying 오탐 mining과 외부 FAR 평가 |
-| 선택 범위 | Subject 1-10, Activity 8·9·11, Trial 1, Camera 1 |
-| 원본 형식 | timestamp PNG ZIP 30개, 640×480, 공식 nominal 18 FPS |
-| 다운로드 크기 | 11,852,380,320 bytes |
+| 용도 | 실제 RGB 낙상 Recall과 sitting·picking-up·laying FAR 외부 진단 |
+| 선택 범위 | Subject 1-10, Activity 1-5·8·9·11, Trial 1, Camera 1 |
+| 원본 형식 | timestamp PNG ZIP 79개, 640×480, 공식 nominal 18 FPS |
+| 다운로드 크기 | 16,487,618,041 bytes |
 | 다운로드 일자 | 2026-08-04 |
 | 검토 상태 | 공식 링크·파일 크기·ZIP CRC·개별 SHA-256 확인 완료 |
 
 ### 분할·가공
 
-- Subject 1-8: `train_candidate` 24개
-- Subject 9-10: 독립 `validation` 6개
+- Subject 1-8: `train_candidate` 63개(fall 39, no-fall 24)
+- Subject 9-10: 독립 `validation` 16개(fall 10, no-fall 6)
 - Camera 2는 시점 비교용 1개만 별도 확인했으며 cohort에는 넣지 않는다.
 - PNG ZIP은 전체 압축 해제하지 않고 timestamp 순서로 읽어 nominal 18 FPS
   H.264/yuv420p MP4로 변환한다.
 - selection manifest SHA-256:
-  `188937111a6fdf05001f09b83a9b95d038d85828dd3bd2c755976abc2cf78754`
+  `2b18cc492c26769700478e0715ffa97bfcba5a49d1a5d9cbb869745227f66c9e`
 - 개별 archive checksum 목록 SHA-256:
-  `a4415e4d8da55dc7eed59236f01c76ca764adb1e2f8d0639bdb8c0291d8b6e8a`
+  `4a1daf3bee1e41753df87fa550f12bca55819a8e2c74216a7e6b095097ca514c`
+
+### E0 외부 진단 결과
+
+| 분할 | Recall | timely Recall | FAR | 중복 Event |
+|---|---:|---:|---:|---:|
+| Subject 1-8 train-candidate | 23.1% | 7.7% | 0.1191/min | 0 |
+| Subject 9-10 validation | 40.0% | 30.0% | 0.0/min | 0 |
+
+no-fall FAR는 낮았지만 낙상 Recall이 크게 하락했다. 이는 CAUCAFall 기반 E0가
+UP-Fall의 카메라 시점과 낙상 표현에 일반화되지 않았음을 보여주는 외부 진단
+결과이며, 성능 개선이나 새 모델 채택 결과가 아니다. UP-Fall validation은 학습에
+사용하지 않고, train-candidate의 hard-negative도 사람이 검수한 뒤 보조 모델이
+관여한 구간만 E1 후보로 사용할 수 있다.
 
 공식 페이지에서 공개 다운로드는 확인했지만 명시적인 재배포 라이선스 문구는
 확인하지 못했다. 따라서 프로젝트의 비상업적 로컬 연구·평가에만 사용하고 원본,
@@ -172,7 +185,7 @@ Signal Cache·검수 결과는 삭제하고 이 진단 결과만 이력으로 �
 | 데이터 | 우선 용도 | 현재 상태 |
 |---|---|---|
 | OmniFall OF-Synthetic | 합성 도메인 stress test | 진단 종료, 학습 미채택 |
-| UP-Fall | 실제 RGB sit·pick·lay hard-negative | 다운로드·검증 완료, subject 분할 동결 |
+| UP-Fall | 실제 RGB 낙상·ADL 외부 진단 | 79개 평가 완료, 모델·설정 미채택 |
 | GMDCSA-24 | 실제 RGB ADL·Fall 외부 진단 | 진단 종료, 카메라 구도 불일치로 미채택 |
 
 - gate를 통과한 데이터만 E1에 사용한다.

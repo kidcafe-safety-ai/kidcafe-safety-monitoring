@@ -940,8 +940,14 @@ OF-Synthetic는 학습에 넣지 않고 진단을 종료한다. 산출물은 str
 
 | 데이터 | train-candidate | validation | 용도 |
 | --- | --- | --- | --- |
-| UP-Fall | Subject 1-8, ADL 24개 | Subject 9-10, ADL 6개 | sit·pick·lay FAR |
+| UP-Fall | Subject 1-8, fall 39개·ADL 24개 | Subject 9-10, fall 10개·ADL 6개 | 외부 낙상 Recall·ADL FAR |
 | GMDCSA24 | Subject 1-3, 123개 | Subject 4, 37개 | 외부 진단 전용, §14.6 이후 미채택 |
+
+UP-Fall E0 외부 진단 결과는 train-candidate Recall 23.1%, timely Recall 7.7%,
+FAR 0.1191/min이고 validation Recall 40.0%, timely Recall 30.0%, FAR 0.0/min이다.
+두 분할 모두 중복 Event는 0건이었다. no-fall FAR는 낮았지만 낙상 Recall이 크게
+하락했으므로, 이 결과는 CAUCAFall 기반 E0의 카메라·동작 도메인 일반화 한계를
+확인한 진단으로만 사용한다. 새 모델이나 runtime 설정을 채택한 결과가 아니다.
 
 `train_candidate`에서만 E0 false Event를 mining하고 사람이 `hard_negative`로
 확정한 Event 중 `confirm_path=model` 또는 `candidate_entry_reason=model`인
