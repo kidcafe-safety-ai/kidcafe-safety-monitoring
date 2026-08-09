@@ -1012,8 +1012,11 @@ E1 채택 조건:
 - S7-8 FAR 1.75/min 이하
 - 실제 RGB validation의 false Event 30% 이상 감소
 - 실제 RGB validation fall Recall 감소 없음
+- 실제 RGB validation timely TP 감소 없음
+- false cause 증가 없음
 - 중복 Event 증가 없음
 - 평균 감지 지연 증가는 0.2초 이내
+- 동일 환경 기준 FPS 하락률 20% 이내
 
 Fall 라벨을 가진 외부 실제 RGB validation은 GMDCSA24가 유일했으나 §14.6에서
 카메라 구도 불일치로 미채택했다(`docs/data_sources.md` GMDCSA24 진단 종료
