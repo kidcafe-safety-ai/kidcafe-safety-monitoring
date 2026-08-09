@@ -1069,6 +1069,10 @@ class FallDetector:
         origin_track_ids = state.origin_track_ids
 
         if diagnostics is not None:
+            # 평가는 Event schema를 바꾸지 않고도 실제 confirm 직전의 후보 근거를
+            # 비교할 수 있어야 한다. 특히 dynamic 진입은 하강 속도와 bbox 높이
+            # 수축 중 하나로 가능하므로, max_descent_score만 남기면 후자를 구분할
+            # 수 없다. 상태를 초기화하기 전에 모두 snapshot한다.
             diagnostics.append(
                 {
                     "video_source": video_source,
@@ -1076,6 +1080,21 @@ class FallDetector:
                     "frame_number": frame_number,
                     "confirm_path": confirm_path,
                     "candidate_entry_reason": candidate_entry_reason,
+                    "event_confidence": event_confidence,
+                    "track_avg_confidence": features.avg_confidence,
+                    "candidate_duration_sec": (
+                        now_sec - fall_start_sec if fall_start_sec is not None else None
+                    ),
+                    "max_descent_score": state.max_descent_score,
+                    "horizontal_duration_sec": state.horizontal_duration_sec,
+                    "pose_duration_sec": state.pose_duration_sec,
+                    "model_duration_sec": state.model_duration_sec,
+                    "confirm_aspect_ratio": features.aspect_ratio,
+                    "confirm_height_change_rate": features.height_change_rate,
+                    "confirm_center_vertical_velocity": features.center_vertical_velocity,
+                    "confirm_foot_point_vertical_velocity": (
+                        features.foot_point_vertical_velocity
+                    ),
                 }
             )
 

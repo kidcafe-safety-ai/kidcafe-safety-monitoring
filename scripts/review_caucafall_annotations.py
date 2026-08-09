@@ -121,6 +121,15 @@ def parse_args() -> argparse.Namespace:
             "impact_frame/lying_start_frame 네 값이 모두 있어야 한다."
         ),
     )
+    parser.add_argument(
+        "--no-dataset-label-frame",
+        action="store_true",
+        help=(
+            "UP-Fall처럼 원본 프레임별 라벨이 없어 dataset_fall_label_frame을 영원히 "
+            "채울 수 없는 데이터셋용. v2 reviewed 조건에서 이 필드를 빼고 "
+            "fall_start_frame/impact_frame/lying_start_frame 세 값만 요구한다."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -185,7 +194,12 @@ def _count_video_frames(video_path: Path) -> int:
     return count
 
 
-def save_rows(rows: List[_AnnotationRow], csv_path: Path, columns: List[str]) -> None:
+def save_rows(
+    rows: List[_AnnotationRow],
+    csv_path: Path,
+    columns: List[str],
+    require_dataset_label: bool = True,
+) -> None:
     """임시 파일에 먼저 쓰고, 성공하면 원자적으로 원본 CSV를 교체한다.
 
     중간에 오류가 나거나 프로세스가 죽어도 원본 CSV(이전 검수 결과 포함)는
@@ -215,7 +229,7 @@ def save_rows(rows: List[_AnnotationRow], csv_path: Path, columns: List[str]) ->
     if columns == _CSV_COLUMNS_V2:
         for row in rows:
             if row.review_status == "reviewed":
-                _validate_v2_three_timestamps(row)
+                _validate_v2_three_timestamps(row, require_dataset_label=require_dataset_label)
 
     row_values = {
         "video_id": lambda row: row.video_id,
@@ -259,25 +273,30 @@ def _validate_frame_order(row: _AnnotationRow) -> None:
             )
 
 
-def _validate_v2_three_timestamps(row: _AnnotationRow) -> None:
+def _validate_v2_three_timestamps(
+    row: _AnnotationRow, require_dataset_label: bool = True
+) -> None:
     """V2 fall 행은 원본 라벨 프레임과 세 동작 시점이 있어야 검수를 확정한다.
 
     v1은 fall_start_frame 하나만 있어도 reviewed였지만, v2는 dataset_fall_label_frame과
     분리된 실제 onset/impact/lying 세 시점을 전부 확보하는 게 목적이므로, 하나라도
     비어 있으면 아직 검수가 끝나지 않은 것으로 본다.
+
+    require_dataset_label=False: UP-Fall처럼 원본 프레임별 라벨(.txt)이 애초에
+    없는 데이터셋은 dataset_fall_label_frame을 영원히 채울 수 없다 — "아직 검수
+    안 함"이 아니라 "이 데이터셋에는 이 값 자체가 없음"이므로, onset/impact/lying
+    세 시점만 요구한다.
     """
     if row.label != "fall":
         return
-    missing = [
-        name
-        for name, value in (
-            ("dataset_fall_label_frame", row.dataset_fall_label_frame),
-            ("fall_start_frame", row.fall_start_frame),
-            ("impact_frame", row.impact_frame),
-            ("lying_start_frame", row.lying_start_frame),
-        )
-        if value is None
+    required = [
+        ("fall_start_frame", row.fall_start_frame),
+        ("impact_frame", row.impact_frame),
+        ("lying_start_frame", row.lying_start_frame),
     ]
+    if require_dataset_label:
+        required.append(("dataset_fall_label_frame", row.dataset_fall_label_frame))
+    missing = [name for name, value in required if value is None]
     if missing:
         raise ValueError(
             f"{row.video_id}: v2 검수는 {missing}이(가) 모두 있어야 reviewed로 표시할 수 있습니다."
@@ -298,10 +317,12 @@ class ReviewSession:
         video_id: Optional[str] = None,
         label: Optional[str] = None,
         annotation_version: str = "auto",
+        require_dataset_label: bool = True,
     ) -> None:
         self.csv_path = Path(csv_path)
         self.videos_dir = Path(videos_dir)
         self.margin = margin
+        self.require_dataset_label = require_dataset_label
         # 저장할 컬럼 목록은 실제 CSV 헤더로 정한다 — v1 CSV를 열었는데
         # dataset_fall_label_frame 컬럼을 억지로 만들어내지 않기 위함이다.
         with open(self.csv_path, "r", encoding="utf-8", newline="") as file:
@@ -459,7 +480,9 @@ class ReviewSession:
         """
         _validate_frame_order(self.current)
         if self.annotation_version == "v2":
-            _validate_v2_three_timestamps(self.current)
+            _validate_v2_three_timestamps(
+                self.current, require_dataset_label=self.require_dataset_label
+            )
         self.current.review_status = "reviewed"
 
     def mark_needs_review(self) -> None:
@@ -528,7 +551,12 @@ class ReviewSession:
 
     def save(self) -> None:
         """--label/--video-id로 필터링돼 있어도 항상 전체 행(all_rows)을 저장한다."""
-        save_rows(self.all_rows, self.csv_path, self.csv_columns)
+        save_rows(
+            self.all_rows,
+            self.csv_path,
+            self.csv_columns,
+            require_dataset_label=self.require_dataset_label,
+        )
 
     def close(self) -> None:
         if self._avi_cap is not None:
@@ -647,6 +675,7 @@ def main() -> None:
         video_id=args.video_id,
         label=args.label,
         annotation_version=args.annotation_version,
+        require_dataset_label=not args.no_dataset_label_frame,
     )
 
     if args.auto_verify_no_fall:

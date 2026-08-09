@@ -801,6 +801,19 @@ def score_video_from_frame_source(
             "track_id": d["track_id"],
             "confirm_path": d["confirm_path"],
             "candidate_entry_reason": d["candidate_entry_reason"],
+            "event_confidence": d["event_confidence"],
+            "track_avg_confidence": d["track_avg_confidence"],
+            "candidate_duration_sec": d["candidate_duration_sec"],
+            "max_descent_score": d["max_descent_score"],
+            "horizontal_duration_sec": d["horizontal_duration_sec"],
+            "pose_duration_sec": d["pose_duration_sec"],
+            "model_duration_sec": d["model_duration_sec"],
+            "confirm_aspect_ratio": d["confirm_aspect_ratio"],
+            "confirm_height_change_rate": d["confirm_height_change_rate"],
+            "confirm_center_vertical_velocity": d["confirm_center_vertical_velocity"],
+            "confirm_foot_point_vertical_velocity": d[
+                "confirm_foot_point_vertical_velocity"
+            ],
         }
         for d in diagnostics
     ]

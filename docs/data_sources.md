@@ -17,9 +17,9 @@ data/datasets/
 │  ├─ development/   # Subject 1-6
 │  ├─ validation/    # Subject 7-8
 │  └─ holdout/       # Subject 9-10 (최종 평가 전까지 미사용)
-├─ gmdcsa24/v2.1/
-├─ omnifall/                 # Phase 4 후보, gate 통과 후 사용
-├─ up_fall/                  # Phase 4 후보, gate 통과 후 사용
+├─ gmdcsa24/                 # v2.1 공식 archive, 실제 RGB
+├─ omnifall/                 # OF-Synthetic 진단 기록 전용
+├─ up_fall/                  # 실제 RGB 선별 pilot archive
 ├─ ur_fall/                  # 선택
 ├─ phase4_recordings/        # 2026-08-07 촬영 원본, Git 제외
 └─ fall_cause_mini_set/
@@ -82,37 +82,151 @@ SHA-256: 44b67468167fad2565edd51056bb1a2b62110ea165221ffd3ea8dbe03a181ee0
 | DOI | 10.5281/zenodo.13354453 |
 | 접근 방법 | Zenodo 직접 다운로드 |
 | 라이선스 | CC BY 4.0 |
-| 용도 | 외부 오탐 평가 |
-| 검토 상태 | 공식 메타데이터·라이선스 확인 완료, 실제 다운로드·체크섬 확인 예정 |
+| 용도 | 실제 RGB 외부 Recall·FAR 평가, train-candidate 오탐 mining |
+| 검토 상태 | 공식 v2.1 다운로드·archive 무결성·체크섬 확인 완료, metadata 불일치는 cohort manifest에 보존 |
 
 ### 체크섬
 
-다운로드 후 기록:
-
 ```text
-SHA-256: (다운로드 후 기입)
-다운로드 일자: (기입)
+파일명: GMDCSA24-v2.1.zip
+파일 크기: 1,107,545,615 bytes
+MD5: 3d36f2c5c1a666b99639e4e9fd843efb
+SHA-256: d455f90f67060b9c8032701d0a91ff38536eaa5ec85582a7a12e68351af591d7
+다운로드 일자: 2026-08-04
 ```
+
+### 구성·분할
+
+- 실제 RGB H.264 MP4 160개: ADL 81개, Fall 79개
+- Subject 1-3: `train_candidate` 123개
+- Subject 4: 독립 `validation` 37개
+- official CSV의 명시적 `Falling (...) [start to end]` 시작 시각만 onset으로
+  사용한다.
+- Fall 5개는 원본 구간 문자열이 깨져 있어 자동 보정하지 않고
+  `needs_review`로 제외한다. 이 중 Subject 4 validation은 2개다.
+- ADL의 세부 temporal class 문자열과 `Length (seconds)`에 원본 오타가 있다.
+  materializer는 원문을 고치지 않고 실제 probe duration과의 차이를
+  `metadata_issues`로 기록한다. 전체 ADL의 `no_fall` 라벨은 유지하되, fall
+  onset이 duration 불일치의 영향을 받으면 `needs_review`로 평가에서 제외한다.
+
+### GMDCSA24 진단 종료 판정
+
+`docs/fall_evaluation.md` §14.6의 E0·motion gate 실험에서 GMDCSA24는
+train-candidate FAR 0.9809/min, validation FAR 1.5507/min, fall Recall
+train 56.9%·validation 73.3%로 §14.4의 실제 RGB validation 채택 기준에
+미달했다.
+
+원인 진단을 위해 원본 프레임을 직접 확인한 결과, GMDCSA24는 근접 정면
+(눈높이) 구도로 촬영됐다. 실 배포 예정 카메라와 같은 구도로 확인된
+CAUCAFall(천장 구석·하향각·광각 CCTV)과 비교하면 구도 차이가 가장 크고,
+낙상 규칙·보조 모델 임계값은 모두 CAUCAFall 기반으로 튜닝돼 있어 이
+구도 차이가 GMDCSA24에서 유독 낮은 Recall과 rule-path 의존(§14.6)의
+원인일 가능성이 크다.
+
+따라서 GMDCSA24는 production 판단 데이터로 채택하지 않는다. §14.4의
+실제 RGB validation 채택 기준은 8월 7일 직접 촬영 데이터로 대체한다.
+원본은 체크섬을 기록해 재다운로드
+가능하고 가공물은 스크립트로 재생성 가능하므로, 로컬 원본·가공 영상·
+Signal Cache·검수 결과는 삭제하고 이 진단 결과만 이력으로 보존한다.
 
 ---
 
-## Phase 4 E1 외부 데이터 후보
+## UP-Fall
 
-외부 데이터는 2026-07-31까지 다운로드 가능 여부, 원 출처, 라이선스,
-checksum, CAUCAFall 중복 여부를 확인한 뒤 사용한다. 확인 전에는 학습용으로
-취급하지 않는다.
+| 항목 | 내용 |
+|---|---|
+| 데이터셋명 | UP-Fall Detection Dataset |
+| 공식 URL | https://sites.google.com/up.edu.mx/har-up/ |
+| 용도 | 실제 RGB 낙상 Recall과 sitting·picking-up·laying FAR 외부 진단 |
+| 선택 범위 | Subject 1-10, Activity 1-5·8·9·11, Trial 1, Camera 1 |
+| 원본 형식 | timestamp PNG ZIP 79개, 640×480, 공식 nominal 18 FPS |
+| 다운로드 크기 | 16,487,618,041 bytes |
+| 다운로드 일자 | 2026-08-04 |
+| 검토 상태 | 공식 링크·파일 크기·ZIP CRC·개별 SHA-256 확인 완료 |
+
+### 분할·가공
+
+- Subject 1-8: `train_candidate` 63개(fall 39, no-fall 24)
+- Subject 9-10: 독립 `validation` 16개(fall 10, no-fall 6)
+- Camera 2는 시점 비교용 1개만 별도 확인했으며 cohort에는 넣지 않는다.
+- PNG ZIP은 전체 압축 해제하지 않고 timestamp 순서로 읽어 nominal 18 FPS
+  H.264/yuv420p MP4로 변환한다.
+- selection manifest SHA-256:
+  `2b18cc492c26769700478e0715ffa97bfcba5a49d1a5d9cbb869745227f66c9e`
+- 개별 archive checksum 목록 SHA-256:
+  `4a1daf3bee1e41753df87fa550f12bca55819a8e2c74216a7e6b095097ca514c`
+
+### E0 외부 진단 결과
+
+| 분할 | Recall | timely Recall | FAR | 중복 Event |
+|---|---:|---:|---:|---:|
+| Subject 1-8 train-candidate | 23.1% | 7.7% | 0.1191/min | 0 |
+| Subject 9-10 validation | 40.0% | 30.0% | 0.0/min | 0 |
+
+no-fall FAR는 낮았지만 낙상 Recall이 크게 하락했다. 이는 CAUCAFall 기반 E0가
+UP-Fall의 카메라 시점과 낙상 표현에 일반화되지 않았음을 보여주는 외부 진단
+결과이며, 성능 개선이나 새 모델 채택 결과가 아니다. UP-Fall validation은 학습에
+사용하지 않고, train-candidate의 hard-negative도 사람이 검수한 뒤 보조 모델이
+관여한 구간만 E1 후보로 사용할 수 있다.
+
+공식 페이지에서 공개 다운로드는 확인했지만 명시적인 재배포 라이선스 문구는
+확인하지 못했다. 따라서 프로젝트의 비상업적 로컬 연구·평가에만 사용하고 원본,
+변환본, frame supplement를 Git이나 외부 저장소에 재배포하지 않는다. 라이선스가
+명확해지기 전에는 모델 공개 시 해당 데이터 포함 여부도 별도로 검토한다.
+
+---
+
+## Phase 4 외부 데이터 결정
+
+외부 데이터는 다운로드 가능 여부, 원 출처, 라이선스, checksum, CAUCAFall
+중복 여부를 확인한 뒤 사용한다. UP-Fall·GMDCSA24 검증은 2026-08-04에
+완료했으며, 확인 전 데이터는 학습용으로 취급하지 않는다.
 
 | 데이터 | 우선 용도 | 현재 상태 |
 |---|---|---|
-| OmniFall OF-Synthetic | sit·kneel·squat·crawl·lie-down hard-negative | 접근·라이선스·중복 확인 대기 |
-| UP-Fall | 실제 RGB fall·sit·pick·lay 다양성 | subject·camera 분할과 라이선스 확인 대기 |
-| GMDCSA-24 | 다른 환경의 고신뢰 false Event 선별 | 메타데이터 확인, 다운로드·checksum 대기 |
+| OmniFall OF-Synthetic | 합성 도메인 stress test | 진단 종료, 학습 미채택 |
+| UP-Fall | 실제 RGB 낙상·ADL 외부 진단 | 79개 평가 완료, 모델·설정 미채택 |
+| GMDCSA-24 | 실제 RGB ADL·Fall 외부 진단 | 진단 종료, 카메라 구도 불일치로 미채택 |
 
 - gate를 통과한 데이터만 E1에 사용한다.
 - 접근 또는 라이선스가 불명확하면 `not_available`로 기록한다.
 - CAUCAFall 파생·중복 영상은 제외한다.
 - 외부 데이터 미확보로 8월 7일 촬영이나 E0 기준선 평가를 지연하지 않는다.
 - E1 미실행도 사유와 함께 정식 결과로 기록한다.
+
+### OmniFall OF-Synthetic 사용 기록
+
+| 항목 | 내용 |
+|---|---|
+| 공식 저장소 | https://huggingface.co/datasets/simplexsigil2/omnifall |
+| 진단 범위 | OF-Synthetic random Train split의 E0 mining cohort 569개와 독립 validation 187개 |
+| 원본 archive | `data_files/omnifall-synthetic_av1.tar` (12,000개 AV1 영상) |
+| 다운로드 상태 | 2026-08-04 완료, revision·SHA-256은 팀 스토리지의 source manifest에 기록 |
+| Git 저장 | 원본·H.264 변환본·Signal Cache·검수 clip 모두 제외 |
+| 중복 방지 | positive temporal label과 `fall`·`fallen` 대표 category 영상 제외 |
+| 현재 용도 | E0 합성 도메인 stress test 기록 보존, 학습에는 미사용 |
+
+Hugging Face metadata에는 `CC BY-NC 4.0`이 표시되지만 dataset card 본문은
+annotation과 split을 `CC BY-NC-SA 4.0`으로 설명하고 영상 권리는 원 권리자에게
+있다고 명시한다. 따라서 Phase 4에서는 비상업적 연구·진단 목적으로만 사용하고,
+원본·변환 영상은 재배포하지 않는다. 외부 공개나 상업적 사용 전에는
+OF-Synthetic 영상 archive에 적용되는 정확한 라이선스 범위를 원 배포자에게
+추가 확인한다.
+
+### OF-Synthetic 진단 종료 판정
+
+Train mining cohort 569개에서 E0 false Event 125건(2.6037/min)이 발생했다.
+수동 검수 결과 111건은 합성 영상 안에서는 일관된 hard-negative였고, 13건은
+시각적 합성 artifact, 1건은 판단 보류였다. 별도 synthetic validation 187개에서도
+41건(2.5985/min)이 재현됐으며 confirm 경로는 model 15건, bbox 26건이었다.
+
+이는 눕기 중심의 취약점과 보조 모델만 고쳐서는 FAR 목표에 도달할 수 없다는
+stress-test 근거로는 유효하다. 하지만 모든 영상이 생성형 합성 데이터이고 실제
+카메라의 사람·조명·가림·배경 분포를 대표하지 않으므로 E1 학습 데이터로는
+채택하지 않는다. 카메라 구도도 근접 정면 위주로 확인되어, 실 배포 예정인
+천장 구석·하향각 CCTV 구도와 다르다. 생성한 archive, H.264 cohort, Signal
+Cache와 검수 결과는 감사 가능한 진단 기록으로만 보존하고, 개선 실험은
+UP-Fall과 8월 7일 직접 촬영 실제 RGB로 전환한다.
 
 ---
 
@@ -148,10 +262,11 @@ Phase 3 원인 후보 구현 당시 공개 샘플 28개의 파일명과 설명�
 
 ## Phase 4 직접 촬영 데이터
 
-2026-08-07에 성인 참여자·안전 매트·고정 카메라로 통제된 안전 시나리오를
-촬영한다. 낙상, hard-negative, cause, Zone, Homography holdout을 같은
-manifest와 review 정책으로 관리한다. 현재 구현은 합성 multi-track 테스트로
-계약만 검증했으며 실제 촬영 데이터는 아직 없다.
+2026-08-07에 성인 참여자·안전 매트·고정 IP 카메라로 통제된 안전 시나리오
+촬영을 완료했다. 낙상, hard-negative, cause, Zone, Homography holdout을 같은
+manifest와 review 정책으로 관리한다. 원본 파일 무결성 확인, manifest 작성,
+frame annotation과 actor 또는 session 단위 분할은 촬영 후 평가 브랜치에서
+진행하며, 완료 전에는 성능 개선 결과로 해석하지 않는다.
 
 | 시나리오 | 최소 샘플 수 |
 |---|---|
