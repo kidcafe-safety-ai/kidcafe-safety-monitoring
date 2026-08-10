@@ -1,0 +1,11 @@
+point_id,role,y,x
+P01,fit,18,6
+P08,fit,67,44
+P09,fit,82,5
+P10,fit,17,36
+P02,holdout,9,19
+P03,holdout,36,13
+P04,holdout,31,40
+P05,holdout,48,32
+P06,holdout,56,8
+P07,holdout,73,21
