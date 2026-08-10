@@ -86,7 +86,11 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="CSV의 좌표 1단위가 몇 cm인지. 줄자를 cm로 읽었으면 1.",
     )
-    parser.add_argument("--origin-description", default="")
+    parser.add_argument(
+        "--origin-description",
+        default="촬영 구역 좌하단 회색 테이프. x는 오른쪽, y는 카메라에서 멀어지는 방향.",
+        help="floor 좌표 원점 설명. 비워 둘 수 없다.",
+    )
     parser.add_argument("--output", required=True, help="calibration JSON 저장 경로")
     parser.add_argument(
         "--holdout-output",
@@ -357,9 +361,38 @@ def write_holdout_csv(
     return len(rows)
 
 
+def check_metadata(args: argparse.Namespace) -> None:
+    """클릭을 시작하기 전에 점 좌표와 무관한 필드를 먼저 검증한다.
+
+    클릭 10번은 되돌리기 비싼 작업이라, 설정 오타 때문에 입력이 통째로
+    버려지면 안 된다. 점과 무관한 계약 위반은 GUI를 열기 전에 걸러낸다.
+    """
+    for name in ("camera_id", "calibration_version", "origin_description"):
+        if not str(getattr(args, name) or "").strip():
+            raise PickerError(f"--{name.replace('_', '-')}는 비워 둘 수 없습니다.")
+
+
+def write_recovery(path: Path, points: List[ReferencePoint], picked: List[List[float]]) -> None:
+    """검증에 실패해도 클릭 결과는 남긴다."""
+    rows = [
+        {"point_id": point.point_id, "role": point.role,
+         "pixel_x": f"{pixel[0]:.3f}", "pixel_y": f"{pixel[1]:.3f}"}
+        for point, pixel in zip(points, picked)
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(
+            file, fieldnames=("point_id", "role", "pixel_x", "pixel_y"), lineterminator="\n"
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def main() -> None:
     args = parse_args()
+    output = Path(args.output)
     try:
+        check_metadata(args)
         points = load_reference_points(Path(args.points), args.unit_cm)
         frame = read_frame(Path(args.video), args.frame)
     except PickerError as exc:
@@ -369,14 +402,19 @@ def main() -> None:
     if not picker.run():
         raise SystemExit("저장하지 않고 종료했습니다.")
 
+    recovery = output.with_name(f"{output.stem}_picked.csv")
+    write_recovery(recovery, points, picker.picked)
+
     payload = build_payload(args, frame, points, picker.picked)
     try:
         # 저장 전에 로더로 검증한다. 4점이 일직선이거나 중복이면 여기서 걸린다.
         parse_calibration(payload)
     except Exception as exc:  # noqa: BLE001 - 로더가 던지는 계약 오류를 그대로 보여준다
-        raise SystemExit(f"calibration이 계약을 만족하지 않습니다: {exc}") from exc
+        raise SystemExit(
+            f"calibration이 계약을 만족하지 않습니다: {exc}\n"
+            f"클릭한 좌표는 {recovery}에 저장했습니다."
+        ) from exc
 
-    output = Path(args.output)
     write_json_atomic(output, payload)
     holdout_path = (
         Path(args.holdout_output)
