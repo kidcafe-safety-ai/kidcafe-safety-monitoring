@@ -60,6 +60,7 @@ import cv2
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts import fall_evaluation_protocol as evaluation_protocol  # noqa: E402
+from scripts import phase4_recording_contract as recording_contract  # noqa: E402
 
 from src.common.types import Track  # noqa: E402
 from src.safety.auxiliary_fall_model import AuxiliaryFallModel  # noqa: E402
@@ -88,7 +89,17 @@ _REQUIRED_COLUMNS = {
     "review_status",
 }
 _VALID_LABELS = {"fall", "no_fall"}
-_RECOGNIZED_SPLITS = {"development", "validation", "holdout"}
+_RECOGNIZED_SPLITS = {
+    "development",
+    "validation",
+    "holdout",
+    "train",
+    "internal_validation",
+    "diagnostic",
+    "test",
+    "external_evaluation",
+}
+_SEALED_SPLITS = {"holdout", "test"}
 
 
 @dataclass
@@ -280,6 +291,68 @@ def load_annotations(path: str, include_unreviewed: bool) -> List[_AnnotationRow
     return rows
 
 
+def load_recorded_annotations(
+    annotations_path: str | Path,
+    recordings_manifest_path: str | Path,
+    split: str,
+    include_unreviewed: bool,
+) -> List[_AnnotationRow]:
+    """Phase 4 직접 촬영 manifest와 annotation을 기존 scorer 입력으로 결합한다."""
+    if not split:
+        raise ValueError("직접 촬영 평가는 --split을 명시해야 합니다.")
+    manifest_rows = recording_contract.load_recordings_manifest(recordings_manifest_path)
+    annotation_rows = recording_contract.load_fall_cause_annotations(
+        annotations_path,
+        manifest_rows,
+        require_reviewed=not include_unreviewed,
+    )
+    manifest_by_video = {row["video_id"]: row for row in manifest_rows}
+    rows = []
+    for raw in annotation_rows:
+        manifest = manifest_by_video[raw["video_id"]]
+        if manifest["split_role"] != split:
+            continue
+        review_status = raw["review_status"]
+        if not include_unreviewed and review_status != "reviewed":
+            continue
+        rows.append(
+            _AnnotationRow(
+                video_id=raw["video_id"],
+                label=raw["label"],
+                video_path=manifest["video_path"],
+                fall_start_frame=_parse_optional_int(raw["fall_start_frame"]),
+                impact_frame=_parse_optional_int(raw["impact_frame"]),
+                lying_start_frame=_parse_optional_int(raw["lying_start_frame"]),
+                review_status=review_status,
+            )
+        )
+    return rows
+
+
+def find_excluded_recorded_rows(
+    annotations_path: str | Path,
+    recordings_manifest_path: str | Path,
+    split: str,
+    include_unreviewed: bool,
+) -> List[Dict[str, str]]:
+    if include_unreviewed:
+        return []
+    manifest_rows = recording_contract.load_recordings_manifest(recordings_manifest_path)
+    annotation_rows = recording_contract.load_fall_cause_annotations(
+        annotations_path, manifest_rows
+    )
+    manifest_by_video = {row["video_id"]: row for row in manifest_rows}
+    return [
+        {
+            "video_id": row["video_id"],
+            "review_status": row["review_status"],
+        }
+        for row in annotation_rows
+        if manifest_by_video[row["video_id"]]["split_role"] == split
+        and row["review_status"] != "reviewed"
+    ]
+
+
 def find_excluded_rows(path: str, include_unreviewed: bool) -> List[Dict[str, str]]:
     """load_annotations()가 review_status 필터로 건너뛴 행을 (video_id, review_status)로 남긴다.
 
@@ -414,8 +487,8 @@ def guard_holdout(
         return
 
     violations: List[str] = []
-    if split.lower() == "holdout":
-        violations.append("--split holdout")
+    if split.lower() in _SEALED_SPLITS:
+        violations.append(f"--split {split.lower()}")
     if _contains_holdout_segment(videos_dir.resolve()):
         violations.append(f"--videos-dir={videos_dir}")
     for row in rows:
@@ -425,9 +498,9 @@ def guard_holdout(
 
     if violations:
         raise SystemExit(
-            "Subject 9~10(holdout)은 최종 평가 전까지 사용하지 않습니다 "
-            "(docs/data_sources.md). 의도한 것이면 --allow-holdout을 지정하세요.\n"
-            "감지된 holdout 경로:\n  - " + "\n  - ".join(violations)
+            "동결된 holdout/test split은 최종 평가 전까지 사용하지 않습니다 "
+            "(docs/data_sources.md). 의도한 최종 평가이면 --allow-holdout을 지정하세요.\n"
+            "감지된 sealed 경로:\n  - " + "\n  - ".join(violations)
         )
 
 

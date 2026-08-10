@@ -260,7 +260,11 @@ def manifest_path_for(cache_dir: Path) -> Path:
 
 
 def build_manifest(
-    split: str, videos_dir: str, tracker_meta: dict, auxiliary_meta: Optional[dict]
+    split: str,
+    videos_dir: str,
+    tracker_meta: dict,
+    auxiliary_meta: Optional[dict],
+    dataset_provenance: Optional[dict] = None,
 ) -> dict:
     """캐시 디렉터리 하나 전체에 적용되는 설정 — 개별 영상 캐시가 아니라
 
@@ -268,13 +272,16 @@ def build_manifest(
     다른 모델 파일, 보조 모델 사용/미사용 혼합을 조용히 섞어 평가하는 걸
     막기 위함이다.
     """
-    return {
+    manifest = {
         "cache_schema_version": CACHE_SCHEMA_VERSION,
         "split": split,
         "videos_dir": videos_dir,
         "tracker": tracker_meta,
         "auxiliary_model": auxiliary_meta,
     }
+    if dataset_provenance is not None:
+        manifest["dataset"] = dataset_provenance
+    return manifest
 
 
 def write_manifest(cache_dir: Path, manifest: dict) -> None:

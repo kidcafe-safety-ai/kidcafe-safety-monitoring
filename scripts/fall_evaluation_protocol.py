@@ -14,6 +14,7 @@ from typing import Optional
 CONTRACT_VERSION = "phase4_contract_v1"
 EVALUATION_PROTOCOL_VERSION = "phase4_fall_eval_v1"
 CAUCAFALL_ANNOTATION_VERSION = "caucafall_annotation_v2"
+PHASE4_RECORDED_ANNOTATION_VERSION = "phase4_fall_cause_v1"
 
 EARLY_TOLERANCE_SEC = 0.2
 TIMELY_WINDOW_SEC = 2.0
@@ -174,6 +175,8 @@ def validate_protocol_request(
     early_tolerance_sec: float,
     timely_window_sec: float,
     include_unreviewed: bool,
+    recordings_manifest_path: str | Path | None = None,
+    split: str = "",
 ) -> Optional[str]:
     """공식 protocol 요청을 검증하고 annotation schema version을 반환한다."""
     if protocol_version is None:
@@ -203,10 +206,64 @@ def validate_protocol_request(
     if include_unreviewed:
         raise ValueError(f"{protocol_version} 공식 평가는 reviewed annotation만 허용합니다.")
 
+    if recordings_manifest_path is not None:
+        if not split:
+            raise ValueError("직접 촬영 공식 평가는 --split을 명시해야 합니다.")
+        from scripts import phase4_recording_contract as recording_contract
+
+        manifest_rows = recording_contract.load_recordings_manifest(
+            recordings_manifest_path
+        )
+        annotation_rows = recording_contract.load_fall_cause_annotations(
+            annotations_path,
+            manifest_rows,
+            require_reviewed=True,
+        )
+        selected = [row for row in manifest_rows if row["split_role"] == split]
+        if not selected:
+            raise ValueError(f"직접 촬영 manifest에 split={split!r} 영상이 없습니다.")
+        selected_ids = {row["video_id"] for row in selected}
+        annotation_ids = {
+            row["video_id"] for row in annotation_rows if row["video_id"] in selected_ids
+        }
+        if annotation_ids != selected_ids:
+            raise ValueError("직접 촬영 split의 manifest와 annotation video_id가 다릅니다.")
+        return PHASE4_RECORDED_ANNOTATION_VERSION
+
     return validate_caucafall_v2_annotations(annotations_path)
 
 
-def validate_official_cache_manifest(manifest: dict) -> None:
+def build_dataset_provenance(
+    *,
+    annotation_schema_version: str,
+    annotations_path: str | Path,
+    split: str,
+    video_count: int,
+    recordings_manifest_path: str | Path | None = None,
+) -> dict:
+    annotations_sha256 = sha256_file(annotations_path)
+    if not _SHA256_PATTERN.fullmatch(str(annotations_sha256 or "")):
+        raise ValueError(f"annotation SHA-256을 계산할 수 없습니다: {annotations_path}")
+    payload = {
+        "annotation_schema_version": annotation_schema_version,
+        "annotations_sha256": annotations_sha256,
+        "split": split,
+        "video_count": video_count,
+    }
+    if recordings_manifest_path is not None:
+        manifest_sha256 = sha256_file(recordings_manifest_path)
+        if not _SHA256_PATTERN.fullmatch(str(manifest_sha256 or "")):
+            raise ValueError(
+                f"recordings manifest SHA-256을 계산할 수 없습니다: "
+                f"{recordings_manifest_path}"
+            )
+        payload["recordings_manifest_sha256"] = manifest_sha256
+    return payload
+
+
+def validate_official_cache_manifest(
+    manifest: dict, expected_dataset_provenance: Optional[dict] = None
+) -> None:
     """공식 cache replay에 필요한 signal 생성 provenance를 검증한다."""
     tracker = manifest.get("tracker") or {}
     auxiliary = manifest.get("auxiliary_model") or {}
@@ -225,6 +282,13 @@ def validate_official_cache_manifest(manifest: dict) -> None:
             + ", ".join(missing)
             + ". scripts/cache_fall_signals.py로 새 cache를 생성하세요."
         )
+    if expected_dataset_provenance is not None:
+        actual = manifest.get("dataset")
+        if actual != expected_dataset_provenance:
+            raise ValueError(
+                "cache dataset provenance가 현재 annotation/manifest와 다릅니다. "
+                f"cache={actual}, expected={expected_dataset_provenance}"
+            )
 
 
 def _is_resolved_device(value) -> bool:
@@ -275,10 +339,15 @@ def build_metadata(
     device: dict,
     evaluator_git_commit: Optional[str] = None,
     evaluator_git_dirty: Optional[bool] = None,
+    dataset_provenance: Optional[dict] = None,
 ) -> dict:
     """공식 결과 JSON root에 넣을 재현 metadata를 만든다."""
-    if annotation_schema_version != CAUCAFALL_ANNOTATION_VERSION:
-        raise ValueError(f"공식 CAUCAFall annotation schema가 아닙니다: {annotation_schema_version}")
+    valid_annotation_schemas = {
+        CAUCAFALL_ANNOTATION_VERSION,
+        PHASE4_RECORDED_ANNOTATION_VERSION,
+    }
+    if annotation_schema_version not in valid_annotation_schemas:
+        raise ValueError(f"공식 annotation schema가 아닙니다: {annotation_schema_version}")
     if not _SHA256_PATTERN.fullmatch(str(model_sha256 or "")):
         raise ValueError("공식 평가에는 보조 낙상 모델 SHA-256이 필요합니다.")
     if not tracker or not isinstance(tracker_config, dict):
@@ -311,7 +380,7 @@ def build_metadata(
         "auxiliary_model": auxiliary_device.strip(),
     }
 
-    return {
+    metadata = {
         "contract_version": CONTRACT_VERSION,
         "evaluation_protocol_version": EVALUATION_PROTOCOL_VERSION,
         "annotation_schema_version": annotation_schema_version,
@@ -328,3 +397,15 @@ def build_metadata(
         "duplicate_rule": DUPLICATE_RULE,
         "far_denominator_rule": FAR_DENOMINATOR_RULE,
     }
+    if annotation_schema_version == PHASE4_RECORDED_ANNOTATION_VERSION:
+        if not isinstance(dataset_provenance, dict):
+            raise ValueError("직접 촬영 공식 평가에는 dataset provenance가 필요합니다.")
+        if dataset_provenance.get("annotation_schema_version") != annotation_schema_version:
+            raise ValueError("dataset provenance의 annotation schema가 다릅니다.")
+        for field in ("annotations_sha256", "recordings_manifest_sha256"):
+            if not _SHA256_PATTERN.fullmatch(
+                str(dataset_provenance.get(field) or "")
+            ):
+                raise ValueError(f"직접 촬영 공식 평가에는 {field}가 필요합니다.")
+        metadata["dataset"] = dataset_provenance
+    return metadata
