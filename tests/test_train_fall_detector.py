@@ -89,6 +89,21 @@ class TestTrainingConfigFromFile:
         assert config.train_args["optimizer"] == "AdamW"
         assert config.train_args["freeze"] == 10
 
+    def test_loads_recorded_e1_repository_config(self):
+        repo_root = Path(__file__).resolve().parent.parent
+
+        config = train.TrainingConfig.from_file(
+            str(repo_root / "configs/fall_training_e1_recorded.json")
+        )
+
+        assert config.model.endswith("fall_detector_v1.pt")
+        assert config.data.endswith("e1_training/dataset/dataset.yaml")
+        assert config.epochs == 30
+        assert config.device == "0"
+        assert config.train_args["optimizer"] == "AdamW"
+        assert config.train_args["lr0"] == 0.0005
+        assert config.train_args["freeze"] == 10
+
     @pytest.mark.parametrize(
         "train_args",
         [

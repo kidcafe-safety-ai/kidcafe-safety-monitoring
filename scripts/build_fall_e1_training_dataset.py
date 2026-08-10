@@ -2,8 +2,9 @@
 
 이미지를 복사하지 않고 Ultralytics가 지원하는 ``train.txt``/``val.txt``를
 생성한다. CAUCAFall의 fall frame은 모두 replay하고, 강하게 상관된 nofall
-frame은 Subject·활동별로 균등하게 줄인다. 실제 RGB supplement는
-``train_candidate``에서 사람이 승인한 class 0 frame만 허용한다.
+frame은 Subject·활동별로 균등하게 줄인다. 외부 실제 RGB supplement는
+``train_candidate``의 class 0만, Phase 4 직접 촬영 supplement는 diagnostic의
+명시된 train actor에서 만든 class 0/1만 허용한다.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import math
 import os
 import shutil
 import tempfile
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -25,9 +26,15 @@ import yaml
 
 SCHEMA_VERSION = "fall_e1_training_dataset_v1"
 SUPPLEMENT_SCHEMA_VERSION = "real_rgb_e1_frame_supplement_v1"
+RECORDED_SUPPLEMENT_SCHEMA_VERSION = "phase4_recorded_e1_frame_supplement_v1"
 BASE_TRAIN_SUBJECTS = [1, 2, 3, 4, 5]
 BASE_VAL_SUBJECTS = [6]
 NOFALL_ACTIVITIES = (
+    "fall_backwards",
+    "fall_forward",
+    "fall_left",
+    "fall_right",
+    "fall_sitting",
     "pick_up_object",
     "sit_down",
     "kneel",
@@ -63,6 +70,12 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=1.0,
         help="CAUCAFall train nofall replay 수 / fall replay 수",
+    )
+    parser.add_argument(
+        "--recorded-supplement-repeat",
+        type=int,
+        default=1,
+        help="Phase 4 직접 촬영 supplement의 train.txt 반복 횟수(1~5).",
     )
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
@@ -180,7 +193,9 @@ def _nofall_group(sample_id: str) -> tuple[int, str]:
     for activity in NOFALL_ACTIVITIES:
         if remainder.startswith(f"{activity}_"):
             return subject, activity
-    raise DatasetBuildError(f"CAUCAFall nofall 활동을 읽을 수 없습니다: {sample_id}")
+    raise DatasetBuildError(
+        f"CAUCAFall nofall 활동을 읽을 수 없습니다: {sample_id}"
+    )
 
 
 def _evenly_spaced(records: Sequence[dict], count: int) -> list[dict]:
@@ -239,12 +254,31 @@ def _load_frames_csv(path: Path) -> list[dict]:
 def load_supplement(path: Path) -> tuple[list[dict], dict]:
     manifest_path = path / "supplement_manifest.json"
     manifest = _load_json(manifest_path, "supplement manifest")
-    if manifest.get("schema_version") != SUPPLEMENT_SCHEMA_VERSION:
+    schema_version = manifest.get("schema_version")
+    if schema_version not in {
+        SUPPLEMENT_SCHEMA_VERSION,
+        RECORDED_SUPPLEMENT_SCHEMA_VERSION,
+    }:
         raise DatasetBuildError(f"supplement schema가 다릅니다: {path}")
-    if manifest.get("purpose") != "train-only E1 nofall supplement":
-        raise DatasetBuildError(f"train-only supplement가 아닙니다: {path}")
-    if manifest.get("source_split_role") != "train_candidate":
-        raise DatasetBuildError(f"supplement source가 train_candidate가 아닙니다: {path}")
+    if schema_version == SUPPLEMENT_SCHEMA_VERSION:
+        if manifest.get("purpose") != "train-only E1 nofall supplement":
+            raise DatasetBuildError(f"train-only supplement가 아닙니다: {path}")
+        if manifest.get("source_split_role") != "train_candidate":
+            raise DatasetBuildError(
+                f"supplement source가 train_candidate가 아닙니다: {path}"
+            )
+    else:
+        if manifest.get("purpose") != "train-only Phase 4 recorded E1 supplement":
+            raise DatasetBuildError(f"직접 촬영 train-only supplement가 아닙니다: {path}")
+        if manifest.get("source_split_role") != "diagnostic":
+            raise DatasetBuildError(f"직접 촬영 supplement는 diagnostic이어야 합니다: {path}")
+        training_actor_ids = manifest.get("training_actor_ids")
+        if not isinstance(training_actor_ids, list) or not training_actor_ids:
+            raise DatasetBuildError(f"직접 촬영 training_actor_ids가 비었습니다: {path}")
+        if any(actor != "A01" for actor in training_actor_ids):
+            raise DatasetBuildError(
+                f"현재 E1 직접 촬영 supplement는 A01만 허용합니다: {path}"
+            )
     if manifest.get("class_mapping") != {"0": "nofall", "1": "fall"}:
         raise DatasetBuildError(f"supplement class mapping이 다릅니다: {path}")
 
@@ -262,13 +296,20 @@ def load_supplement(path: Path) -> tuple[list[dict], dict]:
         row = rows_by_id.get(record["sample_id"])
         if row is None:
             raise DatasetBuildError(f"frames.csv에 sample이 없습니다: {record['sample_id']}")
-        if record["class_id"] != 0:
+        if schema_version == SUPPLEMENT_SCHEMA_VERSION and record["class_id"] != 0:
             raise DatasetBuildError(f"supplement에는 nofall만 허용합니다: {record['label']}")
         if row["image_sha256"] != _sha256(record["image"]):
             raise DatasetBuildError(f"supplement image SHA-256이 다릅니다: {record['image']}")
         if row["label_sha256"] != _sha256(record["label"]):
             raise DatasetBuildError(f"supplement label SHA-256이 다릅니다: {record['label']}")
         record["source_dataset"] = manifest.get("sources", {}).get("source_dataset")
+    class_counts = Counter(record["class_id"] for record in records)
+    expected_class_counts = manifest.get("class_counts")
+    if schema_version == RECORDED_SUPPLEMENT_SCHEMA_VERSION and expected_class_counts != {
+        "nofall": class_counts.get(0, 0),
+        "fall": class_counts.get(1, 0),
+    }:
+        raise DatasetBuildError(f"직접 촬영 supplement class_counts가 다릅니다: {path}")
     return records, {
         "path": str(path.resolve()),
         "manifest_sha256": _sha256(manifest_path),
@@ -276,6 +317,11 @@ def load_supplement(path: Path) -> tuple[list[dict], dict]:
         "frame_count": len(records),
         "selected_event_count": manifest.get("selected_event_count"),
         "source_dataset": manifest.get("sources", {}).get("source_dataset"),
+        "schema_version": schema_version,
+        "class_counts": {
+            "nofall": class_counts.get(0, 0),
+            "fall": class_counts.get(1, 0),
+        },
     }
 
 
@@ -305,6 +351,7 @@ def build_dataset(
     output_dir: Path,
     base_nofall_to_fall_ratio: float,
     force: bool,
+    recorded_supplement_repeat: int = 1,
 ) -> dict:
     if (
         not math.isfinite(base_nofall_to_fall_ratio)
@@ -314,6 +361,8 @@ def build_dataset(
         raise DatasetBuildError("base-nofall-to-fall-ratio는 0보다 크고 3 이하여야 합니다.")
     if not supplement_dirs:
         raise DatasetBuildError("--supplement를 1개 이상 지정해야 합니다.")
+    if not 1 <= recorded_supplement_repeat <= 5:
+        raise DatasetBuildError("recorded-supplement-repeat은 1~5여야 합니다.")
 
     base_train, base_val, _, base_manifest_path = load_base_dataset(base_dir)
     base_fall = [record for record in base_train if record["class_id"] == 1]
@@ -324,19 +373,35 @@ def build_dataset(
     selected_nofall = select_balanced_nofall(base_nofall, nofall_target)
 
     supplements = []
+    unique_supplements = []
     supplement_sources = []
+    seen_sample_ids = set()
     for supplement_dir in supplement_dirs:
         records, provenance = load_supplement(supplement_dir)
-        supplements.extend(records)
+        sample_ids = {record["sample_id"] for record in records}
+        overlap = seen_sample_ids & sample_ids
+        if overlap:
+            raise DatasetBuildError(
+                f"여러 supplement 사이에 sample_id가 중복됩니다: {sorted(overlap)}"
+            )
+        seen_sample_ids.update(sample_ids)
+        unique_supplements.extend(records)
+        repeat = (
+            recorded_supplement_repeat
+            if provenance["schema_version"] == RECORDED_SUPPLEMENT_SCHEMA_VERSION
+            else 1
+        )
+        for _ in range(repeat):
+            supplements.extend(records)
+        provenance["training_repeat"] = repeat
         supplement_sources.append(provenance)
-    all_sample_ids = [record["sample_id"] for record in supplements]
-    if len(all_sample_ids) != len(set(all_sample_ids)):
-        raise DatasetBuildError("여러 supplement 사이에 sample_id가 중복됩니다.")
 
     train = sorted(
         [*base_fall, *selected_nofall, *supplements],
         key=lambda item: (item["class_id"], item["sample_id"], str(item["image"])),
     )
+    supplement_nofall = sum(record["class_id"] == 0 for record in unique_supplements)
+    supplement_fall = sum(record["class_id"] == 1 for record in unique_supplements)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     staging_dir = Path(
         tempfile.mkdtemp(prefix=f".{output_dir.name}.build-", dir=output_dir.parent)
@@ -359,12 +424,16 @@ def build_dataset(
         )
         manifest = {
             "schema_version": SCHEMA_VERSION,
-            "purpose": "E1 real RGB hard-negative fine-tuning",
+            "purpose": "E1 recorded-domain adaptation fine-tuning",
             "policy": {
                 "base_fall_replay": "all CAUCAFall S1-5 fall frames",
                 "base_nofall_sampling": "equal Subject/activity quotas, temporal spacing",
                 "base_nofall_to_fall_ratio": base_nofall_to_fall_ratio,
-                "supplement": "reviewed model-involved train_candidate nofall only",
+                "recorded_supplement_repeat": recorded_supplement_repeat,
+                "supplement": (
+                    "reviewed external train_candidate nofall or Phase 4 "
+                    "diagnostic A01 nofall/fall"
+                ),
                 "validation": "unchanged CAUCAFall Subject 6",
             },
             "sources": {
@@ -378,7 +447,9 @@ def build_dataset(
                 "base_train_fall": len(base_fall),
                 "base_train_nofall_available": len(base_nofall),
                 "base_train_nofall_selected": len(selected_nofall),
-                "real_rgb_nofall": len(supplements),
+                "real_rgb_nofall": supplement_nofall,
+                "real_rgb_fall": supplement_fall,
+                "supplement_training_entries": len(supplements),
                 "train_total": len(train),
                 "val_total": len(base_val),
             },
@@ -408,6 +479,7 @@ def main() -> None:
             Path(args.output_dir),
             args.base_nofall_to_fall_ratio,
             args.force,
+            args.recorded_supplement_repeat,
         )
     except DatasetBuildError as exc:
         raise SystemExit(str(exc)) from exc
@@ -417,7 +489,9 @@ def main() -> None:
         f"train={counts['train_total']} "
         f"(fall replay={counts['base_train_fall']}, "
         f"base nofall={counts['base_train_nofall_selected']}, "
-        f"real RGB nofall={counts['real_rgb_nofall']}), "
+        f"real RGB nofall={counts['real_rgb_nofall']}, "
+        f"real RGB fall={counts['real_rgb_fall']}, "
+        f"weighted entries={counts['supplement_training_entries']}), "
         f"val={counts['val_total']}"
     )
 

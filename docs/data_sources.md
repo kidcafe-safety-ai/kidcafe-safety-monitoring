@@ -275,6 +275,11 @@ frame annotation과 actor 또는 session 단위 분할은 촬영 후 평가 브�
 | 다른 사람이 옆을 지나감 | 5개 이상 |
 | 여러 사람이 근처에 있음 | 5개 이상 |
 
+A 역할 낙상·Cause 평가 subset의 실제 확보 수는 `contact_fall` 8개,
+`near_pass` 3개, `occluded_cross` 1개다. 접촉 후 낙상 외 다중 인원 시나리오는
+위 최소 수에 미달하므로 Cause·ID switch 결과를 일반 성능으로 해석하지 않고
+사례 진단으로만 사용한다.
+
 ### 촬영 원칙
 
 - 실제 충돌 강제 연출 금지

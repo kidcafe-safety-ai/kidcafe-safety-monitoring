@@ -991,10 +991,15 @@ E0로 `train_candidate` Subject를 실행한 뒤 사람이 실제 오탐으로 �
 - CAUCAFall Subject 1-5의 fall frame 전량 positive replay
 - CAUCAFall nofall은 Subject·활동별 동일 quota와 시간 간격으로 축소
 - UP-Fall `train_candidate`의 reviewed hard-negative
-- 직접 촬영 데이터의 train split에서 검수된 model-involved hard-negative
+- 직접 촬영 diagnostic에서는 A01 단독 영상만 학습 후보로 사용
+- A01 낙상은 onset 직전 nofall과 onset부터 lying 직후까지의 fall frame을 함께 사용
+- A01 일상 동작은 검수된 nofall frame으로 사용
+- A02는 subject-disjoint diagnostic 비교에만 사용하고 학습하지 않음
+- A03 test는 모델·tracker·config 동결 전까지 접근하지 않음
 - Event 전후 1초 안에서 실제 auxiliary `fall` detection이 Track에 매칭된 frame
 - 최대 3 FPS, Event당 최대 7 frame
-- 실제 RGB supplement에는 class 0 `nofall`만 허용
+- 외부 실제 RGB supplement에는 class 0 `nofall`만 허용
+- 직접 촬영 A01 supplement에는 검수 annotation에서 만든 class 0·1을 허용
 - CAUCAFall Subject 6 validation은 변경하지 않음
 
 `fall_detector_v1.pt`에서 시작해 낮은 learning rate와 초기 layer freeze를 적용한다.
@@ -1038,16 +1043,19 @@ frame 외형보다 동작 전이를 구분하는 근거는 다음 선행 연구�
 -> false Event 원인 분석
 -> 짧은 검수 clip과 완료 CSV
 -> 검수본 SHA-256 동결
--> model-involved train_candidate frame supplement
+-> 외부 데이터는 model-involved train_candidate nofall supplement
+-> 직접 촬영은 A01 단독 영상의 annotation 기반 nofall/fall supplement
 -> CAUCA positive replay 학습 목록
 -> 낮은 learning rate fine-tuning
--> CAUCA·S7-8·실제 RGB validation 동일 조건 비교
+-> CAUCA·S7-8·A02 diagnostic 동일 조건 비교
+-> 사전 기준 통과 시 A03 test 최종 1회 평가
 ```
 
 관련 도구:
 
 - `freeze_real_rgb_false_event_review.py`: 완료 검수본·clip 무결성 검증과 동결
 - `materialize_real_rgb_e1_frames.py`: 승인된 model-involved nofall frame 생성
+- `materialize_phase4_recorded_e1_frames.py`: A01 단독 영상의 nofall/fall frame 생성
 - `build_fall_e1_training_dataset.py`: CAUCA replay와 supplement 학습 목록 생성
 - `train_fall_detector.py`: 동결 학습 설정과 dataset provenance 기록
 
@@ -1110,8 +1118,135 @@ GMDCSA24 외부 진단과 scalar motion gate 비교를 완료했다. OF-Syntheti
 GMDCSA24는 학습 또는 production 판단 데이터로 미채택했고, scalar motion
 gate도 최소 개선 기준에 미달해 production 동작에 포함하지 않는다.
 
-따라서 이 단계에서 새 낙상 모델·임계값·runtime 정책은 채택하지 않았으며,
-Phase 3 기준선의 Recall·timely Recall·FAR는 그대로 유지한다. 8월 7일 촬영은
-완료됐지만 원본 무결성 확인, manifest·annotation·split 동결과 E0 기준선 평가는
-후속 촬영 데이터 평가 브랜치에서 수행한다. 해당 결과 전에는 E1 재학습이나
-E2 temporal verifier를 production 개선으로 시작하지 않는다.
+따라서 촬영 전에는 새 낙상 모델·임계값·runtime 정책을 채택하지 않고 Phase 3
+기준선의 Recall·timely Recall·FAR를 유지했다. 이후 직접 촬영 데이터의 검수와
+평가는 외부 데이터 진단 결과와 분리해 다음 절부터 기록한다.
+
+### 14.9 직접 촬영 데이터 intake와 검수 기반
+
+2026-08-10에 8월 7일 촬영분 중 A 역할이 사용할 64개 영상을 계약 이름으로
+확정했다. 모든 영상은 1920x1080 HEVC, 약 29.97 FPS이며 총 17,778 frame,
+593.2초다. 전 frame 디코딩, 파일명·원본 대응, 중복 원본, SHA-256을 검사했다.
+
+| 분할 | Actor | 영상 | fall / no_fall | no_fall 시간 |
+| --- | --- | ---: | ---: | ---: |
+| diagnostic | A01·A02 | 46 | 32 / 14 | 163.0초 |
+| test | A03 | 18 | 14 / 4 | 33.2초 |
+
+A03 test는 모델·tracker·config 동결 전까지 추론하지 않는다. 다중 인원 영상은
+A01·A02에만 있어 Cause 결과는 actor-disjoint 일반화가 아닌 diagnostic으로
+해석한다. 전체 no_fall 노출도 196.2초뿐이므로 FAR는 Event 원시 건수와 함께
+기록하며, 이 촬영분만으로 운영 목표 0.2/min 달성을 확정하지 않는다.
+
+다중 인원 A 평가 영상은 `contact_fall` 8개, `near_pass` 3개,
+`occluded_cross` 1개다. 접촉 후 낙상은 계획한 최소 5개를 충족했지만
+near-pass와 다중 인원 가림은 각각 5개에 미달한다. 따라서 Cause와 ID switch
+결과는 사례 진단으로만 기록하고 일반 성능으로 보고하지 않는다.
+
+재현 도구:
+
+- `build_phase4_recordings_manifest.py`: metadata·split·checksum manifest 생성
+- `generate_phase4_fall_annotations.py`: pending 낙상·Cause 검수 초안 생성
+- `review_phase4_fall_annotations.py`: first/second reviewer 영상 검수
+- `validate_phase4_recordings.py`: 파일·checksum·frame·actor·Cause 계약 검증
+- `cache_fall_signals.py --recordings-manifest`: diagnostic 공식 Signal Cache 생성
+- `evaluate_fall_from_cache.py --recordings-manifest`: 동결 annotation 기반 E0 평가
+- `analyze_phase4_recorded_e0.py`: timely window의 candidate·bbox·Pose·모델 근거 진단
+
+실제 manifest와 annotation은 `outputs/phase4_recorded_eval/annotations/`에 두며
+Git에 포함하지 않는다. R01과 R02가 64개를 모두 검수했고 `needs_review` 없이
+`reviewed`로 합의했으며, 파일·checksum을 포함한 공식 검증을 통과했다.
+
+- recordings manifest SHA-256:
+  `bd1f7b51dab9a5f0fd038ef93b0a5a125ce578138c388996d151989ef0e92837`
+- fall/Cause annotation SHA-256:
+  `8f0456f9fc5b65192f2df0e96bd434f53700f61918d7586dd294368350ccbe0b`
+
+Diagnostic Signal Cache는 PoseTracker와 기존 `fall_detector_v1.pt`로 46개 영상,
+13,452 frame을 오류 없이 생성했다. Phase 3 채택 runtime profile(Pose NORMAL
+gate, auxiliary interval 3)과 gate 비활성·interval 1 replay의 Event 결과가
+같아, 이번 Recall 저하는 runtime 최적화가 원인이 아니다.
+
+### 14.10 직접 촬영 Diagnostic E0 결과
+
+동결한 `phase4_fall_eval_v1` 규칙으로 diagnostic 46개를 평가했다. 아래 결과는
+production 채택 결과가 아니라 E1 개선 후보를 비교하기 위한 E0 기준선이다.
+
+| 지표 | 결과 |
+| --- | ---: |
+| Recall | 2/32 (6.25%) |
+| timely Recall | 1/32 (3.125%) |
+| no_fall false Event | 0/14 |
+| FAR | 0.0/min |
+| late detection | 1개 영상 |
+| duplicate Event | 0개 영상 |
+
+Cache 신호를 timely window 기준으로 분해한 결과는 다음과 같다.
+
+- 32/32 fall 영상에서 하강 속도 또는 bbox 높이 수축 candidate 근거가 있었다.
+- 기존 수평 bbox 임계값을 한 frame 이상 넘은 fall 영상은 3/32뿐이었다.
+- 기존 fallen Pose 임계값을 넘은 fall 영상은 0/32였다.
+- 보조 모델이 `fall`로 판단한 frame은 32개 fall 영상 전체에서 0건이었다.
+- Track coverage 중앙값은 98.5%였고, 3개 side-fall만 80% 미만이었다.
+- 미탐 분류는 확정 근거 부족 28개, tracking 제한 3개, timely 성공 1개다.
+
+즉 candidate 진입이 아니라 확정 경로의 실제 카메라 구도 일반화가 주된
+병목이다. 촬영 구도에서는 fall의 최대 bbox aspect ratio 중앙값이 1.09로
+기존 임계값 1.3보다 낮고, `head_hip_diff_norm` 최댓값 중앙값도 -0.27로 기존
+Pose 임계값 0.2와 방향·범위가 맞지 않았다. 보조 모델도 기존 학습 구도와의
+domain shift로 timely window에서 `fall` 신호를 한 frame도 만들지 못했다.
+
+Threshold-only 가능성을 확인하기 위해 같은 Cache에서 소규모 진단 sweep을
+실행했다.
+
+| 설정 | Recall | timely Recall | FAR |
+| --- | ---: | ---: | ---: |
+| 기존 1.3 / confirm 0.5초 | 6.25% | 3.125% | 0.0/min |
+| aspect 1.2 / confirm 0.5초 | 12.5% | 9.375% | 0.0/min |
+| aspect 1.1 / confirm 0.3초 | 46.875% | 31.25% | 0.0/min |
+| aspect 1.0 / confirm 0.3초 | 68.75% | 53.125% | 1.47/min |
+| Pose -0.1 | 9.375% | 3.125% | 1.10/min |
+
+FAR 0.2/min 이하를 유지한 설정은 timely Recall 75% 목표에 도달하지 못했고,
+Recall을 더 높인 설정은 FAR를 크게 악화시켰다. 따라서 임계값 완화는
+production에 채택하지 않는다. 다음 E1 후보는 A01 단독 영상의 검수된 fall
+positive와 nofall을 사용한 보조 모델 domain adaptation이다. A02는 학습하지
+않은 actor 기준 비교에만 사용하며, 기존 Development·S7-8 회귀와 A02 지표를
+모두 통과해야 한다. A03 `test` 18개는 모델·tracker·config 동결 전까지 cache와
+evaluator 양쪽에서 계속 차단한다.
+
+### 14.11 직접 촬영 E1 학습 후보 준비
+
+E1은 기존 `fall_detector_v1.pt`에서 시작하는 단일 사전 정의 후보로 제한한다.
+CAUCAFall Subject 1-5 positive replay와 균형 nofall을 유지하고, 직접 촬영 A01
+단독 영상만 3 FPS로 선별했다. 다중 인원 영상은 자동 victim bbox가 다른 actor를
+선택할 위험이 있어 학습에서 제외했다.
+
+| 항목 | 결과 |
+| --- | ---: |
+| A01 사용 영상 | 17개 |
+| 직접 촬영 고유 frame | 239개 |
+| nofall / fall | 160 / 79 |
+| Track 부재로 제외된 요청 frame | 29개 |
+| CAUCA fall replay | 2,684개 |
+| CAUCA 균형 nofall | 2,684개 |
+| 직접 촬영 가중 반복 | 3회 |
+| 최종 train entry | 6,085개 |
+| 변경하지 않은 S6 validation | 2,181개 |
+
+직접 촬영 고유 frame은 세 번 반복해 train entry의 약 11.8%를 차지하게 한다.
+동일 frame 반복은 새로운 표본 수로 보고하지 않으며 manifest에 고유 frame 수와
+가중 entry 수를 분리해 기록한다. A02·A03 경로가 학습 목록에 없음을 생성기가
+검증한다.
+
+학습 설정은 `configs/fall_training_e1_recorded.json`으로 고정한다. 낮은 learning
+rate, 초기 layer freeze, 기존 모델 warm start를 사용하며 E1 결과를 보고 추가
+튜닝하지 않는다. 비교 순서는 S6 학습 validation, A02 diagnostic, CAUCAFall
+Development·S7-8 회귀다. 사전 채택 기준을 통과할 때만 A03 test를 한 번 평가한다.
+
+관련 도구:
+
+- `materialize_phase4_recorded_e1_frames.py`: A01 단독 영상의 class 0·1 frame 생성
+- `build_fall_e1_training_dataset.py`: CAUCA replay와 직접 촬영 supplement 결합
+- `evaluate_fall_from_cache.py`: 직접 촬영 결과의 primary actor별 지표 기록
+- `refresh_fall_signal_cache_auxiliary.py`: 기존 Track을 유지하고 E1 신호만 갱신
