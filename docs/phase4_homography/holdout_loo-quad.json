@@ -1,0 +1,505 @@
+{
+  "unit_cm": 1.0,
+  "clip_count": 2,
+  "clips": [
+    "cam01_clip00_orig_picked",
+    "cam01_clip01_picked"
+  ],
+  "fit_mode": "loo-quad",
+  "is_official": false,
+  "fit_selection_rule": "보조 진단: target 점을 제외한 조합 중 사각형 면적 최대인 4점",
+  "contract": {
+    "required_holdout_positions": 10,
+    "required_observations": 20,
+    "meets_contract": true
+  },
+  "overall": {
+    "observation_count": 20,
+    "position_count": 10,
+    "point_ids": [
+      "P01",
+      "P02",
+      "P03",
+      "P04",
+      "P05",
+      "P06",
+      "P07",
+      "P08",
+      "P09",
+      "P10"
+    ],
+    "mean_m": 0.022306939077924227,
+    "p95_m": 0.08559817379415897,
+    "max_m": 0.11608150492168103
+  },
+  "interpolation": {
+    "observation_count": 8,
+    "position_count": 4,
+    "point_ids": [
+      "P03",
+      "P05",
+      "P06",
+      "P07"
+    ],
+    "mean_m": 0.01142909366486002,
+    "p95_m": 0.018890906726217512,
+    "max_m": 0.020659991457454983
+  },
+  "extrapolation": {
+    "observation_count": 12,
+    "position_count": 6,
+    "point_ids": [
+      "P01",
+      "P02",
+      "P04",
+      "P08",
+      "P09",
+      "P10"
+    ],
+    "mean_m": 0.029558836019967023,
+    "p95_m": 0.09843326058469454,
+    "max_m": 0.11608150492168103
+  },
+  "per_clip": {
+    "cam01_clip00_orig_picked": {
+      "observation_count": 10,
+      "position_count": 10,
+      "point_ids": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "mean_m": 0.020055762584208985,
+      "p95_m": 0.0580622712063744,
+      "max_m": 0.083993787945342
+    },
+    "cam01_clip01_picked": {
+      "observation_count": 10,
+      "position_count": 10,
+      "point_ids": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "mean_m": 0.02455811557163946,
+      "p95_m": 0.0810526700450073,
+      "max_m": 0.11608150492168103
+    }
+  },
+  "observations": [
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P01",
+      "fit_points": [
+        "P02",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.06,
+        0.18
+      ],
+      "predicted_m": [
+        0.05536910452461933,
+        0.18865488481947115
+      ],
+      "error_m": 0.009815916877307665,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P02",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.19,
+        0.09
+      ],
+      "predicted_m": [
+        0.1936553876626957,
+        0.08636522041416293
+      ],
+      "error_m": 0.005154947293833923,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P03",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.13,
+        0.36
+      ],
+      "predicted_m": [
+        0.1378505392406494,
+        0.3582952151895384
+      ],
+      "error_m": 0.008033508425274524,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P04",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.4,
+        0.31
+      ],
+      "predicted_m": [
+        0.4140025395912981,
+        0.30880036008140943
+      ],
+      "error_m": 0.014053834029906103,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P05",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.32,
+        0.48
+      ],
+      "predicted_m": [
+        0.3073178328130071,
+        0.48075118121074173
+      ],
+      "error_m": 0.012704394427528238,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P06",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.08,
+        0.56
+      ],
+      "predicted_m": [
+        0.08685597195301738,
+        0.5597917769241998
+      ],
+      "error_m": 0.006859133201058032,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P07",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.21,
+        0.73
+      ],
+      "predicted_m": [
+        0.20137548640732067,
+        0.7169942988984258
+      ],
+      "error_m": 0.015605463653919356,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P08",
+      "fit_points": [
+        "P01",
+        "P04",
+        "P07",
+        "P09"
+      ],
+      "expected_m": [
+        0.44,
+        0.67
+      ],
+      "predicted_m": [
+        0.4956940270746555,
+        0.7328739354710251
+      ],
+      "error_m": 0.083993787945342,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P09",
+      "fit_points": [
+        "P01",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "expected_m": [
+        0.05,
+        0.82
+      ],
+      "predicted_m": [
+        0.0592331899242349,
+        0.8446987838063067
+      ],
+      "error_m": 0.026368195192080803,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P10",
+      "fit_points": [
+        "P01",
+        "P04",
+        "P08",
+        "P09"
+      ],
+      "expected_m": [
+        0.36,
+        0.17
+      ],
+      "predicted_m": [
+        0.34391172779917567,
+        0.17800203136542875
+      ],
+      "error_m": 0.017968444795839224,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P01",
+      "fit_points": [
+        "P02",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.06,
+        0.18
+      ],
+      "predicted_m": [
+        0.05550144920207274,
+        0.1864314175108604
+      ],
+      "error_m": 0.007848572512281058,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P02",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.19,
+        0.09
+      ],
+      "predicted_m": [
+        0.19333808064741392,
+        0.08761284889488546
+      ],
+      "error_m": 0.00410381198488538,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P03",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.13,
+        0.36
+      ],
+      "predicted_m": [
+        0.13812410207100767,
+        0.36010547264382337
+      ],
+      "error_m": 0.00812478670112306,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P04",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.4,
+        0.31
+      ],
+      "predicted_m": [
+        0.4132608002847581,
+        0.30761988044982475
+      ],
+      "error_m": 0.01347270549167338,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P05",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.32,
+        0.48
+      ],
+      "predicted_m": [
+        0.3079130005617872,
+        0.4795745952916351
+      ],
+      "error_m": 0.012094483229359377,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P06",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.08,
+        0.56
+      ],
+      "predicted_m": [
+        0.08730287390941549,
+        0.5591603211802995
+      ],
+      "error_m": 0.0073509882231626005,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P07",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.21,
+        0.73
+      ],
+      "predicted_m": [
+        0.20143585700397798,
+        0.711198651597138
+      ],
+      "error_m": 0.020659991457454983,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P08",
+      "fit_points": [
+        "P01",
+        "P04",
+        "P07",
+        "P09"
+      ],
+      "expected_m": [
+        0.44,
+        0.67
+      ],
+      "predicted_m": [
+        0.5128714625214817,
+        0.7603585399110817
+      ],
+      "error_m": 0.11608150492168103,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P09",
+      "fit_points": [
+        "P01",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "expected_m": [
+        0.05,
+        0.82
+      ],
+      "predicted_m": [
+        0.05615912891517673,
+        0.8577403754036742
+      ],
+      "error_m": 0.03823964964018403,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P10",
+      "fit_points": [
+        "P01",
+        "P04",
+        "P08",
+        "P09"
+      ],
+      "expected_m": [
+        0.36,
+        0.17
+      ],
+      "predicted_m": [
+        0.34487871866785164,
+        0.17901504072789862
+      ],
+      "error_m": 0.017604661554589705,
+      "region": "extrapolation"
+    }
+  ]
+}

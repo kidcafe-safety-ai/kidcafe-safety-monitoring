@@ -1,0 +1,17 @@
+{
+  "tracks_per_frame": 3,
+  "frames": 2000,
+  "repeats": 5,
+  "baseline_fps": 25.0,
+  "baseline_ms_per_frame": 0.05880964150000523,
+  "homography_ms_per_frame": 0.08073931199999151,
+  "added_latency_ms_per_frame": 0.021929670499986287,
+  "candidate_fps": 24.98630146604591,
+  "fps_drop_ratio": 0.000547941358163655,
+  "thresholds": {
+    "max_added_latency_ms_per_frame": 1.0,
+    "max_fps_drop_ratio": 0.05
+  },
+  "passes_added_latency": true,
+  "passes_fps_drop": true
+}

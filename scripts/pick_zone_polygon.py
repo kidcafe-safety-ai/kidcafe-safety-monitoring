@@ -87,6 +87,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dwell-threshold-sec", type=int, default=5)
     parser.add_argument("--floor-output", required=True)
     parser.add_argument("--image-output", required=True)
+    parser.add_argument(
+        "--unit-verified",
+        action="store_true",
+        help=(
+            "calibration 좌표가 실제 meter임이 확인됐을 때만 준다. 없으면 floor "
+            "Zone에 diagnostic_only를 붙여 runtime 사용을 막는다."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -120,7 +128,14 @@ def to_image_points(
 
 
 def build_floor_config(args: argparse.Namespace, camera_id: str, points) -> dict:
-    return {
+    """floor Zone 설정을 만든다.
+
+    `coordinate_space`는 로더가 `floor_meters`만 받으므로 값을 바꿀 수 없다.
+    그런데 이번 촬영은 줄자 눈금의 단위가 확정되지 않아 points가 meter라고
+    단정할 수 없다. 값이 meter인 척하는 파일이 runtime에 흘러들지 않도록
+    단위가 확인되기 전까지는 진단용 표시를 함께 저장한다.
+    """
+    config = {
         "schema_version": 1,
         "camera_id": camera_id,
         "coordinate_space": "floor_meters",
@@ -138,6 +153,13 @@ def build_floor_config(args: argparse.Namespace, camera_id: str, points) -> dict
             }
         ],
     }
+    if not args.unit_verified:
+        config["diagnostic_only"] = True
+        config["unit_note"] = (
+            "calibration 좌표 단위 미확인. points는 meter가 아니라 촬영 기록 "
+            "원단위를 100으로 나눈 값이다. runtime에 사용하지 않는다."
+        )
+    return config
 
 
 def build_image_config(args: argparse.Namespace, points) -> list:

@@ -224,10 +224,6 @@ __marimo__/
 data/videos/*
 !data/videos/.gitkeep
 
-# calibration 클릭 중간 산출물. 계약 기록은 문서와 configs JSON에만 남긴다.
-configs/camera_calibration/*_picked.csv
-configs/camera_calibration/*_holdout.csv
-
 # External datasets
 data/datasets/*
 !data/datasets/.gitkeep

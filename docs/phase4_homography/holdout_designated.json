@@ -1,0 +1,329 @@
+{
+  "unit_cm": 1.0,
+  "clip_count": 2,
+  "clips": [
+    "cam01_clip00_orig_picked",
+    "cam01_clip01_picked"
+  ],
+  "fit_mode": "designated",
+  "is_official": true,
+  "fit_selection_rule": "CSV role=fit 점으로 행렬 고정, role=holdout 점만 평가",
+  "contract": {
+    "required_holdout_positions": 10,
+    "required_observations": 20,
+    "meets_contract": false
+  },
+  "overall": {
+    "observation_count": 12,
+    "position_count": 6,
+    "point_ids": [
+      "P02",
+      "P03",
+      "P04",
+      "P05",
+      "P06",
+      "P07"
+    ],
+    "mean_m": 0.010684837343264914,
+    "p95_m": 0.017880001165510383,
+    "max_m": 0.020659991457454983
+  },
+  "interpolation": {
+    "observation_count": 8,
+    "position_count": 4,
+    "point_ids": [
+      "P03",
+      "P05",
+      "P06",
+      "P07"
+    ],
+    "mean_m": 0.01142909366486002,
+    "p95_m": 0.018890906726217512,
+    "max_m": 0.020659991457454983
+  },
+  "extrapolation": {
+    "observation_count": 4,
+    "position_count": 2,
+    "point_ids": [
+      "P02",
+      "P04"
+    ],
+    "mean_m": 0.009196324700074697,
+    "p95_m": 0.013966664749171194,
+    "max_m": 0.014053834029906103
+  },
+  "per_clip": {
+    "cam01_clip00_orig_picked": {
+      "observation_count": 6,
+      "position_count": 6,
+      "point_ids": [
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07"
+      ],
+      "mean_m": 0.01040188017192003,
+      "p95_m": 0.015217556247916042,
+      "max_m": 0.015605463653919356
+    },
+    "cam01_clip01_picked": {
+      "observation_count": 6,
+      "position_count": 6,
+      "point_ids": [
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07"
+      ],
+      "mean_m": 0.010967794514609797,
+      "p95_m": 0.018863169966009584,
+      "max_m": 0.020659991457454983
+    }
+  },
+  "observations": [
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P02",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.19,
+        0.09
+      ],
+      "predicted_m": [
+        0.1936553876626957,
+        0.08636522041416293
+      ],
+      "error_m": 0.005154947293833923,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P03",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.13,
+        0.36
+      ],
+      "predicted_m": [
+        0.1378505392406494,
+        0.3582952151895384
+      ],
+      "error_m": 0.008033508425274524,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P04",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.4,
+        0.31
+      ],
+      "predicted_m": [
+        0.4140025395912981,
+        0.30880036008140943
+      ],
+      "error_m": 0.014053834029906103,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P05",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.32,
+        0.48
+      ],
+      "predicted_m": [
+        0.3073178328130071,
+        0.48075118121074173
+      ],
+      "error_m": 0.012704394427528238,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P06",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.08,
+        0.56
+      ],
+      "predicted_m": [
+        0.08685597195301738,
+        0.5597917769241998
+      ],
+      "error_m": 0.006859133201058032,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P07",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.21,
+        0.73
+      ],
+      "predicted_m": [
+        0.20137548640732067,
+        0.7169942988984258
+      ],
+      "error_m": 0.015605463653919356,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P02",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.19,
+        0.09
+      ],
+      "predicted_m": [
+        0.19333808064741392,
+        0.08761284889488546
+      ],
+      "error_m": 0.00410381198488538,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P03",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.13,
+        0.36
+      ],
+      "predicted_m": [
+        0.13812410207100767,
+        0.36010547264382337
+      ],
+      "error_m": 0.00812478670112306,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P04",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.4,
+        0.31
+      ],
+      "predicted_m": [
+        0.4132608002847581,
+        0.30761988044982475
+      ],
+      "error_m": 0.01347270549167338,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P05",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.32,
+        0.48
+      ],
+      "predicted_m": [
+        0.3079130005617872,
+        0.4795745952916351
+      ],
+      "error_m": 0.012094483229359377,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P06",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.08,
+        0.56
+      ],
+      "predicted_m": [
+        0.08730287390941549,
+        0.5591603211802995
+      ],
+      "error_m": 0.0073509882231626005,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P07",
+      "fit_points": [
+        "P01",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.21,
+        0.73
+      ],
+      "predicted_m": [
+        0.20143585700397798,
+        0.711198651597138
+      ],
+      "error_m": 0.020659991457454983,
+      "region": "interpolation"
+    }
+  ]
+}

@@ -1,19 +1,21 @@
-"""클립별 calibration의 holdout 위치 오차를 교차검증으로 측정한다.
+"""클립별 calibration의 holdout 위치 오차를 측정한다.
 
-8월 7일 촬영에서 확보한 기준점은 10개다. `homography_acceptance_v1`은 holdout
-10위치·20관측을 요구하는데, fit 점을 고정하면 남은 점만 holdout이 되어 요구를
-만족할 수 없다. 그래서 점마다 하나씩 빼고 나머지로 fit해 모든 점이 한 번씩
-holdout이 되게 한다.
+공식 경로(`--fit-mode designated`, 기본값)는 실측 CSV의 `role`을 그대로 따른다.
+`role == "fit"`인 점으로 변환 행렬을 고정하고 `role == "holdout"`인 점만 평가한다.
+runtime config(`pick_calibration_points.py`)가 fit 점만 `image_points_px`에 담으므로
+실제 배포되는 변환은 그 점들로 만든 것 하나이고, 평가가 다른 조합을 쓰면 배포되지
+않는 시스템의 정확도를 재게 된다.
 
-fit 점 수는 `--fit-mode`로 고른다. 계약이 fit 기준점을 "최소 4개"로만 정하고
-상한을 두지 않으므로 남은 점을 모두 쓰는 최소자승(`all`, 기본값)이 계약 안에
-있다. 4점만 쓰면(`quad`) fit 사각형 밖이 전부 외삽이 되어, 측정값이 변환 성능이
-아니라 어떤 4점을 골랐는지를 반영하게 된다. 같은 입력에서 p95가 2.89와 8.56으로
-갈릴 만큼 차이가 크므로 기본값을 `all`로 둔다.
+`loo-all`·`loo-quad`는 점마다 하나씩 빼는 leave-one-out **보조 진단**이다. holdout
+위치 수를 늘려 볼 수는 있으나 runtime 후보의 정확도가 아니므로 공식 판정에 쓰지
+않는다. 출력의 `is_official`로 구분한다.
 
-내삽·외삽은 그 fit 점들의 볼록껍질 안팎으로 나눠 따로 보고한다. 껍질 밖 오차는
-변환 정확도와 기준점 배치 한계가 섞인 값이라 합산 수치만으로는 원인을 가릴 수
-없다.
+2026-08-07 촬영은 기준점이 10개(fit 4·holdout 6)뿐이라 `phase4_contract_v1`이
+요구하는 holdout 10위치·20관측을 공식 경로로 채울 수 없다. 이 스크립트는 수치를
+내되 계약 충족 여부를 함께 기록하며, 미달이면 공식 acceptance 판정을 할 수 없다.
+
+내삽·외삽은 fit 점들의 볼록껍질 안팎으로 나눠 따로 보고한다. 껍질 밖 오차는 변환
+정확도와 기준점 배치 한계가 섞인 값이라 합산 수치만으로는 원인을 가릴 수 없다.
 
 촬영 중 카메라가 고정되지 않아 단일 calibration을 전 클립에 쓸 수 없다. 클립마다
 `pick_calibration_points.py`로 만든 클릭 결과를 넣으면 클립별 결과와 합산 결과를
@@ -23,10 +25,10 @@ fit 점 수는 `--fit-mode`로 고른다. 계약이 fit 기준점을 "최소 4�
 
     python scripts/evaluate_homography_holdout.py \\
         --points docs/calibration_points.csv \\
-        --picked configs/camera_calibration/cam01_clip00_orig_picked.csv \\
-        --picked configs/camera_calibration/cam01_clip01_picked.csv \\
+        --picked docs/phase4_homography/cam01_clip00_orig_picked.csv \\
+        --picked docs/phase4_homography/cam01_clip01_picked.csv \\
         --unit-cm 1 \\
-        --output outputs/homography/holdout_eval.json
+        --output docs/phase4_homography/holdout_designated.json
 """
 
 from __future__ import annotations
@@ -52,6 +54,9 @@ from src.geofencing.homography_evaluation import (  # noqa: E402
 )
 
 FIT_POINT_COUNT = 4
+# phase4_contract_v1 holdout 요건. 미달이면 공식 acceptance 판정을 할 수 없다.
+REQUIRED_HOLDOUT_POSITIONS = 10
+REQUIRED_OBSERVATIONS = 20
 PICKED_FIELDS = ("point_id", "role", "pixel_x", "pixel_y")
 
 
@@ -71,21 +76,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--unit-cm", type=float, required=True)
     parser.add_argument(
         "--fit-mode",
-        choices=("all", "quad"),
-        default="all",
-        help="all=대상 점을 뺀 전부로 최소자승, quad=최대 면적 4점만.",
+        choices=("designated", "loo-all", "loo-quad"),
+        default="designated",
+        help=(
+            "designated=CSV role의 fit 점으로 행렬을 고정하고 holdout 점만 평가 "
+            "(공식). loo-all/loo-quad=점마다 하나씩 빼는 보조 진단."
+        ),
     )
     parser.add_argument("--output", required=True)
     return parser.parse_args()
 
 
-def load_floor_points(path: Path, unit_cm: float) -> Dict[str, Tuple[float, float]]:
-    """실측 CSV를 `{point_id: (x_m, y_m)}`로 읽는다."""
+VALID_ROLES = ("fit", "holdout")
+
+
+def load_floor_points(
+    path: Path, unit_cm: float
+) -> Tuple[Dict[str, Tuple[float, float]], Dict[str, str]]:
+    """실측 CSV를 `{point_id: (x_m, y_m)}`와 `{point_id: role}`로 읽는다.
+
+    role은 공식 평가에서 fit·holdout을 가르는 유일한 근거다. 스크립트가 임의로
+    fit을 고르면 runtime config가 쓰는 변환과 다른 것을 재게 된다.
+    """
     if not math.isfinite(unit_cm) or unit_cm <= 0:
         raise HoldoutEvalError("--unit-cm은 0보다 큰 유한한 값이어야 합니다.")
     if not path.is_file():
         raise HoldoutEvalError(f"실측 좌표 CSV가 없습니다: {path}")
     result: Dict[str, Tuple[float, float]] = {}
+    roles: Dict[str, str] = {}
     with open(path, "r", encoding="utf-8", newline="") as file:
         for number, row in enumerate(csv.DictReader(file), start=2):
             point_id = (row.get("point_id") or "").strip()
@@ -98,12 +116,23 @@ def load_floor_points(path: Path, unit_cm: float) -> Dict[str, Tuple[float, floa
                 raise HoldoutEvalError(f"{number}행 좌표를 읽을 수 없습니다.") from exc
             if not (math.isfinite(y_raw) and math.isfinite(x_raw)):
                 raise HoldoutEvalError(f"{number}행 좌표가 유한하지 않습니다.")
+            role = (row.get("role") or "").strip()
+            if role not in VALID_ROLES:
+                raise HoldoutEvalError(
+                    f"{number}행 role은 {VALID_ROLES} 중 하나여야 합니다: {role!r}"
+                )
+            roles[point_id] = role
             result[point_id] = (x_raw * unit_cm / 100.0, y_raw * unit_cm / 100.0)
     if len(result) < FIT_POINT_COUNT + 1:
         raise HoldoutEvalError(
-            f"기준점이 {FIT_POINT_COUNT + 1}개 이상이어야 교차검증할 수 있습니다."
+            f"기준점이 {FIT_POINT_COUNT + 1}개 이상이어야 평가할 수 있습니다."
         )
-    return result
+    designated_fit = [p for p, r in roles.items() if r == "fit"]
+    if len(designated_fit) < FIT_POINT_COUNT:
+        raise HoldoutEvalError(
+            f"role=fit이 {FIT_POINT_COUNT}개 이상이어야 합니다: {len(designated_fit)}개"
+        )
+    return result, roles
 
 
 def load_picked(path: Path, expected: Sequence[str]) -> Dict[str, Tuple[float, float]]:
@@ -121,9 +150,16 @@ def load_picked(path: Path, expected: Sequence[str]) -> Dict[str, Tuple[float, f
             if point_id in result:
                 raise HoldoutEvalError(f"{path} {number}행 point_id가 중복입니다.")
             try:
-                result[point_id] = (float(row["pixel_x"]), float(row["pixel_y"]))
+                pixel_x = float(row["pixel_x"])
+                pixel_y = float(row["pixel_y"])
             except (TypeError, ValueError) as exc:
                 raise HoldoutEvalError(f"{path} {number}행 픽셀 좌표 오류") from exc
+            # NaN·Inf를 통과시키면 homography가 발산해도 결과가 조용히 생성된다.
+            if not (math.isfinite(pixel_x) and math.isfinite(pixel_y)):
+                raise HoldoutEvalError(
+                    f"{path} {number}행 픽셀 좌표가 유한하지 않습니다: {pixel_x}, {pixel_y}"
+                )
+            result[point_id] = (pixel_x, pixel_y)
     unmatched = set(expected) - set(result)
     if unmatched:
         raise HoldoutEvalError(f"{path}에 없는 기준점: {sorted(unmatched)}")
@@ -144,25 +180,34 @@ def _quad_area(points: Sequence[Tuple[float, float]]) -> float:
 
 
 def choose_fit_sets(
-    floor: Dict[str, Tuple[float, float]], mode: str
+    floor: Dict[str, Tuple[float, float]], roles: Dict[str, str], mode: str
 ) -> Dict[str, Tuple[str, ...]]:
-    """점마다 holdout으로 뺄 대상을 정하고 나머지를 fit으로 쓴다.
+    """평가 대상마다 어떤 점으로 행렬을 맞출지 정한다.
 
-    `homography_acceptance_v1`은 fit 기준점을 "최소 4개"로 정한다. 상한이 없으므로
-    남은 점을 모두 쓰는 최소자승 추정이 계약 안에 있다. 4점만 쓰면 fit 사각형
-    밖이 전부 외삽이 되어 오차가 변환 성능이 아니라 조합 선택의 결과가 된다.
+    `designated`가 공식 경로다. runtime config(`pick_calibration_points.py`)는
+    `role == "fit"`인 점만 `image_points_px`에 담으므로, 실제로 배포되는 변환은
+    그 점들로 만든 것 하나다. 평가가 다른 조합을 쓰면 배포되지 않는 시스템의
+    정확도를 재게 된다.
 
-    - `all`: 대상 점을 제외한 전부를 fit으로 쓴다 (기본값).
-    - `quad`: 대상 점을 제외한 조합 중 사각형 면적이 최대인 4점만 쓴다. 기준점이
-      4개뿐인 촬영과 비교하기 위해 남겨둔 경로다.
-
-    두 규칙 모두 오차를 보기 전에 정해지므로 사후 선택 여지가 없다.
+    `loo-all`·`loo-quad`는 점마다 하나씩 빼는 leave-one-out으로, holdout 위치 수를
+    늘려 보는 **보조 진단**이다. 이 결과는 runtime 후보의 정확도가 아니므로 공식
+    판정에 사용하지 않는다.
     """
     ids = sorted(floor)
+    if mode == "designated":
+        fit = tuple(sorted(p for p in ids if roles[p] == "fit"))
+        holdout = [p for p in ids if roles[p] == "holdout"]
+        if not holdout:
+            raise HoldoutEvalError("role=holdout인 기준점이 없습니다.")
+        overlap = set(fit) & set(holdout)
+        if overlap:
+            raise HoldoutEvalError(f"fit과 holdout이 겹칩니다: {sorted(overlap)}")
+        return {target: fit for target in holdout}
+
     chosen: Dict[str, Tuple[str, ...]] = {}
     for target in ids:
         others = tuple(i for i in ids if i != target)
-        if mode == "all":
+        if mode == "loo-all":
             chosen[target] = others
             continue
         best: Tuple[float, Tuple[str, ...]] | None = None
@@ -205,7 +250,7 @@ def evaluate(
     observations: List[dict] = []
     for clip_name in sorted(clips):
         picked = clips[clip_name]
-        for target in sorted(floor):
+        for target in sorted(fit_sets):
             fit = fit_sets[target]
             src = np.float32([picked[i] for i in fit])
             dst = np.float32([floor[i] for i in fit])
@@ -227,6 +272,11 @@ def evaluate(
                 }
             )
     return observations
+
+
+def _meets_contract(observations: Sequence[dict]) -> bool:
+    positions = len({o["point_id"] for o in observations})
+    return positions >= REQUIRED_HOLDOUT_POSITIONS and len(observations) >= REQUIRED_OBSERVATIONS
 
 
 def summarize(observations: Sequence[dict], region: str | None = None) -> dict:
@@ -264,11 +314,11 @@ def write_json_atomic(path: Path, payload: dict) -> None:
 def main() -> None:
     args = parse_args()
     try:
-        floor = load_floor_points(Path(args.points), args.unit_cm)
+        floor, roles = load_floor_points(Path(args.points), args.unit_cm)
         clips = {
             Path(p).stem: load_picked(Path(p), list(floor)) for p in args.picked
         }
-        fit_sets = choose_fit_sets(floor, args.fit_mode)
+        fit_sets = choose_fit_sets(floor, roles, args.fit_mode)
         observations = evaluate(floor, clips, fit_sets)
     except HoldoutEvalError as exc:
         raise SystemExit(str(exc)) from exc
@@ -278,11 +328,17 @@ def main() -> None:
         "clip_count": len(clips),
         "clips": sorted(clips),
         "fit_mode": args.fit_mode,
-        "fit_selection_rule": (
-            "target 점을 제외한 전부로 최소자승"
-            if args.fit_mode == "all"
-            else "target 점을 제외한 조합 중 사각형 면적 최대인 4점"
-        ),
+        "is_official": args.fit_mode == "designated",
+        "fit_selection_rule": {
+            "designated": "CSV role=fit 점으로 행렬 고정, role=holdout 점만 평가",
+            "loo-all": "보조 진단: target 점을 제외한 전부로 최소자승",
+            "loo-quad": "보조 진단: target 점을 제외한 조합 중 사각형 면적 최대인 4점",
+        }[args.fit_mode],
+        "contract": {
+            "required_holdout_positions": REQUIRED_HOLDOUT_POSITIONS,
+            "required_observations": REQUIRED_OBSERVATIONS,
+            "meets_contract": _meets_contract(observations),
+        },
         "overall": summarize(observations),
         "interpolation": summarize(observations, "interpolation"),
         "extrapolation": summarize(observations, "extrapolation"),
@@ -294,6 +350,11 @@ def main() -> None:
     }
     write_json_atomic(Path(args.output), payload)
 
+    contract = payload["contract"]
+    print(
+        f"모드 {args.fit_mode}"
+        f"{' (공식)' if payload['is_official'] else ' (보조 진단, 공식 판정 불가)'}"
+    )
     for label, key in (("전체", "overall"), ("내삽", "interpolation"), ("외삽", "extrapolation")):
         stats = payload[key]
         if not stats.get("observation_count"):
@@ -302,6 +363,12 @@ def main() -> None:
             f"{label}: {stats['position_count']}위치 / {stats['observation_count']}관측  "
             f"평균 {stats['mean_m'] * 100:.2f}cm  p95 {stats['p95_m'] * 100:.2f}cm  "
             f"최대 {stats['max_m'] * 100:.2f}cm"
+        )
+    if not contract["meets_contract"]:
+        print(
+            f"계약 미달: holdout 위치 {payload['overall']['position_count']}"
+            f"/{REQUIRED_HOLDOUT_POSITIONS}, 관측 {payload['overall']['observation_count']}"
+            f"/{REQUIRED_OBSERVATIONS} -> 공식 acceptance 판정 불가"
         )
     print(f"-> {args.output}")
 
