@@ -864,19 +864,24 @@ Phase 4에서는 A의 낙상 평가, B의 Event·Zone API, C의 Report·Zone UI�
 - 카메라 ID·해상도 불일치는 fail-fast하며 기존 경로로 조용히 fallback하지
   않는다.
 
-### Outcome (2026-08-10)
+### Outcome (2026-08-11)
 
-**미채택.** Zone 판정은 기존 image-normalized polygon 경로를 유지하며 production
-동작은 변경하지 않는다. `calibration.enabled`는 기본값 `false` 그대로다.
+**보류.** production 경로는 기존 image-normalized polygon을 유지하고
+`calibration.enabled`는 기본값 `false` 그대로다.
 
-변환 정확도 자체는 기준을 만족했다(기준점 영역 안 평균 1.14·p95 1.89 원단위).
-미채택 사유는 알고리즘이 아니라 8월 7일 촬영 조건이다. 기준점이 촬영 구역
-일부에만 배치돼 사람 위치의 61%가 fit 사각형 밖이었고 그 구간 오차가 5배 이상
-컸다. 카메라도 고정되지 않아(클립 간 최대 8.5도 회전) 단일 config calibration을
-전 클립에 적용할 수 없었다. 절대 오차 허용값은 holdout 확인 전 동결 절차를
-수행하지 못해 동결하지 않았다.
+측정 가능한 채택 기준은 모두 통과했다. 위치 오차는 holdout 10위치·20관측에서
+평균 1.37·p95 2.89 원단위로, 좌표 단위가 6cm 미만이면 허용값 안에 든다.
+frame당 추가 비용 +0.0130ms, FPS 하락률 +0.032%로 기준(1ms·5%)에 크게 못
+미친다. 해상도 불일치 fail-fast와 기존 경로 회귀 없음도 확인했다.
+
+확정하지 못한 이유는 두 가지다. Zone 정확도·오판정·ENTER·EXIT 오류 4개 항목은
+A 역할의 Zone 진입·이탈 ground truth가 있어야 측정할 수 있고, calibration 15분
+기준은 촬영 중 카메라가 고정되지 않아(클립 간 최대 8.5도 회전) 클립마다 다시
+해야 했으므로 이번 데이터로는 미달이다. 앞의 4개는 재촬영 없이 채울 수 있고,
+뒤의 1개는 카메라를 고정한 재촬영이 필요하다.
+
+절대 오차 허용값은 holdout 확인 전 동결 절차를 수행하지 못해 동결하지 않았다.
+ADR-023이 촬영 전부터 명시한 10cm·20cm를 참고 기준으로만 사용한다.
 
 측정 수치·판정 근거·다음 촬영 보완 사항은
-[docs/homography_calibration.md](homography_calibration.md) 7절에 있다. PoC 코드
-(`src/geofencing/floor_plane.py`, `homography_evaluation.py`, floor-zone 로더)는
-비활성 상태로 유지해 재촬영 후 재검증에 그대로 사용한다.
+[docs/homography_calibration.md](homography_calibration.md) 7절에 있다.
