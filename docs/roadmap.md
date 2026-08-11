@@ -479,15 +479,27 @@ Phase 3 Open·계약 문서 PR
 
 ### 핵심 작업
 
-- 외부·촬영 데이터 기반 낙상 E1 개선 실험
-- 실제 촬영 timely Recall·FAR·cause·ID switch 정량 평가
+- 외부·촬영 데이터 기반 낙상 E1 개선 실험 — 완료
+- 실제 촬영 timely Recall·FAR 평가 — 완료
+- cause·ID switch 정량 분석 — 진행 중
 - Homography floor-plane Zone 기본 비활성 PoC
 - Zone Settings 실제 저장·version 충돌 처리
 - ReportPage 기간별 실제 Event 연동
 - Recent Event UX와 API mode 회귀
-- Subject 9-10 최종 holdout 1회 평가
+- CAUCAFall 참고 holdout은 필요 시 회귀 확인용으로만 평가
 - 실제 영상 A/B/C E2E
 - 개발보고서·제작설계서·시연 영상 준비
+
+### A 진행 상태 (2026-08-11)
+
+- 8월 7일 실제 키즈카페 목표 IP 카메라 구도의 성인 통제 재연 영상 64개를
+  계약 형식으로 정리하고 R01·R02 검수를 완료했다.
+- A01 촬영 frame을 기존 보조 detector에 추가 학습한 E1을 채택했다.
+- 학습하지 않은 A03 actor-disjoint test에서 Recall 93.3%, timely Recall 93.3%,
+  FAR 0.0/min, 평균 onset latency 0.441초, 중복 Event 0건을 기록했다.
+- E1 낙상 감지는 목표 키즈카페 카메라 실행의 기본 활성 프로파일로 동결했다.
+- 실제 영상의 Vision AI·API·SQLite·Live Frame E2E를 통과했다.
+- 다음 A 작업은 다중 인원 Cause·ID switch 분석과 조건부 Tracker 비교다.
 
 경량 temporal classifier는 E1 이후에도 같은 오탐이 실제 촬영에서 재현될 때만
 검토한다. BoT-SORT는 ID switch가 실제 missed·duplicate·cause 오류를 반복해서

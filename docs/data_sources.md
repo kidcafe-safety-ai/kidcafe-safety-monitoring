@@ -16,7 +16,7 @@ data/datasets/
 ├─ caucafall/v5/
 │  ├─ development/   # Subject 1-6
 │  ├─ validation/    # Subject 7-8
-│  └─ holdout/       # Subject 9-10 (최종 평가 전까지 미사용)
+│  └─ holdout/       # Subject 9-10 (필요 시 참고 회귀에만 사용)
 ├─ gmdcsa24/                 # v2.1 공식 archive, 실제 RGB
 ├─ omnifall/                 # OF-Synthetic 진단 기록 전용
 ├─ up_fall/                  # 실제 RGB 선별 pilot archive
@@ -37,7 +37,7 @@ data/datasets/
 | 발행일 | 2025-03-18 |
 | 접근 방법 | Mendeley Data 직접 다운로드 |
 | 라이선스 | CC BY 4.0 |
-| 용도 | 낙상 감지 개발·튜닝·내부 평가 |
+| 용도 | 낙상 감지 초기 구현·학습·참고 회귀 |
 | 검토 상태 | 공식 메타데이터·라이선스·다운로드·압축 무결성·체크섬 확인 완료 |
 
 ### 데이터 구성
@@ -54,11 +54,12 @@ data/datasets/
 |---|---|
 | 개발·튜닝 | Subject 1-6 |
 | 진단·튜닝 (`validation/` 디렉터리) | Subject 7-8 |
-| 최종 내부 평가 (holdout) | Subject 9-10 |
+| CAUCAFall 내부 참고 holdout | Subject 9-10 |
 
 Subject 7-8은 초기 Validation 이후 오류 분석과 규칙 검증에 사용되어 현재는
-진단·튜닝 데이터로 취급한다. Subject 9-10(holdout)은 설정 동결 후 최종 평가
-전까지 사용하지 않는다.
+진단·튜닝 데이터로 취급한다. Subject 9-10(holdout)은 필요 시 설정 동결 후
+참고 회귀에만 사용한다. 이 분할은 CAUCAFall 내부 회귀 확인용이며 실제
+키즈카페 목표 환경의 성능이나 모델 채택을 결정하지 않는다.
 
 ### 체크섬
 

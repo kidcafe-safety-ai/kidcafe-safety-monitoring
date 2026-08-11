@@ -10,7 +10,10 @@
 - 분할 (docs/data_sources.md, configs/caucafall_v5_split.json과 동일):
   - Development (Subject 1-6): 60개 영상 — fall 30, no_fall 30
   - 진단·튜닝 (Subject 7-8, 디렉터리명 `validation`): 20개 영상 — fall 10, no_fall 10
-  - Holdout (Subject 9-10): 최종 평가 전까지 미사용
+  - 참고 holdout (Subject 9-10): 설정 동결 전까지 미사용
+
+CAUCAFall은 낙상 감지 초기 구현·학습과 참고 회귀에 사용한 공개 데이터다.
+실제 키즈카페 목표 환경의 성능과 채택 근거는 직접 촬영 분할에서 별도로 평가한다.
 
 ## 2. Annotation 생성·검수
 
@@ -263,7 +266,7 @@ Subject 9-10 holdout은 로컬 원본 데이터에 존재하더라도 학습,
 체크포인트 선택, 임계값 튜닝, Development/Validation 평가에 사용하지 않았다.
 `generate_caucafall_annotations.py`와 `evaluate_fall.py`는 holdout split을 코드
 수준에서 차단한다(`guard_holdout`, `_contains_holdout_segment`). Holdout 평가는
-설정 동결 후 최종 평가까지 보류한다.
+필요 시 설정 동결 후 참고 회귀로만 수행한다.
 
 ## 8. Fine-tuning 및 파이프라인 통합
 
@@ -791,7 +794,7 @@ Pose NORMAL gate: enabled
 auxiliary model interval: 3
 Development: Subject 1-6
 tuning/diagnostic: Subject 7-8
-final holdout: Subject 9-10
+reference holdout: Subject 9-10
 ```
 
 | 지표 | Development | S7-8 tuning/diagnostic |
@@ -801,8 +804,8 @@ final holdout: Subject 9-10
 | FAR | 0.0/min | 1.75/min |
 | 중복 Event 영상 | 0 | 0 |
 
-S7-8은 학습하지 않는다. S9-10은 모델·tracker·config·threshold·평가 protocol과
-evaluator commit을 동결한 뒤 한 번만 평가한다.
+S7-8은 학습하지 않는다. S9-10은 필요 시 모델·tracker·config·threshold·평가
+protocol과 evaluator commit을 동결한 뒤 참고 회귀용으로 한 번 평가한다.
 
 공식 결과 JSON에는 다음 실행 조건을 기록한다.
 
@@ -905,7 +908,8 @@ reviewed fall 행에는 원본 라벨 프레임과 onset·impact·lying 시점�
 공식 cache replay는 tracker와 보조 모델의 실제 inference device 및 각 모델의
 SHA-256을 가진 새 Signal Cache만 허용한다. 이 정보가 없는 Phase 3 legacy cache는
 비공식 비교에는 계속 사용할 수 있지만 `phase4_fall_eval_v1` 결과에는 사용할 수
-없다. Subject 9-10 cache는 최종 동결 전 생성하지 않는다.
+없다. Subject 9-10 cache는 참고 회귀 필요성을 결정하고 설정을 동결하기 전에는
+생성하지 않는다.
 
 직접 촬영 데이터의 `phase4_fall_cause_v1`·Cause·Track 평가는 촬영 후 전용
 annotation loader와 evaluator에서 구현하며, CAUCAFall 전용 CLI가 해당 schema를
@@ -956,7 +960,7 @@ FAR 0.1191/min이고 validation Recall 40.0%, timely Recall 30.0%, FAR 0.0/min�
 
 Validation Subject의 영상을 hard-negative로 추출하거나 학습에 넣지 않는다.
 E1 후보와 학습 설정을 동결한 뒤 E0와 E1을 같은 validation에 비교한다.
-CAUCAFall Subject 9-10 최종 holdout은 이 외부 validation과 별개로 계속
+CAUCAFall Subject 9-10 참고 holdout은 이 외부 validation과 별개로 계속
 열람하지 않는다.
 
 ### 14.3 실행 도구와 채택 순서
@@ -970,7 +974,7 @@ materialize_up_fall_cohort.py
 -> CAUCAFall positive replay를 유지해 재학습
 -> CAUCAFall Development·S7-8 회귀
 -> 실제 RGB validation 비교
--> 설정 동결 후 CAUCAFall S9-10 최종 1회 평가
+-> 필요 시 설정 동결 후 CAUCAFall S9-10 참고 회귀
 ```
 
 UP-Fall·GMDCSA24 평가는 외부 진단/validation이며 CAUCAFall 전용 공식 모드
@@ -1131,11 +1135,11 @@ gate도 최소 개선 기준에 미달해 production 동작에 포함하지 않�
 | 분할 | Actor | 영상 | fall / no_fall | no_fall 시간 |
 | --- | --- | ---: | ---: | ---: |
 | diagnostic | A01·A02 | 46 | 32 / 14 | 163.0초 |
-| test | A03 | 18 | 14 / 4 | 33.2초 |
+| test | A03 | 18 | 15 / 3 | 27.2초 |
 
-A03 test는 모델·tracker·config 동결 전까지 추론하지 않는다. 다중 인원 영상은
+A03 test는 모델·tracker·config 동결 전까지 추론하지 않았다. 다중 인원 영상은
 A01·A02에만 있어 Cause 결과는 actor-disjoint 일반화가 아닌 diagnostic으로
-해석한다. 전체 no_fall 노출도 196.2초뿐이므로 FAR는 Event 원시 건수와 함께
+해석한다. 전체 no_fall 노출도 190.2초뿐이므로 FAR는 Event 원시 건수와 함께
 기록하며, 이 촬영분만으로 운영 목표 0.2/min 달성을 확정하지 않는다.
 
 다중 인원 A 평가 영상은 `contact_fall` 8개, `near_pass` 3개,
@@ -1158,9 +1162,9 @@ Git에 포함하지 않는다. R01과 R02가 64개를 모두 검수했고 `needs
 `reviewed`로 합의했으며, 파일·checksum을 포함한 공식 검증을 통과했다.
 
 - recordings manifest SHA-256:
-  `bd1f7b51dab9a5f0fd038ef93b0a5a125ce578138c388996d151989ef0e92837`
+  `acfd84cf68641bafa268e18d2e09aba7e2b1579426cf41f65b40b23e3c524e42`
 - fall/Cause annotation SHA-256:
-  `8f0456f9fc5b65192f2df0e96bd434f53700f61918d7586dd294368350ccbe0b`
+  `318a16602bc194e796d5e89eb0ebf87a769eb31f8eae5c6a2d1aa9bf443d5f13`
 
 Diagnostic Signal Cache는 PoseTracker와 기존 `fall_detector_v1.pt`로 46개 영상,
 13,452 frame을 오류 없이 생성했다. Phase 3 채택 runtime profile(Pose NORMAL
@@ -1211,9 +1215,8 @@ FAR 0.2/min 이하를 유지한 설정은 timely Recall 75% 목표에 도달하�
 Recall을 더 높인 설정은 FAR를 크게 악화시켰다. 따라서 임계값 완화는
 production에 채택하지 않는다. 다음 E1 후보는 A01 단독 영상의 검수된 fall
 positive와 nofall을 사용한 보조 모델 domain adaptation이다. A02는 학습하지
-않은 actor 기준 비교에만 사용하며, 기존 Development·S7-8 회귀와 A02 지표를
-모두 통과해야 한다. A03 `test` 18개는 모델·tracker·config 동결 전까지 cache와
-evaluator 양쪽에서 계속 차단한다.
+않은 actor 기준 비교에만 사용한다. A03 `test` 18개는 모델·tracker·config
+동결 전까지 cache와 evaluator 양쪽에서 계속 차단한다.
 
 ### 14.11 직접 촬영 E1 학습 후보 준비
 
@@ -1241,8 +1244,8 @@ CAUCAFall Subject 1-5 positive replay와 균형 nofall을 유지하고, 직접 �
 
 학습 설정은 `configs/fall_training_e1_recorded.json`으로 고정한다. 낮은 learning
 rate, 초기 layer freeze, 기존 모델 warm start를 사용하며 E1 결과를 보고 추가
-튜닝하지 않는다. 비교 순서는 S6 학습 validation, A02 diagnostic, CAUCAFall
-Development·S7-8 회귀다. 사전 채택 기준을 통과할 때만 A03 test를 한 번 평가한다.
+튜닝하지 않는다. 비교 순서는 S6 학습 validation, A02 diagnostic, 기존 공개
+데이터 회귀다.
 
 관련 도구:
 
@@ -1250,3 +1253,96 @@ Development·S7-8 회귀다. 사전 채택 기준을 통과할 때만 A03 test�
 - `build_fall_e1_training_dataset.py`: CAUCA replay와 직접 촬영 supplement 결합
 - `evaluate_fall_from_cache.py`: 직접 촬영 결과의 primary actor별 지표 기록
 - `refresh_fall_signal_cache_auxiliary.py`: 기존 Track을 유지하고 E1 신호만 갱신
+
+### 14.12 E1 학습·회귀와 목표 환경 채택
+
+E1은 8월 7일 실제 키즈카페에서 목표 IP 카메라 구도로 촬영한 A01 frame을 기존
+학습 데이터에 추가해 fine-tuning했다. 학습에 사용하지 않은 A02 diagnostic과
+기존 회귀를 확인한 뒤 모델·tracker·config를 동결하고, 그 전까지 봉인했던 A03
+test를 평가했다.
+
+S6 frame detector validation 결과는 다음과 같다. 이 값은 영상 단위 Event 성능이
+아니라 `fall`·`nofall` 보조 detector의 frame 단위 지표다.
+
+| Class | Precision | Recall | mAP50 | mAP50-95 |
+| --- | ---: | ---: | ---: | ---: |
+| 전체 | 96.4% | 92.1% | 97.4% | 73.1% |
+| nofall | 99.2% | 91.5% | 99.0% | 76.2% |
+| fall | 93.5% | 92.7% | 95.7% | 70.0% |
+
+목표 카메라의 Event 단위 diagnostic 결과는 다음과 같다.
+
+| 데이터 | Recall | timely Recall | FAR | 중복 Event |
+| --- | ---: | ---: | ---: | ---: |
+| 직접 촬영 A01·A02 | 93.75% | 90.63% | 0.368/min | 0 |
+
+Diagnostic no-fall 14편 중 주요 오탐 행동인 앉기 6편과 줍기 4편에서는 false
+Event가 없었다. 근접 통과 3편도 0건이었으며, 유일한 false Event는 다중 인원
+가림 영상 `occluded_cross` 1편에서 발생했다. 따라서 앉기·줍기 오탐 개선과
+가림 상황의 Track 한계를 분리해 해석한다.
+
+배포 채택 판단은 8월 7일 확보한 실제 키즈카페 카메라 데이터로 수행한다. A01만
+학습에 사용하고 A02와 A03을 actor 단위로 분리했으며, A03은 모델·tracker·config
+동결 후 최종 평가했다. 기존 회귀 결과는 동결 manifest에 참고 기록으로 보존하며
+평가 protocol과 산출 공식은 변경하지 않았다.
+
+채택 모델과 실행 프로파일:
+
+- 모델: `outputs/fall_training/models/fall_detector_phase4_e1.pt`
+- 모델 SHA-256:
+  `41701c4686212447271f4dd81b71a14704b76cb9f38fe1c727d446477fbdd28b`
+- tracker: `yolo26n-pose.pt` PoseTracker
+- 보조 모델 interval: `3`
+- Pose NORMAL gate: 활성
+- 낙상 감지: 기본 활성
+- 동결 manifest: `configs/fall_e1_selected.json`
+
+### 14.13 A03 목표 환경 최종 평가
+
+라벨 정정 후 A03 actor-disjoint test 18개를 `phase4_fall_eval_v1`로 평가했다.
+
+| 지표 | 결과 |
+| --- | ---: |
+| Recall | 14/15 (93.3%) |
+| timely Recall | 14/15 (93.3%) |
+| FAR | 0.0/min |
+| 평균 onset latency | 0.441초 |
+| late detection | 0 |
+| duplicate Event | 0 |
+| early false alarm | 0 |
+
+유일한 미탐은 `P4_S01_A03_fall_side_03_cam01`이며 Track coverage가 34.3%였다.
+`fall_forward_knees` 영상은 timely window 안에서 감지됐다. 이 결과를
+근거로 E1을 목표 키즈카페 카메라의 기본 낙상 모델로 채택하고 CLI 기본 실행에서
+낙상 감지를 활성화한다. 이 결과는 사전 목표를 모두 통과했지만 A03의 no_fall
+노출은 주요 오탐 행동인 줍기 3편, 27.2초로 구성됐다. 세 영상의 false Event는
+0건이었다. 앉기는 A01·A02 diagnostic 6편에서 false Event 0건을 확인했다.
+다만 actor-disjoint 앉기 영상과 장시간 정상 행동 노출이 없으므로 운영 성능은
+후속 RTSP 검증에서 확인한다.
+
+### 14.14 기본 활성 프로파일 API E2E
+
+2026-08-11에 A03 `fall_forward_knees` 영상을 별도 활성화 옵션 없이 실행해
+CLI 기본값과 서비스 전달 경로를 확인했다. PoseTracker와 E1 보조 모델은 MPS,
+보조 모델 interval은 `3`, Pose NORMAL gate는 활성 상태였다.
+
+- frame 70에서 `FALL_SUSPECT` 1건 생성
+- FastAPI `POST /events` `201`, `GET /events` 동일 Event 반환
+- SQLite의 Event type·Track·frame·confidence·`event_confidence` 일치
+- 단독 낙상이므로 API `cause=null`, SQLite `cause_json=NULL`
+- CurrentStatus가 같은 source와 최신 frame으로 저장됨
+- 실행 중 `GET /live/frame` `200 image/jpeg`
+- Live Frame 헤더의 source·frame number·captured-at 확인
+- API 최종 전송 실패 Event 0건
+
+Live Frame 확인 JPEG는 640x480, 43,504 bytes였고 헤더 frame number는 142였다.
+영상 처리가 끝나 stale 시간이 지난 뒤에는 계약대로 `204`를 반환했다. 짧은 단일
+파일의 MPS FPS는 채택 성능 수치로 사용하지 않는다. 이 검증은 Vision AI, API,
+SQLite, Live Frame endpoint까지의 경로이며 React 화면 표시 최종 확인은 별도
+통합 검증으로 남긴다.
+
+### 14.15 FPS 회귀 확인
+
+동일 환경(MPS, A03 `fall_backward_01` 영상)에서 E0·E1 각 3회 측정한
+`steady_state.avg_fps` 중앙값 기준 하락률은 -0.5%(E1이 근소하게 더 빠름)로,
+E1 채택 조건의 FPS 하락률 20% 이내를 충족한다.

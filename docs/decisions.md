@@ -863,3 +863,45 @@ Phase 4에서는 A의 낙상 평가, B의 Event·Zone API, C의 Report·Zone UI�
 - calibration·floor-zone 편집 UI와 cross-camera 좌표 통합은 범위에서 제외한다.
 - 카메라 ID·해상도 불일치는 fail-fast하며 기존 경로로 조용히 fallback하지
   않는다.
+
+---
+
+## ADR-024: 목표 카메라 E1 낙상 모델 채택과 기본 활성화
+
+**Date**: 2026-08-11
+**Status**: Accepted
+
+### Context
+
+Phase 3 낙상 모델은 8월 7일 실제 키즈카페 목표 IP 카메라 구도에서 촬영한
+E0의 Recall이 6.25%였다. 주요 원인은 후보 진입이 아니라 카메라 구도 차이로
+인한 보조 detector 확정 실패였다.
+
+### Decision
+
+- 실제 키즈카페에서 성인이 통제 재연한 A01 frame으로 fine-tuning한 E1을
+  목표 카메라의 낙상 모델로 채택한다.
+- 학습에 사용하지 않은 A02 diagnostic과 actor-disjoint A03 test로 목표 환경
+  성능을 검증한다.
+- 동일 A01·A02 diagnostic에서 Recall이 E0 6.25%에서 E1 93.75%로 개선됐다.
+- A03에서 Recall 93.3%, timely Recall 93.3%, FAR 0.0/min, 중복 Event 0건을
+  확인한 E1 프로파일을 CLI 기본값으로 활성화한다.
+- 기본 프로파일은 PoseTracker, 보조 모델 interval `3`, Pose NORMAL gate를
+  사용한다. 필요하면 `--fall-detection-disabled`로 명시적으로 끌 수 있다.
+- 목표 환경 모델의 채택 판단은 실제 키즈카페 카메라의 actor-disjoint 평가를
+  따른다.
+- 모델 파일은 Git에 포함하지 않고 SHA-256과 동결 manifest로 동일성을 확인한다.
+- CLI는 입력 소스를 열기 전에 동결 manifest의 모델 SHA-256을 검증하고,
+  불일치하면 실행을 중단한다. 커스텀 모델은 경로와 SHA-256을 함께 지정한다.
+
+### Consequences
+
+- 기본 실행은 E1 모델 파일을 필요로 하며, CLI가 입력 소스를 열기 전에 동결
+  SHA-256을 검증한다. 파일 누락·manifest 오류·hash 불일치는 fail-closed로
+  실행을 중단한다.
+- A03 no_fall은 주요 오탐 행동인 줍기 3편, 27.2초이며 false Event는 0건이다.
+  앉기는 A01·A02 diagnostic 6편에서 false Event 0건을 확인했지만,
+  actor-disjoint 앉기와 장시간 정상 행동 검증은 계속한다.
+- 외부 구도 확장, 장시간 RTSP, Cause·ID switch 성능은 후속 검증 대상으로 남긴다.
+- 동일 환경 E0·E1 각 3회 측정 FPS 중앙값 비교로 하락률 -0.5%(개선)를 확인해
+  FPS 채택 기준을 충족했다(`docs/fall_evaluation.md` §14.15).
