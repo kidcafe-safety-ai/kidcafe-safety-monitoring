@@ -4,6 +4,10 @@
 |---|---|
 | `configs/camera_calibration/cam01_clip00_orig.json` | `ee12455c0077b6690b60b39e1d9df584c8f5d8ecf2414ff23569174a8129f492` |
 | `configs/camera_calibration/cam01_clip01.json` | `6098cde7e8e1a1cb4e3ec781c4c28ae026cd483de43bfe1b2441c2f90965295d` |
+| `data/zones/floor_cam01.json` | `c4ad1f0bd48d6e30503e88d50353f8d91bc1bc4aaae160644be71a8bc5e7d767` |
+| `data/zones/image_cam01.json` | `acb968dbfc0833ba055402746ea956ebe76bde3035b398fd89533a236ee2b327` |
+| `data/zones/floor_cam01_clip01.json` | `016741bfc25cd0a08c8d60cbdd6459aa96b36126e438a47846e711790897c538` |
+| `data/zones/image_cam01_clip01.json` | `57e071d0f301483d035a5c54bfd8b3911e36d541c4d44f3a3e137d2599d59a09` |
 | `cam01_clip00_orig_holdout.csv` | `b329fb240c5d2e17ee3d0dc5f1808c617718bc758d5ff39485832f22a46739bb` |
 | `cam01_clip00_orig_picked.csv` | `663f00de2512405126ca1e21a077370ca1776a083863bb5d273b81456ec866c2` |
 | `cam01_clip01_holdout.csv` | `593eeeb99b2a7fce690366e791f1fd2f6d2d38278b92e26c811d48be5f6840de` |

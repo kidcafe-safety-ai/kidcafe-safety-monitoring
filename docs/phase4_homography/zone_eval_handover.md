@@ -22,24 +22,44 @@
 
 ## 현재 준비된 것
 
-| 클립 | `calibration_version` | calibration JSON | image Zone | floor Zone |
-|---|---|---|---|---|
-| clip00 (calibration 촬영) | `2026-08-07-clip00-orig` | `configs/camera_calibration/cam01_clip00_orig.json` | `data/zones/image_cam01.json` | `data/zones/floor_cam01.json` |
-| clip01 (시나리오) | `2026-08-07-clip01` | `configs/camera_calibration/cam01_clip01.json` | 없음 | 없음 |
+| 클립 | 원본 | `calibration_version` | calibration JSON | image Zone | floor Zone |
+|---|---|---|---|---|---|
+| clip00 (calibration 촬영) | `IMG_7325.MOV` | `2026-08-07-clip00-orig` | `configs/camera_calibration/cam01_clip00_orig.json` | `data/zones/image_cam01.json` | `data/zones/floor_cam01.json` |
+| clip01 (시나리오) | `IMG_7326.MOV` | `2026-08-07-clip01` | `configs/camera_calibration/cam01_clip01.json` | `data/zones/image_cam01_clip01.json` | `data/zones/floor_cam01_clip01.json` |
 
-`data/zones/*_cam01.json` 두 파일은 **clip00 프레임에서 찍은 것**이다
-(`pick_zone_polygon.py`가 한 번의 클릭에서 두 형식을 함께 생성). clip01에
-그대로 쓰면 카메라 이동만큼 Zone이 어긋난다.
+원본 대응은 `scripts/verify_clip_match.py`로 확인했다. 기록된 기준점 픽셀을
+프레임에 겹쳐 그려 테이프 위에 얹히는지 눈으로 대조하는 방식이다. 클립을 더
+추가할 때도 같은 방법으로 확인한다.
+
+`data/zones/*_cam01.json`(접미사 없는 것)은 **clip00 프레임에서 찍은 것**이고,
+`*_cam01_clip01.json`은 clip01에서 다시 찍은 것이다. 클립을 섞어 쓰면 카메라
+이동만큼 Zone이 어긋난다.
 
 `camera_id`는 전 클립 `cam01`이다. 카메라는 1대였고 위치만 흔들렸다.
 
+### 클립별 재클릭이 실제로 카메라 이동을 상쇄했다
+
+같은 회색 테이프를 두 클립에서 각각 찍어 비교했다.
+
+| 좌표계 | 두 클립 Zone 차이 |
+|---|---|
+| image (픽셀) | 평균 13.6px · 최대 22.1px |
+| floor (원단위) | 평균 0.20 · 최대 0.43 |
+
+픽셀에서는 카메라가 움직인 만큼 어긋나 있는데 floor 좌표로 옮기면 일치한다.
+클립마다 calibration을 다시 만들면 고정되지 않은 카메라로도 같은 물리적 Zone을
+가리킬 수 있다는 뜻이다. 7.3절의 오차 수치와 별개로 얻은 독립적인 근거다.
+
+이 값 자체는 채택 기준 2~5번이 아니다. 두 좌표 경로가 같은 Zone을 얼마나 같게
+표현하는지를 볼 뿐이고, 판정 정확도는 A의 ground truth가 있어야 나온다.
+
 ## 비어 있는 것
 
-측정 대상이 될 시나리오 영상마다 아래가 필요하다. clip00·clip01 외 클립은
-전부 미착수다.
+clip01은 라벨링에 필요한 자료가 모두 준비됐다. 다른 클립을 추가한다면 아래가
+클립마다 필요하다.
 
 - [ ] 원본 파일명 ↔ `video_id` 대응 확정
-- [ ] 기준점 픽셀 재클릭 → `<video_id>_picked.csv`
+- [ ] 기준점 픽셀 재클릭 → `<clip>_picked.csv`
 - [ ] calibration JSON (`configs/camera_calibration/<camera>_<clip>.json`)
 - [ ] Zone 꼭짓점 재클릭 → image Zone JSON
 - [ ] Zone 진입·이탈 interval 검수 (A 역할)
@@ -54,14 +74,20 @@ P4_S<2자리>_A<2자리>_<소문자 scenario>_<2자리 take>_cam<2자리>
 
 | 원본 파일명 | `video_id` | `calibration_version` | 용도 |
 |---|---|---|---|
-| (clip00 원본) | — | `2026-08-07-clip00-orig` | calibration 전용, 시나리오 아님 |
-| (clip01 원본) | 미정 | `2026-08-07-clip01` | Zone 시나리오 후보 |
-| … | 미정 | 미생성 | |
+| `IMG_7325.MOV` | — | `2026-08-07-clip00-orig` | calibration 전용, 시나리오 아님 |
+| `IMG_7326.MOV` | **미정** | `2026-08-07-clip01` | Zone 라벨링 대상 |
 
-**원본 파일명 칸은 B가 채운다.** 원본은 개인정보가 있어 Git에 넣지 않으므로
-(`.gitignore`의 `data/videos/*`) 파일명만 여기 기록하고 실물은 별도 저장소에
-둔다. 대응표가 없으면 `recordings_manifest.csv`의 `video_id`와 실제 촬영분을
-연결할 수 없다.
+원본은 개인정보가 있어 Git에 넣지 않으므로(`.gitignore`의 `data/videos/*`)
+파일명만 여기 기록하고 실물은 별도 저장소에 둔다.
+
+**`video_id`는 아직 정하지 못했다.** 명명 규칙이 session·actor·scenario를
+요구하는데 그 값이 확정되지 않았고, 실제 `recordings_manifest.csv`도 아직
+없다(`tests/fixtures/phase4_contract/`의 것은 계약 테스트용 예시다). manifest가
+만들어지는 시점에 그 값을 그대로 받아 이 표를 채운다. 그 전까지 `zone_intervals`
+초안의 `video_id`도 비워 둔다.
+
+clip00은 기준점만 촬영한 clip이라 시나리오가 없다. `video_id`를 부여하지 않고
+calibration 출처로만 기록한다.
 
 ## `zone_intervals.csv` 초안
 
