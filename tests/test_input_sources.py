@@ -387,6 +387,39 @@ class TestRTSPSource:
         finally:
             src.release()
 
+    def test_delivered_frame_metadata_preserves_capture_sequence_after_drops(
+        self,
+        monkeypatch,
+    ):
+        fake_capture = FakeRTSPCapture([_frame(i) for i in range(1, 6)])
+        monkeypatch.setattr(
+            "src.input.rtsp_source.cv2.VideoCapture",
+            lambda *_args, **_kwargs: fake_capture,
+        )
+        src = RTSPSource(
+            _rtsp_test_url(),
+            read_wait_sec=0.005,
+            stale_timeout_sec=0.2,
+        )
+
+        try:
+            src.open()
+            assert _wait_until(lambda: src.get_stats().captured_frames >= 5)
+
+            ret, frame = src.read()
+            metadata = src.get_last_frame_metadata()
+            stats = src.get_stats()
+
+            assert ret is True
+            assert frame is not None
+            assert metadata is not None
+            assert int(frame[0, 0, 0]) == 5
+            assert metadata.capture_sequence == stats.captured_frames
+            assert metadata.capture_sequence > stats.delivered_frames
+            assert stats.dropped_frames >= 4
+        finally:
+            src.release()
+
     def test_dropped_frames_increase_when_latest_frame_is_overwritten(self, monkeypatch):
         fake_capture = FakeRTSPCapture([_frame(1), _frame(2), _frame(3)])
         monkeypatch.setattr(

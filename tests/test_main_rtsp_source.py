@@ -7,8 +7,15 @@ from argparse import Namespace
 
 import pytest
 
-from src.input.rtsp_source import RTSPCredentialError, RTSPSource, build_rtsp_url
-from src.main import _build_source
+from src.common.types import Track, Zone, ZoneRules
+from src.events.event_manager import EventManager
+from src.input.rtsp_source import (
+    RTSPCredentialError,
+    RTSPFrameMetadata,
+    RTSPSource,
+    build_rtsp_url,
+)
+from src.main import _build_source, _resolve_source_frame_number
 
 TEST_RTSP_HOST = "192.0.2.20"
 TEST_RTSP_USERNAME = "rtsp-user"
@@ -121,3 +128,81 @@ def test_build_source_rtsp_legacy_url_keeps_sanitized_source_id(
     assert "path=/media/video1" in caplog.text
     assert "username_set=True" in caplog.text
     assert "password_set=True" in caplog.text
+
+
+def test_rtsp_time_axis_uses_capture_sequence_after_frame_drops() -> None:
+    class SourceWithRTSPMetadata:
+        def get_last_frame_metadata(self) -> RTSPFrameMetadata:
+            return RTSPFrameMetadata(
+                capture_sequence=46,
+                captured_monotonic=100.0,
+                source_elapsed_seconds=3.0,
+            )
+
+    fps = 15.0
+    processed_frame_number = 15
+
+    source_frame_number = _resolve_source_frame_number(
+        SourceWithRTSPMetadata(),
+        processed_frame_number=processed_frame_number,
+    )
+
+    assert processed_frame_number / fps == pytest.approx(1.0)
+    assert source_frame_number == 45
+    assert source_frame_number / fps == pytest.approx(3.0)
+
+
+def test_time_based_zone_rules_use_source_time_after_rtsp_frame_drops() -> None:
+    class SourceWithRTSPMetadata:
+        def get_last_frame_metadata(self) -> RTSPFrameMetadata:
+            return RTSPFrameMetadata(
+                capture_sequence=46,
+                captured_monotonic=100.0,
+                source_elapsed_seconds=3.0,
+            )
+
+    fps = 15.0
+    zone = Zone(
+        zone_id="playground",
+        name="Playground",
+        type="polygon",
+        zone_type="play",
+        points=[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+        rules=ZoneRules(enter_alert=True, dwell_threshold_sec=2),
+    )
+    track = Track(
+        track_id=1,
+        bbox=[10.0, 10.0, 30.0, 60.0],
+        foot_point=[20.0, 60.0],
+        confidence=0.9,
+    )
+    manager = EventManager([zone], fps=fps, enter_confirm_sec=0.0)
+
+    manager.process(
+        track=track,
+        zones_in=[zone.zone_id],
+        frame_number=0,
+        video_source="rtsp-test",
+    )
+    source_frame_number = _resolve_source_frame_number(
+        SourceWithRTSPMetadata(),
+        processed_frame_number=15,
+    )
+
+    events = manager.process(
+        track=track,
+        zones_in=[zone.zone_id],
+        frame_number=source_frame_number,
+        video_source="rtsp-test",
+    )
+
+    assert 15 / fps == pytest.approx(1.0)
+    assert source_frame_number / fps == pytest.approx(3.0)
+    assert [event.event_type for event in events] == ["DWELL"]
+
+
+def test_source_frame_number_falls_back_for_sources_without_metadata() -> None:
+    class SourceWithoutRTSPMetadata:
+        pass
+
+    assert _resolve_source_frame_number(SourceWithoutRTSPMetadata(), 7) == 7

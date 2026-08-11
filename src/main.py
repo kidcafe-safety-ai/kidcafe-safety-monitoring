@@ -157,7 +157,7 @@ def run_pipeline_from_source(
     overlay_writer = None
     writer = None
     metrics = PipelineMetrics() if metrics_output_path is not None else None
-    frame_number = 0
+    processed_frame_number = 0
     total_events = 0
     fps = source.fps
     try:
@@ -289,7 +289,18 @@ def run_pipeline_from_source(
                 break
 
             # 1. Detection + Tracking
-            result = tracker.update(frame, frame_number, source.source_id)
+            #
+            # RTSPSource는 지연 누적을 막기 위해 오래된 frame을 drop하고 최신
+            # frame만 전달한다. 이때 처리 loop 횟수를 safety/event 시간축으로
+            # 사용하면 dwell/fall/cause 규칙 시간이 실제 카메라 시간보다 느려진다.
+            # 따라서 RTSP처럼 capture_sequence를 제공하는 source는 원본 캡처
+            # frame_number를 사용하고, file/webcam은 기존 처리 frame_number를
+            # 그대로 사용한다.
+            source_frame_number = _resolve_source_frame_number(
+                source,
+                processed_frame_number,
+            )
+            result = tracker.update(frame, source_frame_number, source.source_id)
 
             # 2. Geofencing + Events
             frame_events = []
@@ -298,7 +309,7 @@ def run_pipeline_from_source(
                 events = event_manager.process(
                     track=track,
                     zones_in=zones_in,
-                    frame_number=frame_number,
+                    frame_number=source_frame_number,
                     video_source=source.source_id,
                 )
                 frame_events.extend(events)
@@ -306,7 +317,7 @@ def run_pipeline_from_source(
             active_ids = {track.track_id for track in result.tracks}
             stale_events = event_manager.flush_stale_tracks(
                 active_track_ids=active_ids,
-                frame_number=frame_number,
+                frame_number=source_frame_number,
                 video_source=source.source_id,
             )
             frame_events.extend(stale_events)
@@ -322,7 +333,7 @@ def run_pipeline_from_source(
                 for event in frame_events:
                     LOGGER.info(
                         "[Frame %05d] %s | track_id=%s | zone=%s",
-                        frame_number,
+                        source_frame_number,
                         event.event_type,
                         event.track_id,
                         event.zone_id,
@@ -337,7 +348,7 @@ def run_pipeline_from_source(
                 if _now - _last_status_time >= _STATUS_UPDATE_INTERVAL_SEC:
                     status = _build_current_status(
                         source_id=source.source_id,
-                        frame_number=frame_number,
+                        frame_number=source_frame_number,
                         active_track_count=len(result.tracks),
                         zone_occupancy=event_manager.get_zone_occupancy(),
                         zones=zones,
@@ -354,7 +365,7 @@ def run_pipeline_from_source(
                     dispatcher.update_live_frame(
                         live_frame,
                         source=source.source_id,
-                        frame_number=frame_number,
+                        frame_number=source_frame_number,
                         captured_at=_utc_now_iso_z(),
                     )
 
@@ -379,9 +390,9 @@ def run_pipeline_from_source(
                 metrics.record(processing_time)
             processing_fps = 1.0 / processing_time if processing_time > 0 else 0.0
 
-            if frame_number % 30 == 0:
+            if processed_frame_number % 30 == 0:
                 elapsed = time.perf_counter() - pipeline_start
-                processed = frame_number + 1
+                processed = processed_frame_number + 1
                 if processed > 0 and target_frames:
                     avg_time = elapsed / processed
                     eta_seconds = max(target_frames - processed, 0) * avg_time
@@ -399,8 +410,8 @@ def run_pipeline_from_source(
                     format_eta(eta_seconds) if target_frames else "-",
                 )
 
-            frame_number += 1
-            if frames_limit is not None and frame_number >= frames_limit:
+            processed_frame_number += 1
+            if frames_limit is not None and processed_frame_number >= frames_limit:
                 LOGGER.info("frames_limit=%s에 도달해 처리를 종료합니다.", frames_limit)
                 break
 
@@ -417,7 +428,37 @@ def run_pipeline_from_source(
         if metrics is not None and metrics_output_path is not None:
             metrics.write_json(metrics_output_path)
 
-    LOGGER.info("Processed %s frames, %s events", frame_number, total_events)
+    LOGGER.info("Processed %s frames, %s events", processed_frame_number, total_events)
+
+
+def _resolve_source_frame_number(
+    source: InputSource,
+    processed_frame_number: int,
+) -> int:
+    """안전 규칙에 사용할 입력 source 기준 frame_number를 반환한다.
+
+    FileVideoSource/WebcamSource는 read()마다 순차 처리되므로 처리 loop 번호가
+    source frame_number와 같다. RTSPSource는 최신 프레임 유지를 위해 처리되지
+    않은 오래된 프레임을 버릴 수 있으므로, read()로 전달된 frame의 원본 캡처
+    sequence를 우선 사용한다.
+    """
+
+    metadata_getter = getattr(source, "get_last_frame_metadata", None)
+    if not callable(metadata_getter):
+        return processed_frame_number
+
+    metadata = metadata_getter()
+    capture_sequence = getattr(metadata, "capture_sequence", None)
+    if (
+        isinstance(capture_sequence, int)
+        and not isinstance(capture_sequence, bool)
+        and capture_sequence > 0
+    ):
+        # RTSP capture_sequence는 1부터 증가한다. 기존 Event frame_number 계약은
+        # 0-based이므로 첫 번째 캡처 프레임은 frame_number=0으로 변환한다.
+        return capture_sequence - 1
+
+    return processed_frame_number
 
 
 def _utc_now_iso_z() -> str:

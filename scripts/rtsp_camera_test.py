@@ -207,7 +207,10 @@ def print_connection_summary(
     print("[INFO] Transport: RTSP over TCP")
     print(f"[INFO] RTSP 연결 소요 시간: {connection_seconds:.3f}초")
     print(f"[INFO] 영상 해상도: {width}x{height}" if width and height else "[INFO] 영상 해상도: 확인 전")
-    print(f"[INFO] 카메라 FPS 정보: {camera_fps:.2f}" if camera_fps else "[INFO] 카메라 FPS 정보: 확인 불가")
+    if camera_fps:
+        print(f"[INFO] 카메라 FPS 정보: {camera_fps:.2f}")
+    else:
+        print("[INFO] 카메라 FPS 정보: 확인 불가")
     print("[INFO] q 키 또는 Ctrl+C로 종료할 수 있습니다.\n")
 
 
@@ -224,8 +227,15 @@ def print_final_summary(
 
     print("\n[RESULT] RTSP 수신 테스트 종료")
     print(f"[RESULT] RTSP 연결 소요 시간: {connection_seconds:.3f}초")
-    print(f"[RESULT] 영상 해상도: {width}x{height}" if width and height else "[RESULT] 영상 해상도: 확인 불가")
-    print(f"[RESULT] 카메라가 전달하는 FPS 정보: {camera_fps:.2f}" if camera_fps else "[RESULT] 카메라가 전달하는 FPS 정보: 확인 불가")
+    if width and height:
+        print(f"[RESULT] 영상 해상도: {width}x{height}")
+    else:
+        print("[RESULT] 영상 해상도: 확인 불가")
+
+    if camera_fps:
+        print(f"[RESULT] 카메라가 전달하는 FPS 정보: {camera_fps:.2f}")
+    else:
+        print("[RESULT] 카메라가 전달하는 FPS 정보: 확인 불가")
     print(f"[RESULT] 실제 측정 평균 FPS: {stats.average_fps():.2f}")
     print(f"[RESULT] 수신한 전체 프레임 수: {stats.total_frames}")
     print(f"[RESULT] 프레임 읽기 실패 횟수: {stats.read_failures}")

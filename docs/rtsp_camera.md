@@ -48,6 +48,31 @@ try {
 
 Do not create or commit a real `.env` file containing camera credentials.
 
+## Zone runtime file
+
+`data/zones/sample.json` is a read-only seed file. Zone Settings saves editable
+runtime data to `outputs/zones_runtime.json` by default, so run the initializer
+once before starting the Vision AI pipeline.
+
+```powershell
+.\venv\Scripts\python.exe scripts\init_zone_runtime.py
+```
+
+The initializer does not accept a `--zones` option. If the runtime file already
+exists, it leaves the current file unchanged.
+
+To use a different runtime path, set `KIDCAFE_ZONES_PATH` before running the
+initializer and pass the same path to `src.main --zones`.
+
+```powershell
+$env:KIDCAFE_ZONES_PATH = "outputs/zones_runtime.json"
+.\venv\Scripts\python.exe scripts\init_zone_runtime.py
+```
+
+The Zone Settings API intentionally does not auto-create the runtime file. A
+missing runtime file should fail loudly instead of silently falling back to the
+seed and ignoring saved dashboard settings.
+
 ## Run the Vision AI pipeline with the sub stream
 
 Replace `<CAMERA_IP>` and `<RTSP_PORT>` with the local camera values shared
@@ -60,7 +85,7 @@ through the team’s secure channel.
   --rtsp-port <RTSP_PORT> `
   --rtsp-stream sub `
   --rtsp-alias ipcam_sub `
-  --zones "data/zones/sample.json" `
+  --zones "outputs/zones_runtime.json" `
   --model yolo26n.pt `
   --infer-device cpu `
   --show
@@ -76,7 +101,7 @@ and enable live frame upload:
   --rtsp-port <RTSP_PORT> `
   --rtsp-stream sub `
   --rtsp-alias ipcam_sub `
-  --zones "data/zones/sample.json" `
+  --zones "outputs/zones_runtime.json" `
   --model yolo26n.pt `
   --infer-device cpu `
   --api-url http://localhost:8000 `

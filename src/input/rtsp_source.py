@@ -67,6 +67,15 @@ class RTSPSourceStats:
     delivered_fps: float
 
 
+@dataclass(frozen=True)
+class RTSPFrameMetadata:
+    """파이프라인에 전달된 RTSP 프레임의 원본 시간축 메타데이터."""
+
+    capture_sequence: int
+    captured_monotonic: float
+    source_elapsed_seconds: float
+
+
 def normalize_rtsp_path(path: str) -> str:
     """RTSP path가 항상 '/'로 시작하도록 정규화한다."""
 
@@ -265,6 +274,8 @@ class RTSPSource(InputSource):
         self._stop_event = threading.Event()
         self._reader_thread: Optional[threading.Thread] = None
         self._latest_frame: Optional[np.ndarray] = None
+        self._latest_frame_metadata: Optional[RTSPFrameMetadata] = None
+        self._last_delivered_metadata: Optional[RTSPFrameMetadata] = None
         self._latest_frame_seq: int = 0
         self._delivered_frame_seq: int = 0
         self._terminal: bool = False
@@ -368,7 +379,9 @@ class RTSPSource(InputSource):
                     and self._latest_frame_seq > self._delivered_frame_seq
                 ):
                     frame = self._latest_frame
+                    metadata = self._latest_frame_metadata
                     self._delivered_frame_seq = self._latest_frame_seq
+                    self._last_delivered_metadata = metadata
                     self._delivered_frames += 1
                     return True, frame
 
@@ -423,10 +436,18 @@ class RTSPSource(InputSource):
         with self._condition:
             return self._build_stats_locked(time.perf_counter())
 
+    def get_last_frame_metadata(self) -> Optional[RTSPFrameMetadata]:
+        """가장 최근 read()로 파이프라인에 전달한 프레임의 원본 메타데이터."""
+
+        with self._condition:
+            return self._last_delivered_metadata
+
     def _reset_runtime_state(self) -> None:
         with self._condition:
             self._stop_event.clear()
             self._latest_frame = None
+            self._latest_frame_metadata = None
+            self._last_delivered_metadata = None
             self._latest_frame_seq = 0
             self._delivered_frame_seq = 0
             self._terminal = False
@@ -493,6 +514,16 @@ class RTSPSource(InputSource):
 
             self._latest_frame = frame
             self._latest_frame_seq += 1
+            source_elapsed_seconds = (
+                captured_monotonic - self._started_monotonic
+                if self._started_monotonic is not None
+                else 0.0
+            )
+            self._latest_frame_metadata = RTSPFrameMetadata(
+                capture_sequence=self._latest_frame_seq,
+                captured_monotonic=captured_monotonic,
+                source_elapsed_seconds=max(source_elapsed_seconds, 0.0),
+            )
             self._captured_frames += 1
             self._consecutive_read_failures = 0
             self._last_frame_monotonic = captured_monotonic
