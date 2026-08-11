@@ -6,6 +6,7 @@ torchaudio==2.5.1
 # Detection / Tracking
 ultralytics==8.4.56
 opencv-python==4.8.1.78
+lapx==0.9.4
 
 # Spatial computation
 shapely==2.0.1
