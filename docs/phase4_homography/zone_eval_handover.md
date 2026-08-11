@@ -117,7 +117,18 @@ calibration 출처로만 기록한다.
 - 가림 등으로 경계 frame이 불명확하면 `review_status`를 `needs_review`로 둔다.
 - frame 번호는 0부터 시작한다.
 
-`zone_id`는 현재 `play_floor` 하나다(`data/zones/image_cam01.json`).
+`zone_id`는 현재 `play_floor` 하나다.
+
+초안에는 **라벨링 대상 클립 4개의 뼈대 행**을 넣어뒀다. `zone_id`는 채웠고,
+`notes`에 원본 파일명·`calibration_version`·해당 클립의 image Zone 경로를 적어
+어느 영상을 보고 채우는 행인지 바로 알 수 있게 했다.
+
+`video_id` 칸은 비어 있다. 계약이 `recordings_manifest.csv`와 정확히 같을 것을
+요구하는데 그 manifest가 아직 없어서, 임의로 값을 넣으면 나중에 어긋난다.
+manifest가 만들어지면 `notes`의 파일명으로 대응시켜 채우면 된다.
+
+한 영상에서 진입·이탈이 여러 번이면 행을 복제하고 `interval_index`를 1부터
+매긴다.
 
 ## 측정 실행 조건
 

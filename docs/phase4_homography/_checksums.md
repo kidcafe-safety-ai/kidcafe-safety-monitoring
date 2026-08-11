@@ -31,4 +31,4 @@
 | `holdout_designated.json` | `bed3432199db4c2bcb0581496ed650e02771609cb6e03f52d94e3131b5a3a968` |
 | `holdout_loo-all.json` | `7fd8f16b8cf914987d083f7fd35cd4706ce9bab36f3f453f1fdf43696773c34f` |
 | `holdout_loo-quad.json` | `df1e2b8030c23b35b380cf91e9bde2191ddd14f6162c286b4b1b621e0e33f25b` |
-| `zone_intervals_draft.csv` | `2ddaecfa379c4c9ec491d0d07c5b0b999406a399ac9d30348d0d637ad5ae18a1` |
+| `zone_intervals_draft.csv` | `ca1d17f9c1280662f2e4ab60e142c408a8fc9e0c0bb1579993294e1dfb343552` |

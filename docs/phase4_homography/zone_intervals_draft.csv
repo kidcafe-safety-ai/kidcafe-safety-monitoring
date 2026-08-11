@@ -1,1 +1,5 @@
 video_id,zone_id,interval_index,enter_frame,exit_frame,dwell_start_frame,review_status,notes
+,play_floor,,,,,needs_review,IMG_7326.MOV / calibration_version=2026-08-07-clip01 / image Zone=data/zones/image_cam01_clip01.json
+,play_floor,,,,,needs_review,IMG_7327.MOV / calibration_version=2026-08-07-img7327 / image Zone=data/zones/image_cam01_img7327.json
+,play_floor,,,,,needs_review,IMG_7328.MOV / calibration_version=2026-08-07-img7328 / image Zone=data/zones/image_cam01_img7328.json
+,play_floor,,,,,needs_review,IMG_7329.MOV / calibration_version=2026-08-07-img7329 / image Zone=data/zones/image_cam01_img7329.json
