@@ -1,18 +1,23 @@
 """클립별 calibration의 holdout 위치 오차를 교차검증으로 측정한다.
 
 8월 7일 촬영에서 확보한 기준점은 10개다. `homography_acceptance_v1`은 holdout
-10위치·20관측을 요구하는데, fit 4점을 고정하면 holdout이 6위치뿐이라 요구를
-만족할 수 없다. 그래서 fit 4점 조합을 점마다 바꿔 모든 점이 한 번씩 holdout이
-되게 한다. fit 조합은 "대상 점을 제외한 조합 중 사각형 면적이 최대인 것"으로
-결정하며, 이 규칙은 오차를 보기 전에 정한 것이라 결과에 맞춰 고를 여지가 없다.
+10위치·20관측을 요구하는데, fit 점을 고정하면 남은 점만 holdout이 되어 요구를
+만족할 수 없다. 그래서 점마다 하나씩 빼고 나머지로 fit해 모든 점이 한 번씩
+holdout이 되게 한다.
 
-기준점 10개 중 6개는 전체 배치의 볼록껍질 위에 있다. 그런 점을 holdout으로
-빼면 남은 4점이 그 위치를 감싸지 못해 외삽이 된다. 외삽 오차는 변환의 정확도가
-아니라 기준점 배치의 한계를 재는 값이므로 내삽과 분리해 보고한다.
+fit 점 수는 `--fit-mode`로 고른다. 계약이 fit 기준점을 "최소 4개"로만 정하고
+상한을 두지 않으므로 남은 점을 모두 쓰는 최소자승(`all`, 기본값)이 계약 안에
+있다. 4점만 쓰면(`quad`) fit 사각형 밖이 전부 외삽이 되어, 측정값이 변환 성능이
+아니라 어떤 4점을 골랐는지를 반영하게 된다. 같은 입력에서 p95가 2.89와 8.56으로
+갈릴 만큼 차이가 크므로 기본값을 `all`로 둔다.
+
+내삽·외삽은 그 fit 점들의 볼록껍질 안팎으로 나눠 따로 보고한다. 껍질 밖 오차는
+변환 정확도와 기준점 배치 한계가 섞인 값이라 합산 수치만으로는 원인을 가릴 수
+없다.
 
 촬영 중 카메라가 고정되지 않아 단일 calibration을 전 클립에 쓸 수 없다. 클립마다
-`pick_calibration_points.py`로 만든 calibration을 넣으면 클립별 결과와 합산
-결과를 함께 낸다.
+`pick_calibration_points.py`로 만든 클릭 결과를 넣으면 클립별 결과와 합산 결과를
+함께 낸다.
 
 사용 예:
 
@@ -64,6 +69,12 @@ def parse_args() -> argparse.Namespace:
         help="클립별 클릭 결과 CSV. 여러 번 지정한다.",
     )
     parser.add_argument("--unit-cm", type=float, required=True)
+    parser.add_argument(
+        "--fit-mode",
+        choices=("all", "quad"),
+        default="all",
+        help="all=대상 점을 뺀 전부로 최소자승, quad=최대 면적 4점만.",
+    )
     parser.add_argument("--output", required=True)
     return parser.parse_args()
 
@@ -132,15 +143,28 @@ def _quad_area(points: Sequence[Tuple[float, float]]) -> float:
     return abs(total) / 2.0
 
 
-def choose_fit_sets(floor: Dict[str, Tuple[float, float]]) -> Dict[str, Tuple[str, ...]]:
-    """점마다 그 점을 제외한 최대 면적 fit 조합을 고른다.
+def choose_fit_sets(
+    floor: Dict[str, Tuple[float, float]], mode: str
+) -> Dict[str, Tuple[str, ...]]:
+    """점마다 holdout으로 뺄 대상을 정하고 나머지를 fit으로 쓴다.
 
-    선택 규칙이 오차와 무관해야 사후 선택이 되지 않는다. 면적만 보고 정한다.
+    `homography_acceptance_v1`은 fit 기준점을 "최소 4개"로 정한다. 상한이 없으므로
+    남은 점을 모두 쓰는 최소자승 추정이 계약 안에 있다. 4점만 쓰면 fit 사각형
+    밖이 전부 외삽이 되어 오차가 변환 성능이 아니라 조합 선택의 결과가 된다.
+
+    - `all`: 대상 점을 제외한 전부를 fit으로 쓴다 (기본값).
+    - `quad`: 대상 점을 제외한 조합 중 사각형 면적이 최대인 4점만 쓴다. 기준점이
+      4개뿐인 촬영과 비교하기 위해 남겨둔 경로다.
+
+    두 규칙 모두 오차를 보기 전에 정해지므로 사후 선택 여지가 없다.
     """
     ids = sorted(floor)
     chosen: Dict[str, Tuple[str, ...]] = {}
     for target in ids:
-        others = [i for i in ids if i != target]
+        others = tuple(i for i in ids if i != target)
+        if mode == "all":
+            chosen[target] = others
+            continue
         best: Tuple[float, Tuple[str, ...]] | None = None
         for combo in itertools.combinations(others, FIT_POINT_COUNT):
             area = _quad_area([floor[i] for i in combo])
@@ -150,6 +174,21 @@ def choose_fit_sets(floor: Dict[str, Tuple[float, float]]) -> Dict[str, Tuple[st
             raise HoldoutEvalError(f"{target}을 뺀 유효한 fit 조합이 없습니다.")
         chosen[target] = best[1]
     return chosen
+
+
+def fit_homography(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
+    """fit 점이 4개면 정확해, 그보다 많으면 최소자승으로 homography를 구한다.
+
+    `findHomography(method=0)`은 RANSAC 없이 전체 대응을 최소자승으로 푼다.
+    기준점을 사람이 직접 확인해 찍었으므로 이상치 제거는 필요하지 않고, 오히려
+    RANSAC이 일부 점을 버리면 결과가 실행마다 달라진다.
+    """
+    if len(src) == FIT_POINT_COUNT:
+        return cv2.getPerspectiveTransform(src, dst)
+    matrix, _ = cv2.findHomography(src, dst, 0)
+    if matrix is None:
+        raise HoldoutEvalError("homography를 추정하지 못했습니다.")
+    return matrix
 
 
 def _inside(polygon: np.ndarray, point: Tuple[float, float]) -> bool:
@@ -170,7 +209,7 @@ def evaluate(
             fit = fit_sets[target]
             src = np.float32([picked[i] for i in fit])
             dst = np.float32([floor[i] for i in fit])
-            matrix = cv2.getPerspectiveTransform(src, dst)
+            matrix = fit_homography(src, dst)
             vector = matrix @ np.array([*picked[target], 1.0])
             if not math.isfinite(vector[2]) or abs(vector[2]) < 1e-12:
                 raise HoldoutEvalError(f"{clip_name}/{target} 투영이 발산했습니다.")
@@ -229,7 +268,7 @@ def main() -> None:
         clips = {
             Path(p).stem: load_picked(Path(p), list(floor)) for p in args.picked
         }
-        fit_sets = choose_fit_sets(floor)
+        fit_sets = choose_fit_sets(floor, args.fit_mode)
         observations = evaluate(floor, clips, fit_sets)
     except HoldoutEvalError as exc:
         raise SystemExit(str(exc)) from exc
@@ -238,7 +277,12 @@ def main() -> None:
         "unit_cm": args.unit_cm,
         "clip_count": len(clips),
         "clips": sorted(clips),
-        "fit_selection_rule": "target 점을 제외한 조합 중 사각형 면적 최대",
+        "fit_mode": args.fit_mode,
+        "fit_selection_rule": (
+            "target 점을 제외한 전부로 최소자승"
+            if args.fit_mode == "all"
+            else "target 점을 제외한 조합 중 사각형 면적 최대인 4점"
+        ),
         "overall": summarize(observations),
         "interpolation": summarize(observations, "interpolation"),
         "extrapolation": summarize(observations, "extrapolation"),
