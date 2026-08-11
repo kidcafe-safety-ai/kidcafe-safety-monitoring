@@ -23,8 +23,8 @@
 조작:
     좌클릭      현재 기준점 위치 지정
     마우스 휠   확대·축소
-    u           직전 입력 취소
-    s           저장 후 종료
+    u, BS       직전 입력 취소
+    s, Enter    저장 후 종료
     q / ESC     저장하지 않고 종료
 """
 
@@ -57,6 +57,10 @@ ZOOM_MIN = 1.0
 ZOOM_MAX = 12.0
 CSV_FIELDS = ("point_id", "role", "y", "x")
 ROLES = ("fit", "holdout")
+# 한글 입력 상태·Caps Lock에서도 조작되도록 대소문자와 대체 키를 함께 받는다.
+SAVE_KEYS = {ord("s"), ord("S"), 13, 10, 32}
+UNDO_KEYS = {ord("u"), ord("U"), 8}
+QUIT_KEYS = {ord("q"), ord("Q"), 27}
 
 
 class PickerError(ValueError):
@@ -241,7 +245,7 @@ class Picker:
                 f"({nxt.role})  floor=({nxt.floor_x:.3f}, {nxt.floor_y:.3f}) m"
             )
         else:
-            banner = "모든 점 입력 완료 — s 저장 / u 취소"
+            banner = "모든 점 입력 완료 — s 또는 Enter 저장 / u 취소"
         cv2.rectangle(view, (0, 0), (vw, 34), (0, 0, 0), -1)
         cv2.putText(
             view, banner, (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2
@@ -278,11 +282,15 @@ class Picker:
             while True:
                 cv2.imshow(WINDOW, self.render())
                 key = cv2.waitKey(20) & 0xFF
-                if key in (ord("q"), 27):
+                if key == 255:
+                    continue
+                # 한글 입력 상태나 Caps Lock에서도 동작해야 한다. 대소문자와
+                # Enter·Space를 모두 저장 키로 받는다.
+                if key in QUIT_KEYS:
                     return False
-                if key == ord("u") and self.picked:
+                if key in UNDO_KEYS and self.picked:
                     self.picked.pop()
-                if key == ord("s"):
+                if key in SAVE_KEYS:
                     if len(self.picked) != len(self.points):
                         print(
                             f"아직 {len(self.points) - len(self.picked)}개 남았습니다.",
