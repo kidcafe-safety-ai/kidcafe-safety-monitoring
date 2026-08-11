@@ -10,6 +10,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import sys
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -18,6 +21,24 @@ import pytest
 import src.main as main_module
 from src.common.types import Event
 from src.main import run_pipeline_from_source
+
+
+def _write_selected_fall_profile(tmp_path, model_path, sha256=None):
+    profile_path = tmp_path / "fall_e1_selected.json"
+    digest = sha256 or hashlib.sha256(model_path.read_bytes()).hexdigest()
+    profile_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "phase4_fall_e1_freeze_v1",
+                "status": "selected_for_phase4_target_domain",
+                "default_enabled": True,
+                "integrity_policy": "sha256_fail_closed_before_input_open",
+                "model": {"path": str(model_path), "sha256": digest},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return profile_path
 
 
 def _make_mock_source(frame_count: int = 1):
@@ -74,7 +95,7 @@ def _make_fall_event() -> Event:
     )
 
 
-class TestFallDetectionDisabledByDefault:
+class TestFallDetectionDisabledProgrammaticDefault:
     def test_fall_pipeline_not_constructed_when_disabled(self):
         patcher, _, _ = _patch_pipeline_internals()
 
@@ -305,3 +326,144 @@ class TestFallDetectionEnabled:
         (written_events,), _ = mock_writer.write_batch.call_args
         assert zone_event in written_events
         assert fall_event in written_events
+
+
+class TestFallCliDefaults:
+    def test_cli_uses_selected_phase4_fall_profile_by_default(
+        self, monkeypatch, tmp_path
+    ):
+        source = MagicMock()
+        model_path = tmp_path / "selected.pt"
+        model_path.write_bytes(b"selected-model")
+        profile_path = _write_selected_fall_profile(tmp_path, model_path)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "src.main",
+                "--fall-profile",
+                str(profile_path),
+                "--frames-limit",
+                "1",
+            ],
+        )
+
+        with patch.object(
+            main_module, "_build_source", return_value=source
+        ), patch.object(main_module, "run_pipeline_from_source") as mock_run:
+            main_module.main()
+
+        _, kwargs = mock_run.call_args
+        assert kwargs["fall_detection_enabled"] is True
+        assert kwargs["fall_model_path"] == str(model_path)
+        assert kwargs["fall_model_interval_frames"] == 3
+        assert kwargs["fall_pose_normal_gate_enabled"] is True
+
+    def test_cli_can_disable_selected_phase4_fall_profile(self, monkeypatch):
+        source = MagicMock()
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["src.main", "--fall-detection-disabled", "--frames-limit", "1"],
+        )
+
+        with patch.object(main_module, "_build_source", return_value=source), patch.object(
+            main_module, "run_pipeline_from_source"
+        ) as mock_run:
+            main_module.main()
+
+        _, kwargs = mock_run.call_args
+        assert kwargs["fall_detection_enabled"] is False
+
+    def test_cli_rejects_missing_fall_model_before_opening_source(
+        self, monkeypatch, tmp_path
+    ):
+        selected_model = tmp_path / "selected.pt"
+        selected_model.write_bytes(b"selected-model")
+        profile_path = _write_selected_fall_profile(tmp_path, selected_model)
+        missing_model = tmp_path / "missing.pt"
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "src.main",
+                "--fall-profile",
+                str(profile_path),
+                "--fall-model-path",
+                str(missing_model),
+                "--fall-model-sha256",
+                "0" * 64,
+            ],
+        )
+
+        with patch.object(main_module, "_build_source") as mock_build_source, pytest.raises(
+            SystemExit
+        ):
+            main_module.main()
+
+        mock_build_source.assert_not_called()
+
+    def test_cli_rejects_selected_model_hash_mismatch_before_opening_source(
+        self, monkeypatch, tmp_path
+    ):
+        model_path = tmp_path / "selected.pt"
+        model_path.write_bytes(b"tampered-model")
+        profile_path = _write_selected_fall_profile(
+            tmp_path, model_path, sha256="0" * 64
+        )
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["src.main", "--fall-profile", str(profile_path)],
+        )
+
+        with patch.object(main_module, "_build_source") as mock_build_source, pytest.raises(
+            SystemExit
+        ):
+            main_module.main()
+
+        mock_build_source.assert_not_called()
+
+    def test_cli_rejects_missing_profile_before_opening_source(
+        self, monkeypatch, tmp_path
+    ):
+        missing_profile = tmp_path / "missing.json"
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["src.main", "--fall-profile", str(missing_profile)],
+        )
+
+        with patch.object(main_module, "_build_source") as mock_build_source, pytest.raises(
+            SystemExit
+        ):
+            main_module.main()
+
+        mock_build_source.assert_not_called()
+
+    def test_cli_rejects_custom_model_without_sha256(
+        self, monkeypatch, tmp_path
+    ):
+        selected_model = tmp_path / "selected.pt"
+        selected_model.write_bytes(b"selected-model")
+        profile_path = _write_selected_fall_profile(tmp_path, selected_model)
+        custom_model = tmp_path / "custom.pt"
+        custom_model.write_bytes(b"custom-model")
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "src.main",
+                "--fall-profile",
+                str(profile_path),
+                "--fall-model-path",
+                str(custom_model),
+            ],
+        )
+
+        with patch.object(main_module, "_build_source") as mock_build_source, pytest.raises(
+            SystemExit
+        ):
+            main_module.main()
+
+        mock_build_source.assert_not_called()
