@@ -863,3 +863,20 @@ Phase 4에서는 A의 낙상 평가, B의 Event·Zone API, C의 Report·Zone UI�
 - calibration·floor-zone 편집 UI와 cross-camera 좌표 통합은 범위에서 제외한다.
 - 카메라 ID·해상도 불일치는 fail-fast하며 기존 경로로 조용히 fallback하지
   않는다.
+
+### Outcome (2026-08-10)
+
+**미채택.** Zone 판정은 기존 image-normalized polygon 경로를 유지하며 production
+동작은 변경하지 않는다. `calibration.enabled`는 기본값 `false` 그대로다.
+
+변환 정확도 자체는 기준을 만족했다(기준점 영역 안 평균 1.14·p95 1.89 원단위).
+미채택 사유는 알고리즘이 아니라 8월 7일 촬영 조건이다. 기준점이 촬영 구역
+일부에만 배치돼 사람 위치의 61%가 fit 사각형 밖이었고 그 구간 오차가 5배 이상
+컸다. 카메라도 고정되지 않아(클립 간 최대 8.5도 회전) 단일 config calibration을
+전 클립에 적용할 수 없었다. 절대 오차 허용값은 holdout 확인 전 동결 절차를
+수행하지 못해 동결하지 않았다.
+
+측정 수치·판정 근거·다음 촬영 보완 사항은
+[docs/homography_calibration.md](homography_calibration.md) 7절에 있다. PoC 코드
+(`src/geofencing/floor_plane.py`, `homography_evaluation.py`, floor-zone 로더)는
+비활성 상태로 유지해 재촬영 후 재검증에 그대로 사용한다.
