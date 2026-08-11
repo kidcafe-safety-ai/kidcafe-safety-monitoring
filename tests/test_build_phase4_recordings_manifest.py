@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import shutil
 import sys
 from pathlib import Path
 
@@ -45,6 +46,17 @@ def _review_row(filename: str, *, actors: str, label: str) -> dict[str, str]:
     }
 
 
+def _create_recording(
+    root: Path,
+    filename: str,
+) -> tuple[Path, Path]:
+    review = root / "data" / "datasets" / "phase4_recordings" / "a_fall_review"
+    review.mkdir(parents=True, exist_ok=True)
+    video = review / filename
+    _write_video(video)
+    return review, video
+
+
 def _create_linked_recording(
     root: Path,
     filename: str,
@@ -57,15 +69,18 @@ def _create_linked_recording(
     original = incoming / original_filename
     _write_video(original)
     link = review / filename
-    link.symlink_to(Path("../incoming") / original.name)
+    try:
+        link.symlink_to(Path("../incoming") / original.name)
+    except OSError as exc:
+        pytest.skip(f"symlink 생성 권한이 없어 이 테스트를 건너뜁니다: {exc}")
     return review, link
 
 
 def test_builds_actor_disjoint_manifest_and_verifies_video(tmp_path):
     a01_name = "P4_S01_A01_fall_backward_01_cam01.mp4"
     a03_name = "P4_S01_A03_pick_up_01_cam01.mp4"
-    review_dir, _ = _create_linked_recording(tmp_path, a01_name, "original_A01.mp4")
-    _create_linked_recording(tmp_path, a03_name, "original_A03.mp4")
+    review_dir, _ = _create_recording(tmp_path, a01_name)
+    _create_recording(tmp_path, a03_name)
     review_rows = [
         _review_row(a01_name, actors="A01", label="fall"),
         _review_row(a03_name, actors="A03", label="no_fall"),
@@ -94,7 +109,7 @@ def test_builds_actor_disjoint_manifest_and_verifies_video(tmp_path):
 
 def test_rejects_test_and_diagnostic_actor_in_same_video(tmp_path):
     filename = "P4_S01_A01_contact_fall_01_cam01.mp4"
-    review_dir, _ = _create_linked_recording(tmp_path, filename, "original_A01.mp4")
+    review_dir, _ = _create_recording(tmp_path, filename)
     row = _review_row(filename, actors="A01|A03", label="fall")
 
     with pytest.raises(ValueError, match="test actor"):
@@ -129,9 +144,9 @@ def test_rejects_review_plan_original_mismatch(tmp_path):
 def test_rejects_duplicate_source_target(tmp_path):
     first = "P4_S01_A01_fall_side_01_cam01.mp4"
     second = "P4_S01_A01_fall_side_02_cam01.mp4"
-    review_dir, first_link = _create_linked_recording(tmp_path, first, "original_A01.mp4")
-    second_link = review_dir / second
-    second_link.symlink_to(first_link.readlink())
+    review_dir, first_video = _create_recording(tmp_path, first)
+    second_video = review_dir / second
+    shutil.copyfile(first_video, second_video)
     rows = [
         _review_row(first, actors="A01", label="fall"),
         {
@@ -140,7 +155,7 @@ def test_rejects_duplicate_source_target(tmp_path):
         },
     ]
 
-    with pytest.raises(ValueError, match="두 번 참조"):
+    with pytest.raises(ValueError, match="동일한 영상 내용"):
         build_manifest.build_manifest_rows(
             rows,
             recordings_dir=review_dir,

@@ -162,7 +162,7 @@ def write_video_cache(
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     with open(tmp_path, "w", encoding="utf-8") as file:
         json.dump(payload, file)
-    tmp_path.replace(path)  # POSIX에서 원자적 rename — 쓰다 중단돼도 원본 캐시 보존
+    tmp_path.replace(path)  # 같은 파일시스템에서 교체해 중단 시에도 원본 캐시를 보존한다.
 
 
 def read_video_cache(

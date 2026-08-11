@@ -156,6 +156,7 @@ def build_manifest_rows(
     rows: list[dict[str, object]] = []
     seen_contract_names: set[str] = set()
     seen_targets: set[Path] = set()
+    seen_checksums: dict[str, str] = {}
     for raw in review_rows:
         contract_filename = (raw.get("contract_filename") or "").strip()
         if contract_filename in seen_contract_names:
@@ -185,13 +186,23 @@ def build_manifest_rows(
             raise ValueError(f"같은 원본 영상을 두 번 참조합니다: {resolved_video}")
         seen_targets.add(resolved_video)
         original_filename = (raw.get("original_filename") or "").strip()
-        if original_filename and resolved_video.name != original_filename:
+        if (
+            video_path.is_symlink()
+            and original_filename
+            and resolved_video.name != original_filename
+        ):
             raise ValueError(
                 f"{contract_filename}: symlink 원본({resolved_video.name})과 "
                 f"review plan({original_filename})이 다릅니다."
             )
 
         metadata = _inspect_video(video_path, full_decode_check)
+        checksum = contract.sha256_file(resolved_video)
+        if checksum in seen_checksums:
+            raise ValueError(
+                f"{contract_filename}: {seen_checksums[checksum]}와 동일한 영상 내용입니다."
+            )
+        seen_checksums[checksum] = contract_filename
         relative_path = video_path.absolute().relative_to(root).as_posix()
         rows.append(
             {
@@ -211,7 +222,7 @@ def build_manifest_rows(
                 "split_role": _split_role(actors, test_actors),
                 "review_status": "reviewed",
                 "consent_status": consent_status,
-                "checksum_sha256": contract.sha256_file(resolved_video),
+                "checksum_sha256": checksum,
             }
         )
     return sorted(rows, key=lambda row: str(row["video_id"]))
