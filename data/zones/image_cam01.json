@@ -1,0 +1,30 @@
+[
+  {
+    "zone_id": "danger_play_floor",
+    "name": "놀이 구역",
+    "type": "polygon",
+    "zone_type": "danger",
+    "points": [
+      [
+        0.377188,
+        0.420556
+      ],
+      [
+        0.511354,
+        0.383519
+      ],
+      [
+        0.604062,
+        0.709259
+      ],
+      [
+        0.409271,
+        0.825
+      ]
+    ],
+    "rules": {
+      "enter_alert": true,
+      "dwell_threshold_sec": 5
+    }
+  }
+]
