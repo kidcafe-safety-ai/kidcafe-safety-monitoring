@@ -219,8 +219,14 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Project specific
-data/videos/*.mp4
-data/videos/*.avi
+# 촬영 원본은 Git에 넣지 않는다. 아이폰 원본은 대문자 .MOV로 나오므로 확장자
+# 대소문자를 모두 막는다.
+data/videos/*
+!data/videos/.gitkeep
+
+# calibration 클릭 중간 산출물. 계약 기록은 문서와 configs JSON에만 남긴다.
+configs/camera_calibration/*_picked.csv
+configs/camera_calibration/*_holdout.csv
 
 # External datasets
 data/datasets/*
