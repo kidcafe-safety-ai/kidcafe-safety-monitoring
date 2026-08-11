@@ -1,9 +1,9 @@
 [
   {
-    "zone_id": "danger_play_floor",
+    "zone_id": "play_floor",
     "name": "놀이 구역",
     "type": "polygon",
-    "zone_type": "danger",
+    "zone_type": "play",
     "points": [
       [
         0.377188,

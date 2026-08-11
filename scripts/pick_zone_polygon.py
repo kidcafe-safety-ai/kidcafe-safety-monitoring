@@ -17,9 +17,9 @@ Homography PoC는 같은 물리적 Zone을 두 경로로 판정해 비교한다.
         --video data/videos/IMG_7325.MOV \\
         --frame 40 \\
         --calibration configs/camera_calibration/cam01_clip00_orig.json \\
-        --zone-id danger_play_floor \\
+        --zone-id play_floor \\
         --zone-name "놀이 구역" \\
-        --zone-type danger \\
+        --zone-type play \\
         --corners 4 \\
         --floor-output data/zones/floor_cam01.json \\
         --image-output data/zones/image_cam01.json
@@ -58,11 +58,14 @@ from src.geofencing.floor_plane import (  # noqa: E402
     FloorPlaneTransformer,
     load_calibration,
 )
+from src.common.types import VALID_ZONE_TYPES  # noqa: E402
 from src.geofencing.floor_zone import parse_floor_zones  # noqa: E402
 from src.geofencing.polygon_rules import validate_polygon_points  # noqa: E402
 
 MIN_CORNERS = 3
-ZONE_TYPES = ("danger", "caution", "safe", "play")
+# 계약이 정한 집합을 그대로 쓴다. 직접 나열하면 common/types와 어긋나 저장 뒤
+# 로더에서야 거부되는 Zone이 만들어진다.
+ZONE_TYPES = tuple(sorted(VALID_ZONE_TYPES))
 NORMALIZED_RANGE = (0.0, 1.0)
 
 
@@ -73,7 +76,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--calibration", required=True, help="같은 클립의 calibration JSON")
     parser.add_argument("--zone-id", required=True)
     parser.add_argument("--zone-name", required=True)
-    parser.add_argument("--zone-type", default="danger", choices=ZONE_TYPES)
+    parser.add_argument(
+        "--zone-type",
+        default="play",
+        choices=ZONE_TYPES,
+        help="ENTER·EXIT는 이 값과 무관하고, DWELL과 ENTER 종류만 달라진다.",
+    )
     parser.add_argument("--corners", type=int, default=4, help="Zone 꼭짓점 수")
     parser.add_argument("--enter-alert", action="store_true", default=True)
     parser.add_argument("--dwell-threshold-sec", type=int, default=5)

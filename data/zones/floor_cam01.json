@@ -4,10 +4,10 @@
   "coordinate_space": "floor_meters",
   "zones": [
     {
-      "zone_id": "danger_play_floor",
+      "zone_id": "play_floor",
       "zone_name": "놀이 구역",
       "type": "polygon",
-      "zone_type": "danger",
+      "zone_type": "play",
       "points": [
         [
           -0.007,
