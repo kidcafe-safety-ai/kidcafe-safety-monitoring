@@ -24,8 +24,15 @@
 
 | 클립 | 원본 | `calibration_version` | calibration JSON | image Zone | floor Zone |
 |---|---|---|---|---|---|
-| clip00 (calibration 촬영) | `IMG_7325.MOV` | `2026-08-07-clip00-orig` | `configs/camera_calibration/cam01_clip00_orig.json` | `data/zones/image_cam01.json` | `data/zones/floor_cam01.json` |
-| clip01 (시나리오) | `IMG_7326.MOV` | `2026-08-07-clip01` | `configs/camera_calibration/cam01_clip01.json` | `data/zones/image_cam01_clip01.json` | `data/zones/floor_cam01_clip01.json` |
+| clip00 (calibration 촬영) | `IMG_7325.MOV` | `2026-08-07-clip00-orig` | `cam01_clip00_orig.json` | `image_cam01.json` | `floor_cam01.json` |
+| clip01 | `IMG_7326.MOV` | `2026-08-07-clip01` | `cam01_clip01.json` | `image_cam01_clip01.json` | `floor_cam01_clip01.json` |
+| img7327 | `IMG_7327.MOV` | `2026-08-07-img7327` | `cam01_img7327.json` | `image_cam01_img7327.json` | `floor_cam01_img7327.json` |
+| img7328 | `IMG_7328.MOV` | `2026-08-07-img7328` | `cam01_img7328.json` | `image_cam01_img7328.json` | `floor_cam01_img7328.json` |
+| img7329 | `IMG_7329.MOV` | `2026-08-07-img7329` | `cam01_img7329.json` | `image_cam01_img7329.json` | `floor_cam01_img7329.json` |
+
+calibration JSON은 `configs/camera_calibration/`, Zone은 `data/zones/` 아래다.
+clip00은 기준점만 촬영한 clip이라 Zone 라벨링 대상이 아니다. **라벨링 대상은
+clip01·img7327·img7328·img7329 네 개다.**
 
 원본 대응은 `scripts/verify_clip_match.py`로 확인했다. 기록된 기준점 픽셀을
 프레임에 겹쳐 그려 테이프 위에 얹히는지 눈으로 대조하는 방식이다. 클립을 더
@@ -39,14 +46,17 @@
 
 ### 클립별 재클릭이 실제로 카메라 이동을 상쇄했다
 
-같은 회색 테이프를 두 클립에서 각각 찍어 비교했다.
+같은 회색 테이프를 5개 클립에서 각각 찍어 비교했다. 아래는 클립 쌍 10개에서
+나온 값의 범위다.
 
-| 좌표계 | 두 클립 Zone 차이 |
+| 좌표계 | 클립 쌍 간 차이 |
 |---|---|
-| image (픽셀) | 평균 13.6px · 최대 22.1px |
-| floor (원단위) | 평균 0.20 · 최대 0.43 |
+| image (픽셀) | 평균 12.8~86.8px · 최대 **86.8px** |
+| floor (원단위) | 평균 0.20~0.53 · 최대 **1.00** |
 
-픽셀에서는 카메라가 움직인 만큼 어긋나 있는데 floor 좌표로 옮기면 일치한다.
+img7329가 다른 클립과 픽셀로 72~87px 어긋나 있는데도 floor 좌표로는 0.22~0.44
+안에서 일치한다. 픽셀에서는 카메라가 움직인 만큼 어긋나 있는데 floor 좌표로
+옮기면 일치한다.
 클립마다 calibration을 다시 만들면 고정되지 않은 카메라로도 같은 물리적 Zone을
 가리킬 수 있다는 뜻이다. 7.3절의 오차 수치와 별개로 얻은 독립적인 근거다.
 
@@ -55,14 +65,15 @@
 
 ## 비어 있는 것
 
-clip01은 라벨링에 필요한 자료가 모두 준비됐다. 다른 클립을 추가한다면 아래가
-클립마다 필요하다.
+라벨링에 필요한 자료는 네 클립 모두 준비됐다. 남은 것은 `video_id` 확정
+하나이며, 그것은 `recordings_manifest.csv`가 만들어져야 정해진다.
 
-- [ ] 원본 파일명 ↔ `video_id` 대응 확정
-- [ ] 기준점 픽셀 재클릭 → `<clip>_picked.csv`
-- [ ] calibration JSON (`configs/camera_calibration/<camera>_<clip>.json`)
-- [ ] Zone 꼭짓점 재클릭 → image Zone JSON
-- [ ] Zone 진입·이탈 interval 검수 (A 역할)
+클립을 더 추가한다면 클립마다 아래가 필요하다.
+
+- [ ] 원본 파일명 확인 (`scripts/verify_clip_match.py`)
+- [ ] 기준점 픽셀 클릭 → `<clip>_picked.csv`
+- [ ] calibration JSON
+- [ ] Zone 꼭짓점 클릭 → floor·image Zone JSON
 
 ## 원본 파일명 ↔ `video_id` 대응표
 
@@ -72,10 +83,13 @@ clip01은 라벨링에 필요한 자료가 모두 준비됐다. 다른 클립을
 P4_S<2자리>_A<2자리>_<소문자 scenario>_<2자리 take>_cam<2자리>
 ```
 
-| 원본 파일명 | `video_id` | `calibration_version` | 용도 |
-|---|---|---|---|
-| `IMG_7325.MOV` | — | `2026-08-07-clip00-orig` | calibration 전용, 시나리오 아님 |
-| `IMG_7326.MOV` | **미정** | `2026-08-07-clip01` | Zone 라벨링 대상 |
+| 원본 파일명 | `video_id` | 용도 |
+|---|---|---|
+| `IMG_7325.MOV` | — | calibration 전용, 시나리오 아님 |
+| `IMG_7326.MOV` | **미정** | Zone 라벨링 대상 |
+| `IMG_7327.MOV` | **미정** | Zone 라벨링 대상 |
+| `IMG_7328.MOV` | **미정** | Zone 라벨링 대상 |
+| `IMG_7329.MOV` | **미정** | Zone 라벨링 대상 |
 
 원본은 개인정보가 있어 Git에 넣지 않으므로(`.gitignore`의 `data/videos/*`)
 파일명만 여기 기록하고 실물은 별도 저장소에 둔다.

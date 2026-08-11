@@ -8,8 +8,7 @@
 
 | 파일 | 내용 |
 |---|---|
-| `cam01_clip00_orig_picked.csv` | calibration 영상에서 찍은 기준점 10개 픽셀 좌표 |
-| `cam01_clip01_picked.csv` | 시나리오 클립에서 찍은 같은 기준점 픽셀 좌표 |
+| `cam01_*_picked.csv` | 클립 5개에서 각각 찍은 기준점 10개 픽셀 좌표 |
 | `cam01_*_holdout.csv` | 위 파일 중 holdout 점만 실측 좌표와 함께 뽑은 것 |
 | `holdout_designated.json` | **공식** 평가 결과 (role=fit 4점 고정) |
 | `holdout_loo-all.json` | 보조 진단 (leave-one-out, 남은 9점 최소자승) |
@@ -29,6 +28,9 @@ python scripts/evaluate_homography_holdout.py \
   --points docs/calibration_points.csv \
   --picked docs/phase4_homography/cam01_clip00_orig_picked.csv \
   --picked docs/phase4_homography/cam01_clip01_picked.csv \
+  --picked docs/phase4_homography/cam01_img7327_picked.csv \
+  --picked docs/phase4_homography/cam01_img7328_picked.csv \
+  --picked docs/phase4_homography/cam01_img7329_picked.csv \
   --unit-cm 1 \
   --fit-mode designated \
   --output docs/phase4_homography/holdout_designated.json
@@ -64,5 +66,11 @@ config는 `role == "fit"`인 점만 `image_points_px`에 담으므로 실제 배
 `docs/homography_calibration.md` 7.1절에 있다.
 
 **카메라가 클립마다 움직였다.** 클립 간 최대 8.5도 회전이 측정돼 단일
-calibration을 전 클립에 적용할 수 없다. 클립별로 기준점을 다시 찍어 각각
-평가했다.
+calibration을 전 클립에 적용할 수 없다. 클립 5개에서 기준점을 각각 다시 찍어
+평가했다. 클립을 늘려 관측 수는 30회로 계약 요건 20회를 넘겼지만, 기준점이
+10개뿐이라 **holdout 위치는 6개로 고정**된다. 위치 수는 클립이 아니라 촬영
+현장의 기준점 개수가 정하므로 이 데이터로는 더 늘릴 수 없다.
+
+`_picked.csv`는 picker가 `--output` 옆에 쓰므로 기본 위치는
+`configs/camera_calibration/`이다. 평가 입력은 여기 모아 체크섬을 남기므로
+찍은 뒤 이 디렉터리로 옮긴다.
