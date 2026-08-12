@@ -89,6 +89,11 @@ def parse_args() -> argparse.Namespace:
 
 VALID_ROLES = ("fit", "holdout")
 
+# 출력 수치를 이 자릿수로 반올림한다. OpenCV 빌드가 다르면 같은 입력에서도
+# 부동소수점 결과가 1e-16 수준으로 갈려 JSON 바이트가 달라진다. 좌표가 0.01
+# 규모라 9자리면 유효숫자 7자리가 남아 판정에 영향이 없다.
+OUTPUT_DECIMALS = 9
+
 
 def load_floor_points(
     path: Path, unit_cm: float
@@ -266,8 +271,8 @@ def evaluate(
                     "point_id": target,
                     "fit_points": list(fit),
                     "expected_m": list(expected),
-                    "predicted_m": list(got),
-                    "error_m": float(math.dist(got, expected)),
+                    "predicted_m": [round(v, OUTPUT_DECIMALS) for v in got],
+                    "error_m": round(float(math.dist(got, expected)), OUTPUT_DECIMALS),
                     "region": "interpolation" if _inside(dst, expected) else "extrapolation",
                 }
             )
@@ -290,9 +295,9 @@ def summarize(observations: Sequence[dict], region: str | None = None) -> dict:
         "observation_count": len(errors),
         "position_count": len({o["point_id"] for o in subset}),
         "point_ids": sorted({o["point_id"] for o in subset}),
-        "mean_m": mean_m,
-        "p95_m": p95_m,
-        "max_m": float(max(errors)),
+        "mean_m": round(mean_m, OUTPUT_DECIMALS),
+        "p95_m": round(p95_m, OUTPUT_DECIMALS),
+        "max_m": round(float(max(errors)), OUTPUT_DECIMALS),
     }
 
 

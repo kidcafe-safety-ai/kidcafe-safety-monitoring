@@ -47,6 +47,18 @@ python scripts/benchmark_homography_cost.py \
   --output docs/phase4_homography/cost_benchmark.json
 ```
 
+## 재현의 범위
+
+**수치는 재현되고, 바이트는 플랫폼에 따라 다를 수 있다.** 결과의 실수는 소수점
+9자리로 반올림해 저장하지만, OpenCV 빌드가 다르면 같은 입력에서도 부동소수점
+연산이 1e-16 수준으로 갈려 마지막 자리가 달라질 수 있다.
+
+- **같은 환경에서 다시 실행하면** 바이트 단위로 같은 파일이 나온다.
+- **다른 플랫폼에서 실행하면** 보고 지표(위치·관측 수, 평균, p95, 최대)는 그대로
+  나오지만 JSON 바이트는 다를 수 있다. 재현 여부는 이 지표로 판단한다.
+- **`_checksums.md`의 SHA-256은 커밋된 파일의 무결성 검증용이다.** 다른 환경에서
+  다시 실행한 결과와 대조하는 값이 아니다.
+
 ## 읽을 때 주의할 것
 
 **`is_official`을 먼저 본다.** `holdout_designated.json`만 `true`다. runtime
@@ -55,10 +67,11 @@ config는 `role == "fit"`인 점만 `image_points_px`에 담으므로 실제 배
 정확도이므로 runtime 후보의 성능이 아니다.
 
 **`contract.meets_contract`가 `false`다.** `phase4_contract_v1`은 holdout
-10위치·20관측을 요구하는데 이번 촬영은 fit 4·holdout 6이라 공식 경로로 6위치·
-12관측만 나온다. 수치는 진단으로 읽고 공식 acceptance 판정에는 쓰지 않는다.
-허용값도 동결하지 못했다. 두 사유로 채택 기준 1번은 판정 불가이고, PoC 전체
-판정은 **미채택**이다(`docs/homography_calibration.md` 7.7절).
+10위치·20관측을 요구한다. 클립 5개로 관측은 30회가 됐지만 기준점이 10개뿐이라
+fit 4를 뺀 **위치가 6개로 고정**돼 요건을 채우지 못한다. 수치는 진단으로 읽고
+공식 acceptance 판정에는 쓰지 않는다. 허용값도 동결하지 못했다. 두 사유로 채택
+기준 1번은 판정 불가이고, PoC 전체 판정은 **미채택**이다
+(`docs/homography_calibration.md` 7.7절).
 
 **좌표 단위가 확정되지 않았다.** `--unit-cm 1`로 실행했으므로 결과의
 `*_m` 필드는 meter가 아니라 **촬영 기록 원단위를 100으로 나눈 값**이다. 실측

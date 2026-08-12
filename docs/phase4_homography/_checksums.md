@@ -1,9 +1,11 @@
 설명 문서(`*.md`)는 제외하고 평가 입력·결과 파일만 기록한다.
+커밋된 파일의 무결성 검증용이며, 다른 환경에서 재실행한 결과와 대조하는
+값이 아니다(README `재현의 범위`).
 
 | 파일 | SHA-256 |
 |---|---|
-| `configs/camera_calibration/cam01_clip00_orig.json` | `ee12455c0077b6690b60b39e1d9df584c8f5d8ecf2414ff23569174a8129f492` |
-| `configs/camera_calibration/cam01_clip01.json` | `6098cde7e8e1a1cb4e3ec781c4c28ae026cd483de43bfe1b2441c2f90965295d` |
+| `configs/camera_calibration/cam01_clip00_orig.json` | `e3b82f2a3a380ec8af761e936731976ed606343216b8767c3e31bde766bf688c` |
+| `configs/camera_calibration/cam01_clip01.json` | `0b3856b56844be00ab63b7e64f8740605a1aabb38197946b96f86a8340c7c132` |
 | `configs/camera_calibration/cam01_img7327.json` | `b0d895a65e4f7df81648fd38e8df08c31a8c5ea6df600f3f61bcedf72b993717` |
 | `configs/camera_calibration/cam01_img7328.json` | `598fbe8dea159812791aea9738de7f416deed53b574663498ee4277119ace0da` |
 | `configs/camera_calibration/cam01_img7329.json` | `7bcaca0364f1359120d7c676b7ca1067373edefc9b854bfb1fed28f0f84a05ba` |
@@ -28,7 +30,7 @@
 | `cam01_img7329_holdout.csv` | `8ce8c0d4ab100b469ceac182f27ad902b4347d8bd818eedb65b789ee0a4955e8` |
 | `cam01_img7329_picked.csv` | `4bfc4e52ee196142182168da9673ee55f4adcf7aeacc3096f0274b8936540f18` |
 | `cost_benchmark.json` | `1c01eaef05d9b557af9c9cf8e95fe424ccaddede892fba615c1dde3eaf31396b` |
-| `holdout_designated.json` | `bed3432199db4c2bcb0581496ed650e02771609cb6e03f52d94e3131b5a3a968` |
-| `holdout_loo-all.json` | `7fd8f16b8cf914987d083f7fd35cd4706ce9bab36f3f453f1fdf43696773c34f` |
-| `holdout_loo-quad.json` | `df1e2b8030c23b35b380cf91e9bde2191ddd14f6162c286b4b1b621e0e33f25b` |
+| `holdout_designated.json` | `29c457e9022cf59c0e8cb7a7bb0874a945128427f88cbc43f59a8c6d47d19d30` |
+| `holdout_loo-all.json` | `82cac0e62123522f4b3ab335b8d3c88ae81062a55005167df6709f8ae68560a0` |
+| `holdout_loo-quad.json` | `3fd29325c4dc125cc2a148b3fd93b40c6509cf52cb2c5ef61c3f70018e050ca5` |
 | `zone_intervals_draft.csv` | `ca1d17f9c1280662f2e4ab60e142c408a8fc9e0c0bb1579993294e1dfb343552` |
