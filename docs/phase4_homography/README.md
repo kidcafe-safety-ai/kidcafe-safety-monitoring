@@ -13,9 +13,9 @@
 | `holdout_designated.json` | **공식** 평가 결과 (role=fit 4점 고정) |
 | `holdout_loo-all.json` | 보조 진단 (leave-one-out, 남은 9점 최소자승) |
 | `holdout_loo-quad.json` | 보조 진단 (leave-one-out, 최대 면적 4점) |
-| `cost_benchmark.json` | frame당 추가 비용·FPS 하락률 |
+| `cost_benchmark.json` | frame당 추가 비용 (FPS 하락률은 추정치, `is_official: false`) |
 | `zone_eval_handover.md` | 채택 기준 2~5번 측정에 필요한 영상별 준비 상태·대응표 |
-| `zone_intervals_draft.csv` | Zone 진입·이탈 검수용 헤더 초안 |
+| `zone_intervals_draft.csv` | Zone 진입·이탈 검수용 초안 (클립 4개 뼈대 행) |
 | `_checksums.md` | 위 파일과 calibration config의 SHA-256 |
 
 runtime calibration config는 계약 위치인 `configs/camera_calibration/`에 있다.

@@ -83,7 +83,14 @@ def parse_args() -> argparse.Namespace:
         help="ENTER·EXIT는 이 값과 무관하고, DWELL과 ENTER 종류만 달라진다.",
     )
     parser.add_argument("--corners", type=int, default=4, help="Zone 꼭짓점 수")
-    parser.add_argument("--enter-alert", action="store_true", default=True)
+    # store_true + default=True로 두면 옵션을 줘도 안 줘도 True라 enter_alert를
+    # 끌 수 없다. 기본값은 True로 두되 --no-enter-alert로 끌 수 있어야 한다.
+    parser.add_argument(
+        "--enter-alert",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="ENTER Event 알림 여부. 끄려면 --no-enter-alert.",
+    )
     parser.add_argument("--dwell-threshold-sec", type=int, default=5)
     parser.add_argument("--floor-output", required=True)
     parser.add_argument("--image-output", required=True)

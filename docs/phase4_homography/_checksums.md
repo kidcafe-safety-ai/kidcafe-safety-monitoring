@@ -27,7 +27,7 @@
 | `cam01_img7328_picked.csv` | `49abdf5ee48cb1cca021a02033174a71d6bb8e43ded4c454c0c31b032d06508c` |
 | `cam01_img7329_holdout.csv` | `8ce8c0d4ab100b469ceac182f27ad902b4347d8bd818eedb65b789ee0a4955e8` |
 | `cam01_img7329_picked.csv` | `4bfc4e52ee196142182168da9673ee55f4adcf7aeacc3096f0274b8936540f18` |
-| `cost_benchmark.json` | `f891387373d4a0f280dae10f245a00f3a01d5ee5e9c4ce417b34f2ee2aef798b` |
+| `cost_benchmark.json` | `1c01eaef05d9b557af9c9cf8e95fe424ccaddede892fba615c1dde3eaf31396b` |
 | `holdout_designated.json` | `bed3432199db4c2bcb0581496ed650e02771609cb6e03f52d94e3131b5a3a968` |
 | `holdout_loo-all.json` | `7fd8f16b8cf914987d083f7fd35cd4706ce9bab36f3f453f1fdf43696773c34f` |
 | `holdout_loo-quad.json` | `df1e2b8030c23b35b380cf91e9bde2191ddd14f6162c286b4b1b621e0e33f25b` |

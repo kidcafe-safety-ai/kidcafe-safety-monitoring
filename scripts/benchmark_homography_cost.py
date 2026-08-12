@@ -1,8 +1,18 @@
-"""Homography 경로의 frame당 추가 비용과 FPS 하락률을 측정한다.
+"""Homography 경로가 Zone 판정에 더하는 frame당 비용을 측정한다.
 
-`homography_acceptance_v1`의 `max_added_latency_ms_per_frame`(1.0ms)과
-`max_fps_drop_ratio`(0.05)를 판정하려면 두 경로의 실측 비용이 필요하다. 이
-값은 촬영 데이터와 무관하게 Zone 판정 연산만으로 측정된다.
+`homography_acceptance_v1`의 `max_added_latency_ms_per_frame`(1.0ms)을 보기
+위한 microbenchmark다. 촬영 데이터와 무관하게 Zone 판정 연산만 잰다.
+
+**FPS 하락률은 이 스크립트로 측정할 수 없다.** 계약은 하락률을
+`(기존 FPS - 후보 FPS) / 기존 FPS`로 정의하는데, 두 FPS 모두 같은 영상을 같은
+조건으로 실행해 얻은 실측값이어야 한다. 여기서 내는 값은 추가 비용을
+`--baseline-fps`가 나타내는 frame 예산에 더해 역산한 **추정치**이고, 출력에
+`measurement_type: "estimated"`로 표시한다. 공식 FPS 판정에 쓰지 않는다.
+
+실측을 하려면 image-coordinate 경로와 Homography 경로가 모두 production
+파이프라인에 연결돼 있어야 하는데, `FloorZoneChecker`는 `src/main.py`에
+연결돼 있지 않다. ADR-023이 production 확장을 채택 이후 별도 PR로 미뤘고
+이번 PoC는 미채택이므로 그 연결을 만들지 않는다.
 
 비교 대상은 Track 하나의 `foot_point`를 Zone 판정까지 보내는 경로 전체다.
 
@@ -27,6 +37,8 @@
         --frames 2000 \\
         --baseline-fps 25 \\
         --output outputs/homography/cost_benchmark.json
+
+`--baseline-fps`는 실측 FPS가 아니라 추정에 쓰는 가정값이다.
 """
 
 from __future__ import annotations
@@ -35,6 +47,7 @@ import argparse
 import json
 import os
 import random
+import statistics
 import sys
 import tempfile
 import time
@@ -85,24 +98,27 @@ def make_foot_points(
     ]
 
 
-def time_path(
-    label: str, work: Callable[[], None], frames: int
-) -> Tuple[float, float]:
-    """frame당 평균 소요를 ms로 잰다. 반복 중 최솟값을 쓴다.
+def time_path(work: Callable[[], None], frames: int) -> dict:
+    """frame당 소요를 ms로 재고 반복 표본을 모두 돌려준다.
 
-    평균이나 최댓값은 GC·스케줄러 노이즈를 그대로 받는다. 최솟값이 그 환경에서
-    달성 가능한 비용에 가장 가깝다.
+    최솟값은 그 환경에서 달성 가능한 하한이라 GC·스케줄러 노이즈가 빠지지만,
+    일반적인 runtime보다 낙관적이다. 중앙값을 대표값으로 쓰고 최솟값은 진단으로
+    함께 남겨 둘을 비교할 수 있게 한다.
     """
     for _ in range(WARMUP_FRAMES):
         work()
-    best = float("inf")
+    samples = []
     for _ in range(REPEATS):
         start = time.perf_counter()
         for _ in range(frames):
             work()
-        elapsed = time.perf_counter() - start
-        best = min(best, elapsed)
-    return best * 1000.0 / frames, best
+        samples.append((time.perf_counter() - start) * 1000.0 / frames)
+    return {
+        "median_ms_per_frame": statistics.median(samples),
+        "min_ms_per_frame": min(samples),
+        "max_ms_per_frame": max(samples),
+        "samples_ms_per_frame": samples,
+    }
 
 
 def write_json_atomic(path: Path, payload: dict) -> None:
@@ -157,43 +173,54 @@ def main() -> None:
         for point in points:
             floor_checker.check_point(transformer.transform(list(point)))
 
-    base_ms, _ = time_path("baseline", baseline, args.frames)
-    cand_ms, _ = time_path("homography", candidate, args.frames)
+    base = time_path(baseline, args.frames)
+    cand = time_path(candidate, args.frames)
 
+    base_ms = base["median_ms_per_frame"]
+    cand_ms = cand["median_ms_per_frame"]
     added_ms = cand_ms - base_ms
-    # 프레임 예산에서 추가 비용이 차지하는 만큼 처리 FPS가 떨어진다.
+    added_ms_min = cand["min_ms_per_frame"] - base["min_ms_per_frame"]
+
+    # 추정치다. frame 예산 전체가 --baseline-fps로 결정되고 추가 비용이 선형으로
+    # 얹힌다고 가정한 값이며, 두 파이프라인을 실제로 돌려 잰 FPS가 아니다.
     baseline_budget_ms = 1000.0 / args.baseline_fps
-    candidate_fps = 1000.0 / (baseline_budget_ms + added_ms)
-    fps_drop_ratio = (args.baseline_fps - candidate_fps) / args.baseline_fps
+    estimated_candidate_fps = 1000.0 / (baseline_budget_ms + added_ms)
+    estimated_drop = (args.baseline_fps - estimated_candidate_fps) / args.baseline_fps
 
     payload = {
         "tracks_per_frame": args.tracks_per_frame,
         "frames": args.frames,
         "repeats": REPEATS,
-        "baseline_fps": args.baseline_fps,
-        "baseline_ms_per_frame": base_ms,
-        "homography_ms_per_frame": cand_ms,
+        "baseline": base,
+        "homography": cand,
         "added_latency_ms_per_frame": added_ms,
-        "candidate_fps": candidate_fps,
-        "fps_drop_ratio": fps_drop_ratio,
-        "thresholds": {
-            "max_added_latency_ms_per_frame": 1.0,
-            "max_fps_drop_ratio": 0.05,
-        },
+        "added_latency_ms_per_frame_min": added_ms_min,
+        "thresholds": {"max_added_latency_ms_per_frame": 1.0},
         "passes_added_latency": added_ms <= 1.0,
-        "passes_fps_drop": fps_drop_ratio <= 0.05,
+        "fps_drop": {
+            "measurement_type": "estimated",
+            "is_official": False,
+            "assumed_baseline_fps": args.baseline_fps,
+            "estimated_candidate_fps": estimated_candidate_fps,
+            "estimated_fps_drop_ratio": estimated_drop,
+            "note": (
+                "계약의 FPS 하락률은 두 경로를 같은 영상·같은 조건으로 실행해 얻은 "
+                "실측 FPS로 계산해야 한다. 이 값은 microbenchmark의 추가 비용을 "
+                "frame 예산에 더해 역산한 추정치이므로 공식 판정에 쓰지 않는다."
+            ),
+        },
     }
     write_json_atomic(Path(args.output), payload)
 
-    print(f"기존 경로      {base_ms:.4f} ms/frame")
-    print(f"Homography 경로 {cand_ms:.4f} ms/frame")
+    print(f"기존 경로      중앙값 {base_ms:.4f} / 최소 {base['min_ms_per_frame']:.4f} ms")
+    print(f"Homography 경로 중앙값 {cand_ms:.4f} / 최소 {cand['min_ms_per_frame']:.4f} ms")
     print(
-        f"추가 비용      {added_ms:+.4f} ms/frame "
-        f"(기준 1.0 이하 → {'통과' if payload['passes_added_latency'] else '미달'})"
+        f"추가 비용      {added_ms:+.4f} ms/frame (최소 기준 {added_ms_min:+.4f}) "
+        f"[기준 1.0 이하 → {'통과' if payload['passes_added_latency'] else '미달'}]"
     )
     print(
-        f"FPS 하락률     {fps_drop_ratio * 100:+.3f}% "
-        f"(기준 5% 이내 → {'통과' if payload['passes_fps_drop'] else '미달'})"
+        f"FPS 하락률     {estimated_drop * 100:+.3f}% "
+        f"(baseline {args.baseline_fps:g}fps 가정) -- 추정치, 공식 판정 불가"
     )
     print(f"-> {args.output}")
 
