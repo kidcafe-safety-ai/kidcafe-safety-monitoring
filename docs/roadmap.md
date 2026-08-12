@@ -497,7 +497,8 @@ Phase 3 Open·계약 문서 PR
 - A01 촬영 frame을 기존 보조 detector에 추가 학습한 E1을 채택했다.
 - 학습하지 않은 A03 actor-disjoint test에서 Recall 93.3%, timely Recall 93.3%,
   FAR 0.0/min, 평균 onset latency 0.441초, 중복 Event 0건을 기록했다.
-- E1 낙상 감지는 목표 키즈카페 카메라 실행의 기본 활성 프로파일로 동결했다.
+- E1 낙상 모델과 inference 설정은 목표 키즈카페 카메라의 selected profile로
+  동결했다. 장시간 RTSP·Cause 검증 전까지 실행은 명시적 opt-in으로 유지한다.
 - 실제 영상의 Vision AI·API·SQLite·Live Frame E2E를 통과했다.
 - 다음 A 작업은 다중 인원 Cause·ID switch 분석과 조건부 Tracker 비교다.
 

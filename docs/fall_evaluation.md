@@ -1281,6 +1281,21 @@ Event가 없었다. 근접 통과 3편도 0건이었으며, 유일한 false Even
 가림 영상 `occluded_cross` 1편에서 발생했다. 따라서 앉기·줍기 오탐 개선과
 가림 상황의 Track 한계를 분리해 해석한다.
 
+초기 구현용 공개 데이터의 E1 참고 회귀 결과는 다음과 같다. 이 결과는 목표
+카메라 모델의 선택 기준을 대신하지 않지만, 사전에 정한 회귀 조건의 통과 여부와
+함께 동결 manifest에 보존한다.
+
+| 데이터 | Recall | timely Recall | false Event / FAR | 중복 Event |
+| --- | ---: | ---: | ---: | ---: |
+| CAUCAFall Development | 83.3% | 70.0% | 0건 / 0.0/min | 1 |
+| CAUCAFall S7-8 diagnostic | 100% | 90.0% | 5건 / 2.9197/min | 0 |
+
+Development의 Recall·timely Recall·FAR와 S7-8의 Recall·timely Recall은 유지됐지만,
+Development 중복 Event 0건과 S7-8 FAR 1.75/min 이하 조건은 통과하지 못했다.
+따라서 E1을 모든 구도의 production 기본값으로 채택하거나 기존 회귀 조건을 모두
+통과했다고 해석하지 않는다. 실제 키즈카페 목표 구도의 opt-in profile로 범위를
+한정한다.
+
 배포 채택 판단은 8월 7일 확보한 실제 키즈카페 카메라 데이터로 수행한다. A01만
 학습에 사용하고 A02와 A03을 actor 단위로 분리했으며, A03은 모델·tracker·config
 동결 후 최종 평가했다. 기존 회귀 결과는 동결 manifest에 참고 기록으로 보존하며
@@ -1294,7 +1309,7 @@ Event가 없었다. 근접 통과 3편도 0건이었으며, 유일한 false Even
 - tracker: `yolo26n-pose.pt` PoseTracker
 - 보조 모델 interval: `3`
 - Pose NORMAL gate: 활성
-- 낙상 감지: 기본 활성
+- 낙상 감지: 명시적 opt-in
 - 동결 manifest: `configs/fall_e1_selected.json`
 
 ### 14.13 A03 목표 환경 최종 평가
@@ -1313,18 +1328,25 @@ Event가 없었다. 근접 통과 3편도 0건이었으며, 유일한 false Even
 
 유일한 미탐은 `P4_S01_A03_fall_side_03_cam01`이며 Track coverage가 34.3%였다.
 `fall_forward_knees` 영상은 timely window 안에서 감지됐다. 이 결과를
-근거로 E1을 목표 키즈카페 카메라의 기본 낙상 모델로 채택하고 CLI 기본 실행에서
-낙상 감지를 활성화한다. 이 결과는 사전 목표를 모두 통과했지만 A03의 no_fall
-노출은 주요 오탐 행동인 줍기 3편, 27.2초로 구성됐다. 세 영상의 false Event는
-0건이었다. 앉기는 A01·A02 diagnostic 6편에서 false Event 0건을 확인했다.
-다만 actor-disjoint 앉기 영상과 장시간 정상 행동 노출이 없으므로 운영 성능은
-후속 RTSP 검증에서 확인한다.
+근거로 E1을 목표 키즈카페 카메라의 selected 모델로 채택한다. A03 목표 환경
+지표는 사전 목표를 통과했지만 no_fall 노출은 주요 오탐 행동인 줍기 3편,
+27.2초로 구성됐다. 세 영상의 false Event는 0건이었다. 앉기는 A01·A02
+diagnostic 6편에서 false Event 0건을 확인했다. 다만 diagnostic과 test를 합친
+no_fall 노출은 190.2초·false Event 1건이고, actor-disjoint 앉기와 장시간 정상
+행동 및 Cause 정확도는 아직 확인하지 않았다. 따라서 CLI 기본값은 비활성으로
+유지하고 `--fall-detection-enabled`로만 selected profile을 사용한다.
 
-### 14.14 기본 활성 프로파일 API E2E
+기본 ON 전환은 별도 PR에서 진행한다. 검증 시작 전에 acceptance를 동결하고,
+목표 RTSP 카메라에서 no_fall 누적 30분 이상과 걷기·앉기·줍기·눕기·가림·장시간
+정지를 포함해 FAR 0.2/min 이하를 확인한다. `cause=null` specificity 90% 이상과
+Cause top-1 정확도 80% 이상도 함께 확인한다.
 
-2026-08-11에 A03 `fall_forward_knees` 영상을 별도 활성화 옵션 없이 실행해
-CLI 기본값과 서비스 전달 경로를 확인했다. PoseTracker와 E1 보조 모델은 MPS,
-보조 모델 interval은 `3`, Pose NORMAL gate는 활성 상태였다.
+### 14.14 Selected profile API E2E
+
+2026-08-11에 A03 `fall_forward_knees` 영상으로 selected profile과 서비스 전달
+경로를 확인했다. 당시 후보 profile의 자동 활성 wiring을 사용했으며, 이후 운영
+검토에서 CLI 정책만 명시적 opt-in으로 변경했다. PoseTracker와 E1 보조 모델은
+MPS, 보조 모델 interval은 `3`, Pose NORMAL gate는 활성 상태였다.
 
 - frame 70에서 `FALL_SUSPECT` 1건 생성
 - FastAPI `POST /events` `201`, `GET /events` 동일 Event 반환

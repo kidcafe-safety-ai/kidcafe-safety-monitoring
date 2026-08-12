@@ -128,13 +128,15 @@ python -m src.main --source-type file --source data/videos/test.mp4 --fall-detec
 
 #### FALL_SUSPECT 실행
 
-Phase 4 목표 키즈카페 구도에서 채택한 E1 낙상 모델이 기본 활성화된다.
-PoseTracker, interval `3`, Pose NORMAL gate를 기본 프로파일로 사용한다.
+Phase 4 목표 키즈카페 구도에서 채택한 E1 낙상 모델은 명시적으로 활성화해
+사용한다. Selected mode는 PoseTracker, interval `3`, Pose NORMAL gate와 관련
+파일 SHA-256을 동결 프로파일대로 강제한다.
 
 ```bash
 python -m src.main \
   --source-type file \
   --source data/videos/test.mp4 \
+  --fall-detection-enabled \
   --api-url http://localhost:8000 \
   --live-frame-enabled
 
@@ -142,24 +144,25 @@ python -m src.main \
 python -m src.main \
   --source-type file \
   --source data/videos/test.mp4 \
+  --fall-detection-enabled \
   --infer-device mps \
   --fall-model-device mps \
   --api-url http://localhost:8000 \
   --live-frame-enabled
 
-# 낙상 감지를 명시적으로 끄는 경량 실행
+# 기본 경량 실행(낙상 감지 OFF)
 python -m src.main \
   --source-type file \
-  --source data/videos/test.mp4 \
-  --fall-detection-disabled
+  --source data/videos/test.mp4
 ```
 
 | 옵션 | 설명 |
 |------|------|
-| `--fall-detection-enabled` / `--fall-detection-disabled` | 기본 활성화된 `FALL_SUSPECT` 경로를 명시적으로 켜거나 끈다. 끄면 `yolo26n.pt` + ByteTracker 경로를 사용한다. |
-| `--fall-profile` | 채택 모델 경로·SHA-256·활성 상태를 담은 동결 manifest. 기본값은 `configs/fall_e1_selected.json`이다. |
-| `--fall-model-path` | 커스텀 `fall`/`nofall` 보조 detector 경로. 미지정 시 동결 profile의 모델을 사용한다. |
-| `--fall-model-sha256` | 커스텀 모델의 SHA-256. `--fall-model-path`를 동결 모델과 다른 경로로 지정할 때 필수다. |
+| `--fall-detection-enabled` / `--fall-detection-disabled` | 기본 비활성인 `FALL_SUSPECT` 경로를 명시적으로 켜거나 끈다. 끄면 `yolo26n.pt` + ByteTracker 경로를 사용한다. |
+| `--fall-profile` | 채택 모델·tracker·config·inference 설정을 담은 동결 manifest. 기본값은 `configs/fall_e1_selected.json`이다. |
+| `--fall-profile-mode` | `selected`는 동결 profile 전체를 강제하고, `custom`은 profile과 구분된 실험 실행에 사용한다. |
+| `--fall-model-path` | `selected` mode에서는 동결 모델과 일치해야 한다. 다른 보조 detector는 `custom` mode에서 지정한다. |
+| `--fall-model-sha256` | `custom` mode에서 보조 모델을 지정할 때 필요한 SHA-256이다. |
 | `--fall-config` | 낙상 상태머신 설정 파일. 기본값은 `configs/fall_detection.json`이다. |
 | `--fall-model-conf` / `--fall-model-iou-threshold` | 보조 detector confidence와 Track 매칭 IoU 임계값이다. 기본값은 각각 `0.5`, `0.3`이다. |
 | `--fall-model-device` | 보조 detector 실행 장치. `auto`, `mps`, `cuda`, `cpu` 중 하나이며 기본값은 `auto`다. |
@@ -182,8 +185,10 @@ Windows PowerShell:
 Get-FileHash outputs/fall_training/models/fall_detector_phase4_e1.pt -Algorithm SHA256
 ```
 
-기본 CLI는 입력 소스를 열기 전에 동결 manifest의 모델 경로와 SHA-256을
-검증한다. 모델 누락, 잘못된 profile 또는 hash 불일치가 있으면 실행을 중단한다.
+Selected mode는 입력 소스를 열기 전에 tracker 모델·낙상 detector config·보조
+모델의 경로와 SHA-256, confidence·IoU·interval·Pose gate 설정을 동결 manifest와
+대조한다. 누락, hash 불일치 또는 설정 override가 있으면 실행을 중단한다. 다른
+실험 설정은 `--fall-profile-mode custom`으로 selected 실행과 구분한다.
 
 E1은 실제 키즈카페의 목표 IP 카메라 구도에서 촬영한 성인 통제 재연 데이터로
 fine-tuning하고, 학습 참여자와 분리한 데이터로 평가했다.
@@ -192,12 +197,14 @@ fine-tuning하고, 학습 참여자와 분리한 데이터로 평가했다.
 | --- | ---: |
 | 동일 diagnostic의 E0 → E1 Recall | 6.25% → 93.75% |
 | 독립 참여자 test Recall / timely Recall | 93.3% / 93.3% |
-| 독립 참여자 test FAR / 중복 Event | 0.0/min / 0건 |
+| 독립 참여자 test FAR / 중복 Event | 0.0/min / 0건 (no-fall 27.2초) |
 | 주요 hard-negative 앉기 6편·줍기 7편 | false Event 0건 |
 
-위 결과로 E1을 Phase 4 목표 환경 모델로 채택했다. 평가는 고정 카메라 1대와
-통제된 성인 재연 범위이며, 장시간 RTSP와 다중 인원 Track·Cause는 별도 검증을
-계속한다. 상세 분할과 동결값은 `docs/fall_evaluation.md` 및
+위 결과로 E1을 Phase 4 목표 환경의 opt-in 모델로 채택했다. 다만 A01·A02
+diagnostic의 다중 인원 가림 영상에서 false Event 1건이 있었고, 전체 촬영
+no-fall 노출은 190.2초다. 장시간 RTSP의 걷기·앉기·줍기·눕기·가림·정지와 Cause
+정량 평가가 끝날 때까지 CLI 기본값은 비활성으로 유지한다. 상세 분할과 동결값은
+`docs/fall_evaluation.md` 및
 `configs/fall_e1_selected.json`을 따른다.
 
 Pose NORMAL gate와 interval `3`의 M1/MPS 단일 파일 steady-state 성능은 낙상 OFF
@@ -496,7 +503,7 @@ AI를 재시작해 변경 내용을 적용한다.
 | React Live View (영상 영역) | Done — Phase 3 (latest-frame polling) |
 | AlertHistory 실제 API 읽기 연동 | Done — Phase 3 |
 | WebSocket 실시간 push | Phase 4 이후 필요성 기반 재검토 |
-| FALL_SUSPECT 낙상 감지 | Done — Phase 4 E1 목표 환경 모델 채택 및 기본 활성화, A03 Recall·timely Recall 93.3%, FAR 0.0/min |
+| FALL_SUSPECT 낙상 감지 | Done — Phase 4 E1 목표 환경 opt-in 모델 채택, A03 Recall·timely Recall 93.3%, FAR 0.0/min |
 | FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 | Done — Phase 3 (근접·접근 근거 기반 PoC, 정량 정확도 미검증) |
 | Phase 4 계약·평가 프로토콜 | Done — Contract v1·`phase4_fall_eval_v1` 동결 |
 | 낙상 오탐 개선(hard-negative 재학습, 외부·촬영 데이터) | Done — Phase 4 E1 목표 환경 채택 |
@@ -547,7 +554,7 @@ Phase 4는 계약과 평가 프로토콜을 먼저 동결한 뒤 실제 촬영 �
 | ADR-021 | opt-in Pose NORMAL 추론 스케줄링 | 불확실 구간은 원래 경로를 유지하면서 안정적 정상 구간의 보조 모델 비용 절감 |
 | ADR-022 | Phase 4 계약·평가 프로토콜 선행 동결 | A/B/C 병렬 구현과 S9-10 holdout 오염 방지 |
 | ADR-023 | Homography 기본 비활성·조건부 채택 | 실제 Zone 정확도 개선과 운영 비용을 측정한 뒤 production 여부 결정 |
-| ADR-024 | 목표 카메라 E1 낙상 모델 채택 | 실제 키즈카페 actor-disjoint 평가를 근거로 기본 활성 프로파일 동결 |
+| ADR-024 | 목표 카메라 E1 낙상 모델 채택 | 실제 키즈카페 actor-disjoint 평가를 근거로 opt-in 프로파일 동결 |
 
 ---
 
