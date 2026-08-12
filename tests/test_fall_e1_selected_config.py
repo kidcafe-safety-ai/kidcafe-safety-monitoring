@@ -26,9 +26,12 @@ def test_selected_e1_freeze_matches_tracked_configs():
 
     assert payload["schema_version"] == "phase4_fall_e1_freeze_v1"
     assert payload["status"] == "selected_for_phase4_target_domain"
-    assert payload["default_enabled"] is True
+    assert payload["default_enabled"] is False
+    assert payload["activation_policy"] == (
+        "explicit_opt_in_pending_long_running_rtsp_and_cause_validation"
+    )
     assert payload["integrity_policy"] == (
-        "sha256_fail_closed_before_input_open"
+        "selected_inference_profile_fail_closed_before_input_open"
     )
 
     training = payload["training"]
@@ -59,6 +62,26 @@ def test_selected_e1_freeze_keeps_recorded_result_and_scope_explicit():
     assert payload["known_limitations"]
 
 
+def test_selected_e1_freeze_preserves_caucafall_reference_regression():
+    payload = json.loads(FREEZE_PATH.read_text(encoding="utf-8"))
+    development = payload["results"]["caucafall_development_reference"]
+    s7_s8 = payload["results"]["caucafall_s7_s8_reference"]
+
+    assert development["recall"] == 0.8333333333333334
+    assert development["timely_recall"] == 0.7
+    assert development["false_events"] == 0
+    assert development["false_alarm_per_min"] == 0.0
+    assert development["duplicate_events"] == 1
+    assert development["reference_gate_passed"] is False
+
+    assert s7_s8["recall"] == 1.0
+    assert s7_s8["timely_recall"] == 0.9
+    assert s7_s8["false_events"] == 5
+    assert s7_s8["false_alarm_per_min"] == 2.9197080291970807
+    assert s7_s8["duplicate_events"] == 0
+    assert s7_s8["reference_gate_passed"] is False
+
+
 def test_selected_e1_model_matches_hash_when_available():
     payload = json.loads(FREEZE_PATH.read_text(encoding="utf-8"))
     model = payload["model"]
@@ -78,8 +101,10 @@ def test_selected_e1_result_artifacts_match_hashes_when_available():
             result["artifact_sha256"],
         )
 
-    recorded_test = payload["results"]["recorded_a03_test"]
-    _assert_hash_when_available(
-        recorded_test["cache_manifest_path"],
-        recorded_test["cache_manifest_sha256"],
-    )
+    for result in payload["results"].values():
+        if "cache_manifest_path" not in result:
+            continue
+        _assert_hash_when_available(
+            result["cache_manifest_path"],
+            result["cache_manifest_sha256"],
+        )

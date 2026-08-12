@@ -2,8 +2,9 @@
   "schema_version": "phase4_fall_e1_freeze_v1",
   "frozen_at": "2026-08-10T23:54:13+09:00",
   "status": "selected_for_phase4_target_domain",
-  "default_enabled": true,
-  "integrity_policy": "sha256_fail_closed_before_input_open",
+  "default_enabled": false,
+  "activation_policy": "explicit_opt_in_pending_long_running_rtsp_and_cause_validation",
+  "integrity_policy": "selected_inference_profile_fail_closed_before_input_open",
   "deployment_scope": "target_kidcafe_camera",
   "selection_basis": "actor-disjoint A03 test captured in the target kidcafe camera geometry",
   "model": {
@@ -48,6 +49,32 @@
     "fall_cause_annotations_sha256": "318a16602bc194e796d5e89eb0ebf87a769eb31f8eae5c6a2d1aa9bf443d5f13"
   },
   "results": {
+    "caucafall_development_reference": {
+      "artifact_path": "outputs/fall_eval/phase4_e1_development_pose_normal_gate_interval3.json",
+      "artifact_sha256": "dab3e6b5e3a8f72fdbc6c7cab16b38099f2bd2f090e5c57f8c2bae0b9500bbac",
+      "cache_manifest_path": "outputs/fall_eval/cache/phase4_e1_development_pose_conf05_recorded_mps/manifest.json",
+      "cache_manifest_sha256": "294e6e7ac61a0bf7fa867db9e82dd7498be429bf66d85c85354ab7c17e1a221c",
+      "recall": 0.8333333333333334,
+      "timely_recall": 0.7,
+      "false_events": 0,
+      "false_alarm_per_min": 0.0,
+      "no_fall_exposure_sec": 292.35,
+      "duplicate_events": 1,
+      "reference_gate_passed": false
+    },
+    "caucafall_s7_s8_reference": {
+      "artifact_path": "outputs/fall_eval/phase4_e1_s7_s8_pose_normal_gate_interval3.json",
+      "artifact_sha256": "b061e648f5be992e46687bcf41947d5d01d2ef71bff4425457e9b3e704365525",
+      "cache_manifest_path": "outputs/fall_eval/cache/phase4_e1_s7_s8_pose_conf05_recorded_mps/manifest.json",
+      "cache_manifest_sha256": "39fe14e71868ecdbf81830532ead0e788d5cb0efb127a8f1e7bd51fed1bb283d",
+      "recall": 1.0,
+      "timely_recall": 0.9,
+      "false_events": 5,
+      "false_alarm_per_min": 2.9197080291970807,
+      "no_fall_exposure_sec": 102.75,
+      "duplicate_events": 0,
+      "reference_gate_passed": false
+    },
     "recorded_diagnostic": {
       "artifact_path": "outputs/phase4_recorded_eval/results/e1_diagnostic_actor_comparison.json",
       "artifact_sha256": "6e03ea7ca666b0957f8e2cfd4d84ab7475c5567b539d740999af2a1a931cf4fb",
@@ -82,8 +109,10 @@
     }
   },
   "known_limitations": [
-    "Evaluation covers controlled adult reenactments from one target camera setup; long-running RTSP and multi-person tracking remain separate validation scopes.",
-    "The selected default requires the external model artifact to match the frozen SHA-256.",
+    "Evaluation covers controlled adult reenactments from one target camera setup; long-running RTSP, cause attribution, and multi-person tracking remain separate validation scopes.",
+    "The selected profile is explicit opt-in until long-running target-camera no-fall and cause acceptance are complete.",
+    "CAUCAFall reference regression retained recall but exceeded the frozen S7-S8 FAR criterion and produced one Development duplicate event.",
+    "Selected mode requires the tracker model, fall detector config, auxiliary model, and inference settings to match the frozen profile.",
     "The single A03 miss had track coverage 0.34328358208955223."
   ],
   "evaluator_git_commit": "ae08f73d17c4637a8c2faa70b6235e58ca404022"

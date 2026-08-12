@@ -64,37 +64,18 @@ def test_cli_forwards_metrics_and_failure_paths(monkeypatch, tmp_path):
     source = MagicMock()
     fall_model_path = tmp_path / "fall_model.pt"
     fall_model_path.touch()
-    selected_model = tmp_path / "selected.pt"
-    selected_model.write_bytes(b"selected-model")
-    profile_path = tmp_path / "fall_e1_selected.json"
-    profile_path.write_text(
-        json.dumps(
-            {
-                "schema_version": "phase4_fall_e1_freeze_v1",
-                "status": "selected_for_phase4_target_domain",
-                "default_enabled": True,
-                "integrity_policy": "sha256_fail_closed_before_input_open",
-                "model": {
-                    "path": str(selected_model),
-                    "sha256": hashlib.sha256(
-                        selected_model.read_bytes()
-                    ).hexdigest(),
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
     monkeypatch.setattr(
         sys,
         "argv",
         [
             "src.main",
+            "--fall-detection-enabled",
+            "--fall-profile-mode",
+            "custom",
             "--metrics-output",
             "outputs/run/metrics.json",
             "--api-failed-events-output",
             "outputs/run/failures.jsonl",
-            "--fall-profile",
-            str(profile_path),
             "--fall-model-interval-frames",
             "3",
             "--fall-model-path",
