@@ -1,0 +1,30 @@
+[
+  {
+    "zone_id": "play_floor",
+    "name": "놀이 구역",
+    "type": "polygon",
+    "zone_type": "play",
+    "points": [
+      [
+        0.349492,
+        0.478341
+      ],
+      [
+        0.487092,
+        0.436622
+      ],
+      [
+        0.5967,
+        0.757837
+      ],
+      [
+        0.391908,
+        0.905615
+      ]
+    ],
+    "rules": {
+      "enter_alert": true,
+      "dwell_threshold_sec": 5
+    }
+  }
+]
