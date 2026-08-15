@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import logging
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import cv2
@@ -36,6 +39,11 @@ from src.visualization.video_overlay import VideoOverlayWriter
 LOGGER = logging.getLogger(__name__)
 
 _STATUS_UPDATE_INTERVAL_SEC = 2.0
+_DEFAULT_FALL_PROFILE_PATH = "configs/fall_e1_selected.json"
+_FALL_PROFILE_SCHEMA_VERSION = "phase4_fall_e1_freeze_v1"
+_FALL_PROFILE_INTEGRITY_POLICY = (
+    "selected_inference_profile_fail_closed_before_input_open"
+)
 
 
 def run_pipeline(
@@ -128,17 +136,16 @@ def run_pipeline_from_source(
             쓰지 않기 위함이다.
         live_frame_enabled: 지정 시 FastAPI PUT /live/frame으로 최신 frame을 전송한다.
             api_url이 필요하며, Event/CurrentStatus 전송과는 별도로 켜고 끌 수 있다.
-        fall_detection_enabled: FALL_SUSPECT 감지(FallPipeline)를 켤지 여부. 기본
-            False — Subject 7~8 진단에서 오탐 목표를 충족하지 못했으므로
-            (docs/fall_evaluation.md 참고) 명시적으로 켜야만 동작한다. 켜면
-            tracker도 PoseTracker로 바뀐다 — pose confirm 경로가
-            Track.keypoints를 필요로 하기 때문이다.
+        fall_detection_enabled: FALL_SUSPECT 감지(FallPipeline)를 켤지 여부.
+            함수 API와 CLI 모두 기본 False다. 명시적으로 켜면 pose confirm 경로에
+            필요한 Track.keypoints를 얻기 위해 PoseTracker를 사용한다.
         fall_model_path: fine-tuned fall/nofall 보조 모델 경로. None이면 모델 없이
             bbox+pose 규칙 기반 경로만 사용한다 (scripts/evaluate_fall.py와 동일 정책).
         fall_model_interval_frames: 보조 모델 실행 간격. pose normal gate가 없으면
             고정 간격이고, pose normal gate가 있으면 fallback 구간의 최대 간격이다.
         fall_pose_normal_gate_enabled: 안정적인 직립 Pose에서만 RGB 보조 모델을
-            건너뛰는 보수적 gate. 기본 False로 기존 경로를 유지한다.
+            건너뛰는 보수적 gate. 함수 API는 기본 False이고 CLI는 E1 채택값인
+            True를 사용한다.
         metrics_output_path: 지정 시 모델 초기화와 종료 flush를 제외한 frame-loop
             latency/FPS 지표를 JSON으로 저장한다. None이면 계측 파일을 만들지 않는다.
         api_failed_events_output_path: API 전송 최종 실패 Event를 기록할 JSONL 경로.
@@ -522,22 +529,47 @@ def main() -> None:
     )
 
     # 낙상 감지 (FALL_SUSPECT)
-    parser.add_argument(
+    fall_detection_group = parser.add_mutually_exclusive_group()
+    fall_detection_group.add_argument(
         "--fall-detection-enabled",
+        dest="fall_detection_enabled",
         action="store_true",
-        help="FallPipeline 기반 FALL_SUSPECT 감지를 켠다. 기본 비활성화 — "
-        "Subject 7~8 진단에서 오탐 목표를 미충족(자세한 내용은 "
-        "docs/fall_evaluation.md 참고).",
+        help="FallPipeline 기반 FALL_SUSPECT 감지를 명시적으로 켠다.",
     )
+    fall_detection_group.add_argument(
+        "--fall-detection-disabled",
+        dest="fall_detection_enabled",
+        action="store_false",
+        help="낙상 감지를 끄고 기존 경량 ByteTracker 경로를 사용한다.",
+    )
+    parser.set_defaults(fall_detection_enabled=False)
     parser.add_argument(
         "--fall-config",
         default="configs/fall_detection.json",
         help="FallDetectorConfig JSON 경로.",
     )
     parser.add_argument(
+        "--fall-profile",
+        default=_DEFAULT_FALL_PROFILE_PATH,
+        help="채택 모델·tracker·config·inference 설정을 담은 동결 profile manifest.",
+    )
+    parser.add_argument(
+        "--fall-profile-mode",
+        choices=("selected", "custom"),
+        default="selected",
+        help="selected=동결 profile 전체를 강제, custom=명시한 실험 설정으로 실행.",
+    )
+    parser.add_argument(
         "--fall-model-path",
         default=None,
-        help="fine-tuned fall/nofall 보조 모델 경로. 미지정 시 bbox+pose 규칙 기반만 사용.",
+        help="fine-tuned fall/nofall 보조 모델 경로. 미지정 시 --fall-profile의 "
+        "동결 모델을 사용한다.",
+    )
+    parser.add_argument(
+        "--fall-model-sha256",
+        default=None,
+        help="커스텀 --fall-model-path의 SHA-256. 동결 profile 모델은 "
+        "manifest 값을 사용한다.",
     )
     parser.add_argument("--fall-model-conf", type=float, default=0.5)
     parser.add_argument(
@@ -549,14 +581,23 @@ def main() -> None:
     parser.add_argument(
         "--fall-model-interval-frames",
         type=int,
-        default=1,
-        help="보조 fall/nofall 모델 실행 간격(frame). 1이면 매 frame 실행.",
+        default=3,
+        help="보조 fall/nofall 모델 실행 간격(frame). Phase 4 채택값은 3이다.",
     )
-    parser.add_argument(
+    pose_gate_group = parser.add_mutually_exclusive_group()
+    pose_gate_group.add_argument(
         "--fall-pose-normal-gate-enabled",
+        dest="fall_pose_normal_gate_enabled",
         action="store_true",
-        help="안정적인 직립 Pose에서 RGB 보조 모델 추론을 생략한다. 기본 비활성화.",
+        help="안정적인 직립 Pose에서 RGB 보조 모델 추론을 생략한다. Phase 4 기본값이다.",
     )
+    pose_gate_group.add_argument(
+        "--fall-pose-normal-gate-disabled",
+        dest="fall_pose_normal_gate_enabled",
+        action="store_false",
+        help="Pose NORMAL gate를 끄고 interval cadence만 사용한다.",
+    )
+    parser.set_defaults(fall_pose_normal_gate_enabled=True)
 
     # API 연동
     parser.add_argument(
@@ -624,6 +665,7 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+    _resolve_and_validate_cli_fall_model(args, parser)
     setup_logging(args.log_level)
 
     LOGGER.info("=" * 50)
@@ -659,6 +701,246 @@ def main() -> None:
         metrics_output_path=args.metrics_output,
         api_failed_events_output_path=args.api_failed_events_output,
     )
+
+
+def _resolve_and_validate_cli_fall_model(
+    args, parser: argparse.ArgumentParser
+) -> None:
+    """CLI 낙상 실행 계약을 입력 소스보다 먼저 fail-closed로 검증한다."""
+    if not args.fall_detection_enabled:
+        return
+
+    if args.fall_profile_mode == "custom":
+        _resolve_and_validate_custom_fall_model(args, parser)
+        return
+
+    profile = _load_selected_fall_profile(Path(args.fall_profile), parser)
+    _validate_selected_fall_inference(args, profile, parser)
+
+
+def _validate_selected_fall_inference(
+    args, profile: Dict[str, Any], parser: argparse.ArgumentParser
+) -> None:
+    """동결 profile의 전체 inference 경로와 CLI 값을 강제한다."""
+    selected_model = profile["model"]
+    selected_path = str(selected_model["path"])
+    selected_sha256 = _normalize_sha256(selected_model["sha256"], parser)
+
+    if args.fall_model_path is None:
+        args.fall_model_path = selected_path
+        expected_sha256 = selected_sha256
+    elif Path(args.fall_model_path).resolve() == Path(selected_path).resolve():
+        if args.fall_model_sha256 is not None:
+            explicit_sha256 = _normalize_sha256(args.fall_model_sha256, parser)
+            if explicit_sha256 != selected_sha256:
+                parser.error(
+                    "--fall-model-sha256이 동결 profile의 SHA-256과 다릅니다."
+                )
+        expected_sha256 = selected_sha256
+    else:
+        parser.error(
+            "selected mode에서는 --fall-model-path를 변경할 수 없습니다. "
+            "실험 설정은 --fall-profile-mode custom을 사용하세요."
+        )
+
+    _validate_file_sha256(
+        Path(args.fall_model_path), expected_sha256, "낙상 모델", parser
+    )
+    args.fall_model_sha256 = expected_sha256
+
+    inference = profile.get("inference")
+    if not isinstance(inference, dict):
+        parser.error("낙상 profile에 inference object가 필요합니다.")
+    if inference.get("tracker") != "pose":
+        parser.error("selected 낙상 profile의 tracker는 'pose'여야 합니다.")
+
+    tracker_path = _require_profile_string(
+        inference, "tracker_model", "inference", parser
+    )
+    tracker_sha256 = _normalize_sha256(
+        _require_profile_string(
+            inference, "tracker_model_sha256", "inference", parser
+        ),
+        parser,
+    )
+    if args.model is None:
+        args.model = tracker_path
+    elif Path(args.model).resolve() != Path(tracker_path).resolve():
+        parser.error(
+            "selected mode에서는 --model을 변경할 수 없습니다. "
+            "실험 설정은 --fall-profile-mode custom을 사용하세요."
+        )
+    _validate_file_sha256(Path(args.model), tracker_sha256, "tracker 모델", parser)
+
+    config_path = _require_profile_string(
+        inference, "fall_detector_config_path", "inference", parser
+    )
+    config_sha256 = _normalize_sha256(
+        _require_profile_string(
+            inference, "fall_detector_config_sha256", "inference", parser
+        ),
+        parser,
+    )
+    if Path(args.fall_config).resolve() != Path(config_path).resolve():
+        parser.error(
+            "selected mode에서는 --fall-config를 변경할 수 없습니다. "
+            "실험 설정은 --fall-profile-mode custom을 사용하세요."
+        )
+    _validate_file_sha256(
+        Path(args.fall_config), config_sha256, "낙상 detector config", parser
+    )
+
+    expected_values = {
+        "--conf": _require_profile_number(
+            inference, "tracker_confidence", "inference", parser
+        ),
+        "--fall-model-conf": _require_profile_number(
+            inference, "fall_model_confidence", "inference", parser
+        ),
+        "--fall-model-iou-threshold": _require_profile_number(
+            inference, "fall_model_iou_threshold", "inference", parser
+        ),
+    }
+    actual_values = {
+        "--conf": args.conf,
+        "--fall-model-conf": args.fall_model_conf,
+        "--fall-model-iou-threshold": args.fall_model_iou_threshold,
+    }
+    for option, expected in expected_values.items():
+        if actual_values[option] != expected:
+            parser.error(
+                f"selected mode의 {option} 값은 {expected}이어야 합니다. "
+                "실험 설정은 --fall-profile-mode custom을 사용하세요."
+            )
+
+    interval = inference.get("fall_model_interval_frames")
+    if isinstance(interval, bool) or not isinstance(interval, int) or interval <= 0:
+        parser.error(
+            "낙상 profile inference.fall_model_interval_frames가 유효하지 않습니다."
+        )
+    if args.fall_model_interval_frames != interval:
+        parser.error(
+            "selected mode의 --fall-model-interval-frames 값은 "
+            f"{interval}이어야 합니다."
+        )
+
+    pose_gate = inference.get("fall_pose_normal_gate_enabled")
+    if not isinstance(pose_gate, bool):
+        parser.error(
+            "낙상 profile inference.fall_pose_normal_gate_enabled가 "
+            "boolean이어야 합니다."
+        )
+    if args.fall_pose_normal_gate_enabled is not pose_gate:
+        parser.error(
+            "selected mode의 Pose NORMAL gate 설정이 동결 profile과 다릅니다."
+        )
+
+
+def _resolve_and_validate_custom_fall_model(
+    args, parser: argparse.ArgumentParser
+) -> None:
+    """Custom 실행은 selected profile과 구분하고 지정 모델만 무결성 검증한다."""
+    if args.fall_model_path is None:
+        if args.fall_model_sha256 is not None:
+            parser.error(
+                "--fall-model-sha256은 --fall-model-path와 함께 사용해야 합니다."
+            )
+        if args.fall_pose_normal_gate_enabled:
+            parser.error(
+                "--fall-pose-normal-gate-enabled 사용 시 --fall-model-path가 "
+                "필요합니다."
+            )
+        return
+    if args.fall_model_sha256 is None:
+        parser.error("커스텀 --fall-model-path에는 --fall-model-sha256이 필요합니다.")
+    expected_sha256 = _normalize_sha256(args.fall_model_sha256, parser)
+    _validate_file_sha256(
+        Path(args.fall_model_path), expected_sha256, "커스텀 낙상 모델", parser
+    )
+    args.fall_model_sha256 = expected_sha256
+
+
+def _load_selected_fall_profile(
+    profile_path: Path, parser: argparse.ArgumentParser
+) -> Dict[str, Any]:
+    """동결 profile의 최소 실행 계약을 fail-closed로 읽는다."""
+    try:
+        payload = json.loads(profile_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        parser.error(f"낙상 profile을 읽을 수 없습니다: {profile_path}: {exc}")
+
+    if not isinstance(payload, dict):
+        parser.error(f"낙상 profile은 JSON object여야 합니다: {profile_path}")
+    if payload.get("schema_version") != _FALL_PROFILE_SCHEMA_VERSION:
+        parser.error(
+            "지원하지 않는 낙상 profile schema입니다: "
+            f"{payload.get('schema_version')!r}"
+        )
+    if payload.get("status") != "selected_for_phase4_target_domain":
+        parser.error("채택 상태가 아닌 낙상 profile은 기본 실행에 사용할 수 없습니다.")
+    if not isinstance(payload.get("default_enabled"), bool):
+        parser.error("낙상 profile default_enabled는 boolean이어야 합니다.")
+    if payload.get("integrity_policy") != _FALL_PROFILE_INTEGRITY_POLICY:
+        parser.error("지원하지 않는 낙상 profile 무결성 정책입니다.")
+
+    model = payload.get("model")
+    if not isinstance(model, dict):
+        parser.error("낙상 profile에 model object가 필요합니다.")
+    if not isinstance(model.get("path"), str) or not model["path"].strip():
+        parser.error("낙상 profile model.path가 유효하지 않습니다.")
+    if not isinstance(model.get("sha256"), str):
+        parser.error("낙상 profile model.sha256이 유효하지 않습니다.")
+    return payload
+
+
+def _require_profile_string(
+    payload: Dict[str, Any], key: str, section: str, parser: argparse.ArgumentParser
+) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        parser.error(f"낙상 profile {section}.{key}가 유효하지 않습니다.")
+    return value
+
+
+def _require_profile_number(
+    payload: Dict[str, Any], key: str, section: str, parser: argparse.ArgumentParser
+) -> float:
+    value = payload.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        parser.error(f"낙상 profile {section}.{key}가 숫자여야 합니다.")
+    return float(value)
+
+
+def _validate_file_sha256(
+    path: Path, expected_sha256: str, label: str, parser: argparse.ArgumentParser
+) -> None:
+    if not path.is_file():
+        parser.error(f"{label} 파일을 찾을 수 없습니다: {str(path)!r}")
+    actual_sha256 = _file_sha256(path)
+    if actual_sha256 != expected_sha256:
+        parser.error(
+            f"{label} SHA-256이 일치하지 않습니다: "
+            f"expected={expected_sha256}, actual={actual_sha256}"
+        )
+
+
+def _normalize_sha256(value: str, parser: argparse.ArgumentParser) -> str:
+    """SHA-256 문자열을 검증하고 소문자로 정규화한다."""
+    normalized = value.strip().lower()
+    if len(normalized) != 64 or any(
+        character not in "0123456789abcdef" for character in normalized
+    ):
+        parser.error(f"유효하지 않은 SHA-256입니다: {value!r}")
+    return normalized
+
+
+def _file_sha256(path: Path) -> str:
+    """큰 모델 파일을 메모리에 올리지 않고 SHA-256을 계산한다."""
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _build_source(args) -> InputSource:

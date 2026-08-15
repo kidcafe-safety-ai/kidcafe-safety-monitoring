@@ -10,6 +10,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -18,6 +22,46 @@ import pytest
 import src.main as main_module
 from src.common.types import Event
 from src.main import run_pipeline_from_source
+
+
+def _write_selected_fall_profile(tmp_path, model_path, sha256=None):
+    profile_path = tmp_path / "fall_e1_selected.json"
+    digest = sha256 or hashlib.sha256(model_path.read_bytes()).hexdigest()
+    tracker_path = tmp_path / "tracker.pt"
+    tracker_path.write_bytes(b"tracker-model")
+    tracker_sha256 = hashlib.sha256(tracker_path.read_bytes()).hexdigest()
+    fall_config_path = (
+        Path(main_module.__file__).resolve().parents[1]
+        / "configs/fall_detection.json"
+    )
+    config_sha256 = hashlib.sha256(fall_config_path.read_bytes()).hexdigest()
+    profile_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "phase4_fall_e1_freeze_v1",
+                "status": "selected_for_phase4_target_domain",
+                "default_enabled": False,
+                "integrity_policy": (
+                    "selected_inference_profile_fail_closed_before_input_open"
+                ),
+                "model": {"path": str(model_path), "sha256": digest},
+                "inference": {
+                    "tracker": "pose",
+                    "tracker_model": str(tracker_path),
+                    "tracker_model_sha256": tracker_sha256,
+                    "tracker_confidence": 0.5,
+                    "fall_model_confidence": 0.5,
+                    "fall_model_iou_threshold": 0.3,
+                    "fall_detector_config_path": str(fall_config_path),
+                    "fall_detector_config_sha256": config_sha256,
+                    "fall_model_interval_frames": 3,
+                    "fall_pose_normal_gate_enabled": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return profile_path
 
 
 def _make_mock_source(frame_count: int = 1):
@@ -74,7 +118,7 @@ def _make_fall_event() -> Event:
     )
 
 
-class TestFallDetectionDisabledByDefault:
+class TestFallDetectionDisabledProgrammaticDefault:
     def test_fall_pipeline_not_constructed_when_disabled(self):
         patcher, _, _ = _patch_pipeline_internals()
 
@@ -305,3 +349,253 @@ class TestFallDetectionEnabled:
         (written_events,), _ = mock_writer.write_batch.call_args
         assert zone_event in written_events
         assert fall_event in written_events
+
+
+class TestFallCliDefaults:
+    def test_cli_is_opt_in_by_default(self, monkeypatch):
+        source = MagicMock()
+        monkeypatch.setattr(sys, "argv", ["src.main", "--frames-limit", "1"])
+
+        with patch.object(
+            main_module, "_build_source", return_value=source
+        ), patch.object(main_module, "run_pipeline_from_source") as mock_run:
+            main_module.main()
+
+        _, kwargs = mock_run.call_args
+        assert kwargs["fall_detection_enabled"] is False
+        assert kwargs["fall_model_path"] is None
+
+    def test_cli_uses_selected_phase4_fall_profile_when_enabled(
+        self, monkeypatch, tmp_path
+    ):
+        source = MagicMock()
+        model_path = tmp_path / "selected.pt"
+        model_path.write_bytes(b"selected-model")
+        profile_path = _write_selected_fall_profile(tmp_path, model_path)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "src.main",
+                "--fall-detection-enabled",
+                "--fall-profile",
+                str(profile_path),
+                "--frames-limit",
+                "1",
+            ],
+        )
+
+        with patch.object(
+            main_module, "_build_source", return_value=source
+        ), patch.object(main_module, "run_pipeline_from_source") as mock_run:
+            main_module.main()
+
+        _, kwargs = mock_run.call_args
+        assert kwargs["fall_detection_enabled"] is True
+        assert kwargs["fall_model_path"] == str(model_path)
+        assert kwargs["fall_model_interval_frames"] == 3
+        assert kwargs["fall_pose_normal_gate_enabled"] is True
+
+    def test_cli_can_disable_selected_phase4_fall_profile(self, monkeypatch):
+        source = MagicMock()
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["src.main", "--fall-detection-disabled", "--frames-limit", "1"],
+        )
+
+        with patch.object(main_module, "_build_source", return_value=source), patch.object(
+            main_module, "run_pipeline_from_source"
+        ) as mock_run:
+            main_module.main()
+
+        _, kwargs = mock_run.call_args
+        assert kwargs["fall_detection_enabled"] is False
+
+    def test_cli_rejects_missing_fall_model_before_opening_source(
+        self, monkeypatch, tmp_path
+    ):
+        missing_model = tmp_path / "missing.pt"
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "src.main",
+                "--fall-detection-enabled",
+                "--fall-profile-mode",
+                "custom",
+                "--fall-model-path",
+                str(missing_model),
+                "--fall-model-sha256",
+                "0" * 64,
+            ],
+        )
+
+        with patch.object(main_module, "_build_source") as mock_build_source, pytest.raises(
+            SystemExit
+        ):
+            main_module.main()
+
+        mock_build_source.assert_not_called()
+
+    def test_cli_rejects_selected_model_hash_mismatch_before_opening_source(
+        self, monkeypatch, tmp_path
+    ):
+        model_path = tmp_path / "selected.pt"
+        model_path.write_bytes(b"tampered-model")
+        profile_path = _write_selected_fall_profile(
+            tmp_path, model_path, sha256="0" * 64
+        )
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "src.main",
+                "--fall-detection-enabled",
+                "--fall-profile",
+                str(profile_path),
+            ],
+        )
+
+        with patch.object(main_module, "_build_source") as mock_build_source, pytest.raises(
+            SystemExit
+        ):
+            main_module.main()
+
+        mock_build_source.assert_not_called()
+
+    def test_cli_rejects_missing_profile_before_opening_source(
+        self, monkeypatch, tmp_path
+    ):
+        missing_profile = tmp_path / "missing.json"
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "src.main",
+                "--fall-detection-enabled",
+                "--fall-profile",
+                str(missing_profile),
+            ],
+        )
+
+        with patch.object(main_module, "_build_source") as mock_build_source, pytest.raises(
+            SystemExit
+        ):
+            main_module.main()
+
+        mock_build_source.assert_not_called()
+
+    def test_cli_rejects_custom_model_without_sha256(
+        self, monkeypatch, tmp_path
+    ):
+        custom_model = tmp_path / "custom.pt"
+        custom_model.write_bytes(b"custom-model")
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "src.main",
+                "--fall-detection-enabled",
+                "--fall-profile-mode",
+                "custom",
+                "--fall-model-path",
+                str(custom_model),
+            ],
+        )
+
+        with patch.object(main_module, "_build_source") as mock_build_source, pytest.raises(
+            SystemExit
+        ):
+            main_module.main()
+
+        mock_build_source.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "override",
+        [
+            ["--conf", "0.6"],
+            ["--fall-model-conf", "0.6"],
+            ["--fall-model-iou-threshold", "0.4"],
+            ["--fall-model-interval-frames", "2"],
+            ["--fall-pose-normal-gate-disabled"],
+        ],
+    )
+    def test_cli_rejects_selected_profile_inference_override_before_source(
+        self, monkeypatch, tmp_path, override
+    ):
+        model_path = tmp_path / "selected.pt"
+        model_path.write_bytes(b"selected-model")
+        profile_path = _write_selected_fall_profile(tmp_path, model_path)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "src.main",
+                "--fall-detection-enabled",
+                "--fall-profile",
+                str(profile_path),
+                *override,
+            ],
+        )
+
+        with patch.object(main_module, "_build_source") as mock_build_source, pytest.raises(
+            SystemExit
+        ):
+            main_module.main()
+
+        mock_build_source.assert_not_called()
+
+    def test_cli_rejects_selected_tracker_hash_mismatch_before_source(
+        self, monkeypatch, tmp_path
+    ):
+        model_path = tmp_path / "selected.pt"
+        model_path.write_bytes(b"selected-model")
+        profile_path = _write_selected_fall_profile(tmp_path, model_path)
+        payload = json.loads(profile_path.read_text(encoding="utf-8"))
+        payload["inference"]["tracker_model_sha256"] = "0" * 64
+        profile_path.write_text(json.dumps(payload), encoding="utf-8")
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "src.main",
+                "--fall-detection-enabled",
+                "--fall-profile",
+                str(profile_path),
+            ],
+        )
+
+        with patch.object(main_module, "_build_source") as mock_build_source, pytest.raises(
+            SystemExit
+        ):
+            main_module.main()
+
+        mock_build_source.assert_not_called()
+
+    def test_cli_rejects_selected_config_hash_mismatch_before_source(
+        self, monkeypatch, tmp_path
+    ):
+        model_path = tmp_path / "selected.pt"
+        model_path.write_bytes(b"selected-model")
+        profile_path = _write_selected_fall_profile(tmp_path, model_path)
+        payload = json.loads(profile_path.read_text(encoding="utf-8"))
+        payload["inference"]["fall_detector_config_sha256"] = "0" * 64
+        profile_path.write_text(json.dumps(payload), encoding="utf-8")
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "src.main",
+                "--fall-detection-enabled",
+                "--fall-profile",
+                str(profile_path),
+            ],
+        )
+
+        with patch.object(main_module, "_build_source") as mock_build_source, pytest.raises(
+            SystemExit
+        ):
+            main_module.main()
+
+        mock_build_source.assert_not_called()

@@ -108,6 +108,51 @@ def _supplement(tmp_path: Path, split_role: str = "train_candidate") -> Path:
     return root
 
 
+def _recorded_supplement(tmp_path: Path, actor_id: str = "A01") -> Path:
+    root = tmp_path / "recorded_supplement"
+    samples = [
+        (f"p4_{actor_id}_fall_f00010", 1),
+        (f"p4_{actor_id}_sit_f00010", 0),
+    ]
+    rows = []
+    for sample_id, class_id in samples:
+        _sample(root, "train", sample_id, class_id)
+        image = root / "images/train" / f"{sample_id}.png"
+        label = root / "labels/train" / f"{sample_id}.txt"
+        rows.append(
+            {
+                "sample_id": sample_id,
+                "video_id": sample_id,
+                "image_path": f"images/train/{sample_id}.png",
+                "label_path": f"labels/train/{sample_id}.txt",
+                "image_sha256": _sha256(image),
+                "label_sha256": _sha256(label),
+            }
+        )
+    frames_path = root / "frames.csv"
+    with frames_path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    (root / "supplement_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "phase4_recorded_e1_frame_supplement_v1",
+                "purpose": "train-only Phase 4 recorded E1 supplement",
+                "source_split_role": "diagnostic",
+                "training_actor_ids": [actor_id],
+                "class_mapping": {"0": "nofall", "1": "fall"},
+                "class_counts": {"nofall": 1, "fall": 1},
+                "sources": {"source_dataset": "phase4_recorded_2026_08_07"},
+                "frame_count": 2,
+                "frames_csv_sha256": _sha256(frames_path),
+            }
+        ),
+        encoding="utf-8",
+    )
+    return root
+
+
 def test_builds_balanced_replay_without_copying_images(tmp_path):
     base = _base_dataset(tmp_path)
     supplement = _supplement(tmp_path)
@@ -120,6 +165,8 @@ def test_builds_balanced_replay_without_copying_images(tmp_path):
         "base_train_nofall_available": 4,
         "base_train_nofall_selected": 2,
         "real_rgb_nofall": 1,
+        "real_rgb_fall": 0,
+        "supplement_training_entries": 1,
         "train_total": 5,
         "val_total": 2,
     }
@@ -146,6 +193,13 @@ def test_balanced_sampling_covers_each_available_group(tmp_path):
         (1, "walk"),
         (2, "sit_down"),
     }
+
+
+def test_nofall_group_accepts_prefall_frame_from_fall_activity():
+    assert builder._nofall_group("S1_fall_backwards_cas100001") == (
+        1,
+        "fall_backwards",
+    )
 
 
 def test_rejects_validation_supplement(tmp_path):
@@ -194,4 +248,45 @@ def test_rejects_fall_class_in_hard_negative_supplement(tmp_path):
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     with pytest.raises(builder.DatasetBuildError, match="nofall"):
+        builder.build_dataset(base, [supplement], tmp_path / "variant", 1.0, False)
+
+
+def test_accepts_recorded_a01_mixed_class_supplement(tmp_path):
+    base = _base_dataset(tmp_path)
+    supplement = _recorded_supplement(tmp_path)
+
+    manifest = builder.build_dataset(
+        base, [supplement], tmp_path / "variant", 1.0, False
+    )
+
+    assert manifest["counts"]["real_rgb_nofall"] == 1
+    assert manifest["counts"]["real_rgb_fall"] == 1
+    assert manifest["counts"]["supplement_training_entries"] == 2
+    assert manifest["counts"]["train_total"] == 6
+
+
+def test_repeats_only_recorded_supplement_for_domain_weighting(tmp_path):
+    base = _base_dataset(tmp_path)
+    recorded = _recorded_supplement(tmp_path)
+
+    manifest = builder.build_dataset(
+        base,
+        [recorded],
+        tmp_path / "variant",
+        1.0,
+        False,
+        recorded_supplement_repeat=3,
+    )
+
+    assert manifest["counts"]["real_rgb_nofall"] == 1
+    assert manifest["counts"]["real_rgb_fall"] == 1
+    assert manifest["counts"]["supplement_training_entries"] == 6
+    assert manifest["counts"]["train_total"] == 10
+
+
+def test_rejects_recorded_a02_training_supplement(tmp_path):
+    base = _base_dataset(tmp_path)
+    supplement = _recorded_supplement(tmp_path, actor_id="A02")
+
+    with pytest.raises(builder.DatasetBuildError, match="A01"):
         builder.build_dataset(base, [supplement], tmp_path / "variant", 1.0, False)

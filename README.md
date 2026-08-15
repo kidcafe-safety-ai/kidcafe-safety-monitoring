@@ -15,15 +15,15 @@ Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
 KidCafe Safety AI는 YOLO + ByteTrack + Geofencing 기반으로 위험구역 진입 및 장시간 체류를 감지하는 Vision AI 안전 모니터링 시스템이다.
 
-**현재 상태: `v0.3.0-safety` 기준 Phase 4 시작, Contract v1·평가 프로토콜 동결**
+**현재 상태: Phase 4 실제 키즈카페 촬영 기반 낙상 감지 고도화 완료**
 
-현재 구현 기준(`v0.3.0-safety`):
+현재 구현 기준(`v0.3.0-safety` 이후):
 
 ```text
 Webcam / RTSP / File   ← 로컬 실행
 → YOLO26n + ByteTrack / PoseTracker
 → ENTER / DWELL / EXIT / ENTER_RESTRICTED / DANGER_ZONE_DWELL 이벤트
-→ FallPipeline → FALL_SUSPECT (opt-in) + optional cause(NEARBY_TRACK)
+→ FallPipeline → FALL_SUSPECT + optional cause(NEARBY_TRACK)
 → AsyncEventDispatcher (비차단 전송, API 장애 시 로컬 보존)
 → FastAPI POST /events + PUT /status/current + Live Frame  ← Docker 실행 가능
 → SQLite 저장                                              ← Docker volume
@@ -32,8 +32,11 @@ Webcam / RTSP / File   ← 로컬 실행
 
 검증 환경:
 
-- macOS: 내장 웹캠 + Docker Compose (FastAPI·React·SQLite)
-- Windows: USB C920 웹캠 + Docker Compose
+- macOS: 내장 웹캠 + Docker Compose (FastAPI·React·SQLite), Phase 4 E1 MPS E2E
+- Windows: USB C920 웹캠 + Docker Compose (Phase 2.5 baseline)
+
+Phase 4 E1 실행 코드는 Windows의 CPU/CUDA와 일반 파일 경로를 지원한다. 현재
+E1 모델의 Windows 장비 E2E는 별도 최종 검증 대상으로 남아 있다.
 
 > Streamlit 대시보드는 MVP 검증용으로 사용되었으며 현재는 비활성 상태다.
 > React Dashboard (`frontend/`)는 REST polling 기반 운영 UI다. Docker frontend는 시연·검증용 Vite dev server로 운영 배포 구성은 아니다.
@@ -44,7 +47,7 @@ Webcam / RTSP / File   ← 로컬 실행
 
 ### 권장 환경
 - Python 3.10.x
-- macOS / Windows / Ubuntu tested
+- macOS / Windows / Ubuntu 지원
 
 ### 1. 환경 셋업
 
@@ -55,11 +58,18 @@ cd kidcafe-safety-monitoring
 
 # 가상환경 생성 (Python 3.10 권장)
 python3.10 -m venv .venv
-source .venv/bin/activate          # macOS/Linux
-# .venv\Scripts\activate           # Windows
+source .venv/bin/activate
 
 # 패키지 설치
 pip install -r requirements.txt
+```
+
+Windows PowerShell:
+
+```powershell
+py -3.10 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
 ### 2. 테스트 영상 준비
@@ -67,17 +77,26 @@ pip install -r requirements.txt
 - 권장 해상도: 1920x1080 또는 1280x720
 - 권장 길이: 10-30초
 
+기본 CLI는 낙상 감지를 비활성화한 경량 경로를 사용한다. Phase 4 E1 낙상 모델은
+제출·배포 패키지에서 별도 제공하며, `--fall-detection-enabled`를 명시한 경우에만
+동결된 selected profile로 실행한다.
+
 ### 3. 실행
 
 ```bash
-# 파일 영상 (기본)
+# 파일 영상 (기본 경량 실행, 낙상 감지 OFF)
 python -m src.main --source-type file --source data/videos/test.mp4
+
+# Phase 4 E1 selected profile 실행 (모델 artifact 필요)
+python -m src.main \
+  --source-type file \
+  --source data/videos/test.mp4 \
+  --fall-detection-enabled
 
 # 웹캠 실시간
 python -m src.main \
   --source-type webcam \
   --source 0 \
-  --model yolo26n.pt \
   --infer-device auto \
   --width 640 --height 480 \
   --frames-limit 300 \
@@ -88,7 +107,6 @@ python -m src.main \
   --source-type rtsp \
   --source rtsp://user:pass@192.168.1.10/stream \
   --rtsp-alias camera_01 \
-  --model yolo26n.pt \
   --infer-device auto
 
 # API 서버 포함 실행
@@ -102,17 +120,23 @@ python -m src.main \
 python -m src.main --help
 ```
 
-#### FALL_SUSPECT opt-in PoC 실행
+Windows PowerShell 기본 smoke 실행:
 
-낙상 감지는 기본 비활성화다. 아래처럼 `--fall-detection-enabled`를 명시할 때만
-PoseTracker와 `FallPipeline`을 사용한다.
+```powershell
+python -m src.main --source-type file --source data/videos/test.mp4 --fall-detection-disabled
+```
+
+#### FALL_SUSPECT 실행
+
+Phase 4 목표 키즈카페 구도에서 채택한 E1 낙상 모델은 명시적으로 활성화해
+사용한다. Selected mode는 PoseTracker, interval `3`, Pose NORMAL gate와 관련
+파일 SHA-256을 동결 프로파일대로 강제한다.
 
 ```bash
 python -m src.main \
   --source-type file \
   --source data/videos/test.mp4 \
   --fall-detection-enabled \
-  --fall-model-path outputs/fall_training/models/fall_detector_v1.pt \
   --api-url http://localhost:8000 \
   --live-frame-enabled
 
@@ -120,47 +144,72 @@ python -m src.main \
 python -m src.main \
   --source-type file \
   --source data/videos/test.mp4 \
-  --infer-device mps \
   --fall-detection-enabled \
-  --fall-model-path outputs/fall_training/models/fall_detector_v1.pt \
+  --infer-device mps \
   --fall-model-device mps \
-  --fall-model-interval-frames 3 \
-  --fall-pose-normal-gate-enabled
+  --api-url http://localhost:8000 \
+  --live-frame-enabled
+
+# 기본 경량 실행(낙상 감지 OFF)
+python -m src.main \
+  --source-type file \
+  --source data/videos/test.mp4
 ```
 
 | 옵션 | 설명 |
 |------|------|
-| `--fall-detection-enabled` | `FALL_SUSPECT` PoC를 명시적으로 활성화한다. 미지정 시 기존 `yolo26n.pt` + ByteTracker 경로를 유지한다. |
-| `--fall-model-path` | fine-tuned `fall`/`nofall` 보조 detector 경로. 미지정 시 bbox+pose 규칙만 사용한다. |
+| `--fall-detection-enabled` / `--fall-detection-disabled` | 기본 비활성인 `FALL_SUSPECT` 경로를 명시적으로 켜거나 끈다. 끄면 `yolo26n.pt` + ByteTracker 경로를 사용한다. |
+| `--fall-profile` | 채택 모델·tracker·config·inference 설정을 담은 동결 manifest. 기본값은 `configs/fall_e1_selected.json`이다. |
+| `--fall-profile-mode` | `selected`는 동결 profile 전체를 강제하고, `custom`은 profile과 구분된 실험 실행에 사용한다. |
+| `--fall-model-path` | `selected` mode에서는 동결 모델과 일치해야 한다. 다른 보조 detector는 `custom` mode에서 지정한다. |
+| `--fall-model-sha256` | `custom` mode에서 보조 모델을 지정할 때 필요한 SHA-256이다. |
 | `--fall-config` | 낙상 상태머신 설정 파일. 기본값은 `configs/fall_detection.json`이다. |
 | `--fall-model-conf` / `--fall-model-iou-threshold` | 보조 detector confidence와 Track 매칭 IoU 임계값이다. 기본값은 각각 `0.5`, `0.3`이다. |
 | `--fall-model-device` | 보조 detector 실행 장치. `auto`, `mps`, `cuda`, `cpu` 중 하나이며 기본값은 `auto`다. |
-| `--fall-model-interval-frames` | 보조 detector 실행 간격이다. 기본값 `1`은 매 frame 실행이며, Pose NORMAL gate와 함께 검증한 최적화 값은 `3`이다. |
-| `--fall-pose-normal-gate-enabled` | 모든 active Track이 안정적인 직립 Pose일 때 보조 detector 추론을 생략한다. 불확실하거나 하강·비정상 자세인 Track이 하나라도 있으면 즉시 보조 경로를 사용한다. 기본 비활성이다. |
+| `--fall-model-interval-frames` | 보조 detector 실행 간격이다. 기본값과 Phase 4 채택값은 `3`이다. |
+| `--fall-pose-normal-gate-enabled` / `--fall-pose-normal-gate-disabled` | 모든 active Track이 안정적인 직립 Pose일 때 보조 detector 추론을 생략하는 gate를 켜거나 끈다. 기본 활성이다. |
 
-`fall_detector_v1.pt`는 Git에 포함하지 않으며, 로컬 보관 위치는
-`outputs/fall_training/models/fall_detector_v1.pt`다. 팀 공유본은 Google Drive
-`kidcafe-data/fall-training/`에 보관한다. 파일을 받은 뒤에는 아래 SHA-256으로
-동일한 모델인지 확인한다.
+`fall_detector_phase4_e1.pt`는 Git에 포함하지 않고 제출·배포 패키지의 모델
+artifact로 별도 제공한다. 로컬 경로는
+`outputs/fall_training/models/fall_detector_phase4_e1.pt`다. 파일을 받은 뒤에는
+아래 SHA-256으로 동일한 모델인지 확인한다.
 
 ```bash
-shasum -a 256 outputs/fall_training/models/fall_detector_v1.pt
-# 5985d5a24db8b69bf0d231644a4c7a71f6a1143724ed7df2be6d669373c83da7
+shasum -a 256 outputs/fall_training/models/fall_detector_phase4_e1.pt
+# 41701c4686212447271f4dd81b71a14704b76cb9f38fe1c727d446477fbdd28b
 ```
 
-Annotation V2와 Track handoff 안정화 이후, runtime 최적화 전 Subject 7-8
-진단 결과는 Recall 100%, timely Recall 90%, false alarm 2.34/min, 중복 Event
-0건이었다. 오탐 목표를 충족하지 못했고 이 split을 진단에 사용했으므로,
-현재는 **선택적 PoC**다. 실제 키즈카페/IP 카메라 hard-negative 검증과
-Subject 9-10 holdout 평가 전에는 기본 활성화하지 않는다.
+Windows PowerShell:
 
-Pose NORMAL gate와 보조 detector interval `3`을 함께 사용한 opt-in 프로파일은
-Development Recall 83.3%·timely Recall 66.7%·false alarm 0/min을 유지했고,
-Subject 7-8 진단의 false alarm을 2.34→1.75/min으로 줄였다. M1/MPS 동일 파일을
-OFF/ON 각각 3회 측정한 steady-state 중앙값은 낙상 OFF 14.571 FPS, 최적화 ON
-13.511 FPS로 하락률 7.3%를 기록했다. tuning split·단일 파일 결과이므로 다른
-하드웨어나 실제 카메라 성능을 보장하지 않으며, 기능과 최적화 옵션은 모두
-기본 비활성으로 유지한다.
+```powershell
+Get-FileHash outputs/fall_training/models/fall_detector_phase4_e1.pt -Algorithm SHA256
+```
+
+Selected mode는 입력 소스를 열기 전에 tracker 모델·낙상 detector config·보조
+모델의 경로와 SHA-256, confidence·IoU·interval·Pose gate 설정을 동결 manifest와
+대조한다. 누락, hash 불일치 또는 설정 override가 있으면 실행을 중단한다. 다른
+실험 설정은 `--fall-profile-mode custom`으로 selected 실행과 구분한다.
+
+E1은 실제 키즈카페의 목표 IP 카메라 구도에서 촬영한 성인 통제 재연 데이터로
+fine-tuning하고, 학습 참여자와 분리한 데이터로 평가했다.
+
+| 평가 항목 | 결과 |
+| --- | ---: |
+| 동일 diagnostic의 E0 → E1 Recall | 6.25% → 93.75% |
+| 독립 참여자 test Recall / timely Recall | 93.3% / 93.3% |
+| 독립 참여자 test FAR / 중복 Event | 0.0/min / 0건 (no-fall 27.2초) |
+| 주요 hard-negative 앉기 6편·줍기 7편 | false Event 0건 |
+
+위 결과로 E1을 Phase 4 목표 환경의 opt-in 모델로 채택했다. 다만 A01·A02
+diagnostic의 다중 인원 가림 영상에서 false Event 1건이 있었고, 전체 촬영
+no-fall 노출은 190.2초다. 장시간 RTSP의 걷기·앉기·줍기·눕기·가림·정지와 Cause
+정량 평가가 끝날 때까지 CLI 기본값은 비활성으로 유지한다. 상세 분할과 동결값은
+`docs/fall_evaluation.md` 및
+`configs/fall_e1_selected.json`을 따른다.
+
+Pose NORMAL gate와 interval `3`의 M1/MPS 단일 파일 steady-state 성능은 낙상 OFF
+14.571 FPS, ON 13.511 FPS로 하락률 7.3%였다. 다른 장치와 장시간 RTSP 환경은
+Phase 4 E2E에서 계속 확인한다.
 
 > 기본 Ultralytics YOLO 모델 파일(`*.pt`)은 Git에 포함하지 않는다. 최초 실행 시 자동 다운로드되며, 다운로드된 `.pt` 파일은 `.gitignore`에 의해 추적되지 않는다. fine-tuned 낙상 보조 모델은 위 공유 위치에서 별도로 받아야 한다.
 > Phase 2 기본 모델은 `yolo26n.pt`이며, `yolov8n.pt`는 MVP baseline/fallback으로 유지한다.
@@ -263,7 +312,7 @@ kidcafe-safety-monitoring/
 │   ├── tracking/            # YOLO + ByteTrack
 │   ├── geofencing/          # Zone 판정
 │   ├── events/              # 상태머신 (ENTER/EXIT/DWELL, ENTER_RESTRICTED, DANGER_ZONE_DWELL)
-│   ├── safety/              # 낙상 상태머신·FallCauseAttributor·PoseNormalGate (FALL_SUSPECT opt-in PoC)
+│   ├── safety/              # 낙상 상태머신·FallCauseAttributor·PoseNormalGate
 │   ├── integrations/        # AsyncEventDispatcher, EventApiClient, Live Frame 비차단 전송
 │   ├── visualization/       # 결과 영상/차트 legacy 유틸 (Streamlit app/pages 종료)
 │   └── main.py              # 파이프라인 진입점
@@ -454,10 +503,10 @@ AI를 재시작해 변경 내용을 적용한다.
 | React Live View (영상 영역) | Done — Phase 3 (latest-frame polling) |
 | AlertHistory 실제 API 읽기 연동 | Done — Phase 3 |
 | WebSocket 실시간 push | Phase 4 이후 필요성 기반 재검토 |
-| FALL_SUSPECT 낙상 PoC | Done — Phase 3 (opt-in PoC 및 M1/MPS runtime 최적화 완료, S7-8 tuning/diagnostic FAR 1.75/min으로 운영 목표 미달 — 상세는 `docs/fall_evaluation.md` 12절 참고) |
+| FALL_SUSPECT 낙상 감지 | Done — Phase 4 E1 목표 환경 opt-in 모델 채택, A03 Recall·timely Recall 93.3%, FAR 0.0/min |
 | FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 | Done — Phase 3 (근접·접근 근거 기반 PoC, 정량 정확도 미검증) |
 | Phase 4 계약·평가 프로토콜 | Done — Contract v1·`phase4_fall_eval_v1` 동결 |
-| 낙상 오탐 개선(hard-negative 재학습, 외부·촬영 데이터) | Phase 4 E1 |
+| 낙상 오탐 개선(hard-negative 재학습, 외부·촬영 데이터) | Done — Phase 4 E1 목표 환경 채택 |
 | 경량 temporal classifier | E1과 실제 촬영 결과가 조건을 충족할 때만 검토 |
 | BoT-SORT / StrongSORT / ReID | 실제 Event 오류를 유발하는 ID switch가 반복될 때만 검토 |
 | Homography floor-plane Zone | Phase 4 기본 비활성 PoC |
@@ -505,6 +554,7 @@ Phase 4는 계약과 평가 프로토콜을 먼저 동결한 뒤 실제 촬영 �
 | ADR-021 | opt-in Pose NORMAL 추론 스케줄링 | 불확실 구간은 원래 경로를 유지하면서 안정적 정상 구간의 보조 모델 비용 절감 |
 | ADR-022 | Phase 4 계약·평가 프로토콜 선행 동결 | A/B/C 병렬 구현과 S9-10 holdout 오염 방지 |
 | ADR-023 | Homography 기본 비활성·조건부 채택 | 실제 Zone 정확도 개선과 운영 비용을 측정한 뒤 production 여부 결정 |
+| ADR-024 | 목표 카메라 E1 낙상 모델 채택 | 실제 키즈카페 actor-disjoint 평가를 근거로 opt-in 프로파일 동결 |
 
 ---
 
@@ -532,8 +582,8 @@ Phase 4는 계약과 평가 프로토콜을 먼저 동결한 뒤 실제 촬영 �
 | track_id 자주 변경 | ReID 없음 | 실제 Event 오류를 유발하면 Phase 4에서 BoT-SORT부터 조건부 비교 |
 | 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | handoff로 해결되지 않는 Event 오류가 반복될 때만 ReID 후속 검토 |
 | ENTER/EXIT 경계 흔들림 | zone 경계 foot_point 진동 | Phase 3에서 temporal hysteresis 적용 완료, 실제 카메라 재튜닝은 Phase 4 |
-| 낙상 opt-in 처리량 비용 | PoseTracker와 보조 detector를 함께 실행 | Phase 3에서 Pose NORMAL gate+interval 3으로 MPS 파일 경로 개선 완료, 다른 장치·API E2E 재검증은 Phase 4 |
-| 낙상 오탐(S7-8 tuning/diagnostic FAR 1.75/min, 목표 0.2/min 미달) | 보조 모델이 앉기·무릎 꿇기를 일부 오분류 | Phase 4 E1 hard-negative·외부 데이터 검증, 동일 문제가 실제 촬영에서도 남을 때만 temporal classifier 검토 |
+| 낙상 처리량 비용 | PoseTracker와 보조 detector를 함께 실행 | Pose NORMAL gate+interval 3을 기본 적용하고 다른 장치·API E2E를 계속 검증 |
+| 카메라 구도별 성능 차이 | 구도·행동 분포 차이 | 실제 키즈카페 A03 기준 E1을 채택하고 다른 구도는 별도 검증 |
 | 알림 조치 상태·리포트·설정 저장 미연동 | 조치 API 미구현, 일부 화면 Mock | Phase 4에서 Zone·Report를 연동하고 알림 조치 저장은 후속 범위 유지 |
 > 상세 분석: [`docs/tracking_analysis.md`](docs/tracking_analysis.md)
 

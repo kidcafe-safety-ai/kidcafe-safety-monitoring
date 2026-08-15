@@ -1,0 +1,32 @@
+{
+  "model": "outputs/fall_training/models/fall_detector_v1.pt",
+  "task": "detect",
+  "data": "outputs/phase4_recorded_eval/e1_training/dataset/dataset.yaml",
+  "classes": ["nofall", "fall"],
+  "imgsz": 640,
+  "epochs": 30,
+  "patience": 8,
+  "seed": 42,
+  "device": "0",
+  "project": "outputs/phase4_recorded_eval/e1_training/runs",
+  "name": "fall_detector_recorded_e1",
+  "train_args": {
+    "optimizer": "AdamW",
+    "batch": 16,
+    "lr0": 0.0005,
+    "lrf": 0.01,
+    "freeze": 10,
+    "weight_decay": 0.0005,
+    "warmup_epochs": 1.0,
+    "close_mosaic": 5,
+    "mosaic": 0.2,
+    "mixup": 0.0,
+    "degrees": 5.0,
+    "translate": 0.1,
+    "scale": 0.2,
+    "fliplr": 0.5,
+    "deterministic": true,
+    "amp": true,
+    "workers": 1
+  }
+}

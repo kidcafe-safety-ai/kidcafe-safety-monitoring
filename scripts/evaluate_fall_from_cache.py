@@ -35,14 +35,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import fall_signal_cache as cache  # noqa: E402
+import phase4_recording_contract as recording_contract  # noqa: E402
 from scripts import fall_evaluation_protocol as evaluation_protocol  # noqa: E402
 from evaluate_fall import (  # noqa: E402
     _AnnotationRow,
     _VideoResult,
     _summarize,
     find_excluded_rows,
+    find_excluded_recorded_rows,
     guard_holdout,
     load_annotations,
+    load_recorded_annotations,
     resolve_video_path,
     score_video_from_frame_source,
     validate_annotations,
@@ -146,11 +149,45 @@ class CachedAdaptiveAuxiliaryCadence:
         return held_detections, False
 
 
+def summarize_recorded_primary_actors(
+    results: List[_VideoResult],
+    recordings_manifest_path: str | Path,
+    split: str,
+) -> dict[str, dict]:
+    """직접 촬영 split 결과를 primary actor별로 같은 공식으로 요약한다."""
+    manifest_rows = recording_contract.load_recordings_manifest(
+        recordings_manifest_path
+    )
+    actor_by_video = {
+        row["video_id"]: row["primary_actor_id"]
+        for row in manifest_rows
+        if row["split_role"] == split
+    }
+    result_ids = {result.video_id for result in results}
+    if result_ids != set(actor_by_video):
+        raise ValueError(
+            "직접 촬영 actor 집계의 manifest와 평가 video_id가 다릅니다."
+        )
+
+    grouped: dict[str, List[_VideoResult]] = {}
+    for result in results:
+        actor_id = actor_by_video[result.video_id]
+        grouped.setdefault(actor_id, []).append(result)
+    return {
+        actor_id: _summarize(grouped[actor_id])
+        for actor_id in sorted(grouped)
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--annotations", required=True, help="annotation CSV 경로")
+    parser.add_argument(
+        "--recordings-manifest",
+        help="Phase 4 직접 촬영 recordings_manifest.csv 경로",
+    )
     parser.add_argument("--cache-dir", required=True, help="scripts/cache_fall_signals.py 출력")
     parser.add_argument(
         "--split",
@@ -375,6 +412,7 @@ def _build_cache_protocol_metadata(
             "auxiliary_model": auxiliary_meta["resolved_device"],
             "evaluation": "cache_replay",
         },
+        dataset_provenance=manifest.get("dataset"),
     )
 
 
@@ -396,16 +434,34 @@ def main() -> None:
             args.early_tolerance_sec,
             args.timely_window_sec,
             args.include_unreviewed,
+            recordings_manifest_path=args.recordings_manifest,
+            split=args.split,
         )
     except (OSError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
 
     config = FallDetectorConfig.from_file(args.config)
     try:
-        rows = load_annotations(args.annotations, include_unreviewed=args.include_unreviewed)
-        excluded_rows = find_excluded_rows(
-            args.annotations, include_unreviewed=args.include_unreviewed
-        )
+        if args.recordings_manifest:
+            rows = load_recorded_annotations(
+                args.annotations,
+                args.recordings_manifest,
+                args.split,
+                args.include_unreviewed,
+            )
+            excluded_rows = find_excluded_recorded_rows(
+                args.annotations,
+                args.recordings_manifest,
+                args.split,
+                args.include_unreviewed,
+            )
+        else:
+            rows = load_annotations(
+                args.annotations, include_unreviewed=args.include_unreviewed
+            )
+            excluded_rows = find_excluded_rows(
+                args.annotations, include_unreviewed=args.include_unreviewed
+            )
         if not rows:
             raise ValueError("평가할 annotation 행이 없습니다 (review_status='reviewed' 확인).")
         validate_annotations(rows)
@@ -423,7 +479,21 @@ def main() -> None:
         )
     if annotation_schema_version is not None:
         try:
-            evaluation_protocol.validate_official_cache_manifest(manifest)
+            expected_dataset_provenance = None
+            if args.recordings_manifest:
+                expected_dataset_provenance = (
+                    evaluation_protocol.build_dataset_provenance(
+                        annotation_schema_version=annotation_schema_version,
+                        annotations_path=args.annotations,
+                        recordings_manifest_path=args.recordings_manifest,
+                        split=args.split,
+                        video_count=len(rows),
+                    )
+                )
+            evaluation_protocol.validate_official_cache_manifest(
+                manifest,
+                expected_dataset_provenance=expected_dataset_provenance,
+            )
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
     if args.split and args.split != manifest["split"]:
@@ -475,6 +545,15 @@ def main() -> None:
             pose_gate_stats_by_video[row.video_id] = video_pose_gate_stats.to_dict()
 
     summary = _summarize(results)
+    if args.recordings_manifest:
+        try:
+            summary["primary_actor_metrics"] = summarize_recorded_primary_actors(
+                results,
+                args.recordings_manifest,
+                args.split,
+            )
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
     summary.update(protocol_metadata)
     summary["split"] = args.split or cache_dir.name
     summary["run_config"] = {
@@ -482,6 +561,7 @@ def main() -> None:
         "cache_dir": str(cache_dir),
         "config_path": args.config,
         "annotations_path": args.annotations,
+        "recordings_manifest_path": args.recordings_manifest,
         "early_tolerance_sec": args.early_tolerance_sec,
         "timely_window_sec": args.timely_window_sec,
         "fall_model_iou_threshold": args.fall_model_iou_threshold,

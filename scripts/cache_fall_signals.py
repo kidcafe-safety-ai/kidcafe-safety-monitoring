@@ -40,6 +40,7 @@ import fall_evaluation_protocol as evaluation_protocol  # noqa: E402
 from evaluate_fall import (  # noqa: E402
     guard_holdout,
     load_annotations,
+    load_recorded_annotations,
     resolve_video_path,
     validate_annotations,
 )
@@ -69,8 +70,16 @@ def parse_args() -> argparse.Namespace:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--annotations", required=True, help="annotation CSV 경로")
+    parser.add_argument(
+        "--recordings-manifest",
+        help="Phase 4 직접 촬영 recordings_manifest.csv 경로",
+    )
     parser.add_argument("--videos-dir", required=True, help="video_path의 기준 디렉터리")
-    parser.add_argument("--split", default="", help="development | validation | holdout")
+    parser.add_argument(
+        "--split",
+        default="",
+        help="development | validation | diagnostic | holdout | test",
+    )
     parser.add_argument(
         "--tracker", default="pose", choices=["bbox", "pose"], help="evaluate_fall.py와 동일"
     )
@@ -86,6 +95,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--force", action="store_true", help="이미 캐시된 video_id도 다시 추론해 덮어쓴다."
     )
+    evaluation_protocol.add_cli_argument(parser)
     return parser.parse_args()
 
 
@@ -160,11 +170,30 @@ def main() -> None:
     cache_dir = Path(args.cache_dir)
 
     try:
-        rows = load_annotations(args.annotations, include_unreviewed=args.include_unreviewed)
+        annotation_schema_version = evaluation_protocol.validate_protocol_request(
+            args.evaluation_protocol_version,
+            args.annotations,
+            evaluation_protocol.EARLY_TOLERANCE_SEC,
+            evaluation_protocol.TIMELY_WINDOW_SEC,
+            args.include_unreviewed,
+            recordings_manifest_path=args.recordings_manifest,
+            split=args.split,
+        )
+        if args.recordings_manifest:
+            rows = load_recorded_annotations(
+                args.annotations,
+                args.recordings_manifest,
+                args.split,
+                args.include_unreviewed,
+            )
+        else:
+            rows = load_annotations(
+                args.annotations, include_unreviewed=args.include_unreviewed
+            )
         if not rows:
             raise ValueError("캐싱할 annotation 행이 없습니다 (review_status='reviewed' 확인).")
         validate_annotations(rows)
-    except ValueError as exc:
+    except (OSError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
 
     guard_holdout(videos_dir, args.split, rows, args.allow_holdout)
@@ -207,11 +236,22 @@ def main() -> None:
             "resolved_device": auxiliary_resolved_device,
         }
 
+    dataset_provenance = None
+    if annotation_schema_version is not None:
+        dataset_provenance = evaluation_protocol.build_dataset_provenance(
+            annotation_schema_version=annotation_schema_version,
+            annotations_path=args.annotations,
+            recordings_manifest_path=args.recordings_manifest,
+            split=args.split,
+            video_count=len(rows),
+        )
+
     manifest = cache.build_manifest(
         split=args.split,
         videos_dir=str(videos_dir.resolve()),
         tracker_meta=tracker_meta,
         auxiliary_meta=auxiliary_meta,
+        dataset_provenance=dataset_provenance,
     )
     existing_manifest = cache.read_manifest(cache_dir)
     manifest_changed = existing_manifest is not None and existing_manifest != manifest

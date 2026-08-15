@@ -8,9 +8,10 @@ FallDetector 상태머신의 책임이다.
 
 지연 로딩: __init__은 모델을 로드하지 않는다. `enabled=False`면 `infer()`가
 항상 빈 리스트를 반환하고 모델 파일에 접근조차 하지 않는다 — 보조 모델이
-없는 배포 환경(main.py --fall-detection-enabled 미지정 등)에서 무거운
-모델 로딩 비용을 아예 지불하지 않기 위함이다. `enabled=True`면 첫 `infer()`
-호출에서 파일 존재·클래스 계약을 검증하고 로드 후 warm-up한다.
+없는 함수 API 경로에서 무거운 모델 로딩 비용을 아예 지불하지 않기 위함이다.
+CLI에서는 `--fall-detection-disabled`로 낙상 경로 전체를 끌 수 있다.
+`enabled=True`면 첫 `infer()` 호출에서 파일 존재·클래스 계약을 검증하고 로드 후
+warm-up한다.
 
 클래스 계약: 모델의 `names`가 정확히 `{0: "nofall", 1: "fall"}`이어야
 한다. 다르면(순서가 바뀌었거나 클래스 이름이 다르면) 조용히 진행하지 않고

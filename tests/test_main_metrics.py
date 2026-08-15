@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from unittest.mock import MagicMock, patch
@@ -59,19 +60,28 @@ def test_pipeline_writes_frame_loop_metrics(tmp_path):
     assert payload["steady_state"]["processed_frames"] == 0
 
 
-def test_cli_forwards_metrics_and_failure_paths(monkeypatch):
+def test_cli_forwards_metrics_and_failure_paths(monkeypatch, tmp_path):
     source = MagicMock()
+    fall_model_path = tmp_path / "fall_model.pt"
+    fall_model_path.touch()
     monkeypatch.setattr(
         sys,
         "argv",
         [
             "src.main",
+            "--fall-detection-enabled",
+            "--fall-profile-mode",
+            "custom",
             "--metrics-output",
             "outputs/run/metrics.json",
             "--api-failed-events-output",
             "outputs/run/failures.jsonl",
             "--fall-model-interval-frames",
             "3",
+            "--fall-model-path",
+            str(fall_model_path),
+            "--fall-model-sha256",
+            hashlib.sha256(fall_model_path.read_bytes()).hexdigest(),
             "--fall-pose-normal-gate-enabled",
             "--frames-limit",
             "600",

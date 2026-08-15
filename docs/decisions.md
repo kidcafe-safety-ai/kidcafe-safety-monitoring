@@ -902,3 +902,53 @@ Phase 4에서는 A의 낙상 평가, B의 Event·Zone API, C의 Report·Zone UI�
 
 측정 수치·판정 근거·다음 촬영 보완 사항은
 [docs/homography_calibration.md](homography_calibration.md) 7절에 있다.
+
+---
+
+## ADR-024: 목표 카메라 E1 낙상 모델 채택과 opt-in 운영
+
+**Date**: 2026-08-11
+**Status**: Accepted
+
+### Context
+
+Phase 3 낙상 모델은 8월 7일 실제 키즈카페 목표 IP 카메라 구도에서 촬영한
+E0의 Recall이 6.25%였다. 주요 원인은 후보 진입이 아니라 카메라 구도 차이로
+인한 보조 detector 확정 실패였다.
+
+### Decision
+
+- 실제 키즈카페에서 성인이 통제 재연한 A01 frame으로 fine-tuning한 E1을
+  목표 카메라의 낙상 모델로 채택한다.
+- 학습에 사용하지 않은 A02 diagnostic과 actor-disjoint A03 test로 목표 환경
+  성능을 검증한다.
+- 동일 A01·A02 diagnostic에서 Recall이 E0 6.25%에서 E1 93.75%로 개선됐다.
+- A03에서 Recall 93.3%, timely Recall 93.3%, FAR 0.0/min, 중복 Event 0건을
+  확인한 E1을 목표 환경의 selected profile로 동결한다.
+- A03 no_fall은 줍기 3편·27.2초이고 A01·A02 diagnostic에는 다중 인원 가림
+  false Event 1건이 있다. 장시간 RTSP와 Cause 평가 전까지 CLI 기본값은
+  비활성으로 유지하고 `--fall-detection-enabled`로 명시적으로 켠다.
+- Selected profile은 PoseTracker, 보조 모델 interval `3`, Pose NORMAL gate를
+  사용한다. profile과 다른 실험은 custom run으로 구분한다.
+- 목표 환경 모델의 채택 판단은 실제 키즈카페 카메라의 actor-disjoint 평가를
+  따른다.
+- 모델 파일은 Git에 포함하지 않고 SHA-256과 동결 manifest로 동일성을 확인한다.
+- CLI selected mode는 입력 소스를 열기 전에 tracker 모델·낙상 config·보조 모델
+  SHA-256과 confidence·IoU·interval·Pose gate를 검증하고, 불일치하면 실행을
+  중단한다. 커스텀 실행은 별도 mode와 모델 SHA-256을 사용한다.
+- CAUCAFall은 초기 구현용 공개 데이터의 참고 회귀로 보존한다. E1에서 Development
+  Recall 83.3%·timely Recall 70%·FAR 0.0/min을 기록했지만 중복 Event 1건이 있었고,
+  S7-8은 Recall 100%·timely Recall 90%와 false Event 5건(FAR 2.9197/min)을
+  기록해 기존 참고 회귀 기준을 통과하지 못했다.
+
+### Consequences
+
+- 기본 실행은 낙상 기능을 끈 경량 경로를 사용한다. E1을 명시적으로 활성화한
+  selected mode는 동결 artifact와 inference 설정 불일치를 fail-closed로 중단한다.
+- A03 no_fall은 주요 오탐 행동인 줍기 3편, 27.2초이며 false Event는 0건이다.
+  앉기는 A01·A02 diagnostic 6편에서 false Event 0건을 확인했지만,
+  actor-disjoint 앉기와 장시간 정상 행동 검증은 계속한다.
+- 장시간 RTSP에서 걷기·앉기·줍기·눕기·가림·정지 동작과 Cause·ID switch를
+  검증한 뒤 기본 ON 전환을 별도 PR에서 판단한다.
+- 동일 환경 E0·E1 각 3회 측정 FPS 중앙값 비교로 하락률 -0.5%(개선)를 확인해
+  FPS 채택 기준을 충족했다(`docs/fall_evaluation.md` §14.15).
