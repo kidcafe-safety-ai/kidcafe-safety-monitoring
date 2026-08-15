@@ -77,21 +77,21 @@ python -m pip install -r requirements.txt
 - 권장 해상도: 1920x1080 또는 1280x720
 - 권장 길이: 10-30초
 
-기본 CLI는 Phase 4 E1 낙상 모델을 사용한다. 제출·배포 패키지의 모델 artifact를
-`outputs/fall_training/models/fall_detector_phase4_e1.pt`에 배치한다. 모델 없이
-입력·Zone 경로만 확인할 때는 `--fall-detection-disabled`를 사용한다.
+기본 CLI는 낙상 감지를 비활성화한 경량 경로를 사용한다. Phase 4 E1 낙상 모델은
+제출·배포 패키지에서 별도 제공하며, `--fall-detection-enabled`를 명시한 경우에만
+동결된 selected profile로 실행한다.
 
 ### 3. 실행
 
 ```bash
-# 파일 영상 (E1 모델 준비 후 기본 실행)
+# 파일 영상 (기본 경량 실행, 낙상 감지 OFF)
 python -m src.main --source-type file --source data/videos/test.mp4
 
-# E1 모델 없이 입력·Zone 경로 확인
+# Phase 4 E1 selected profile 실행 (모델 artifact 필요)
 python -m src.main \
   --source-type file \
   --source data/videos/test.mp4 \
-  --fall-detection-disabled
+  --fall-detection-enabled
 
 # 웹캠 실시간
 python -m src.main \

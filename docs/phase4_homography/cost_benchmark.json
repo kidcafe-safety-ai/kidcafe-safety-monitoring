@@ -1,0 +1,43 @@
+{
+  "tracks_per_frame": 3,
+  "frames": 2000,
+  "repeats": 5,
+  "baseline": {
+    "median_ms_per_frame": 0.06478920100001062,
+    "min_ms_per_frame": 0.06327328049999892,
+    "max_ms_per_frame": 0.06515964700000154,
+    "samples_ms_per_frame": [
+      0.06468826999999067,
+      0.06515964700000154,
+      0.06478920100001062,
+      0.0649335889999918,
+      0.06327328049999892
+    ]
+  },
+  "homography": {
+    "median_ms_per_frame": 0.0835755299999903,
+    "min_ms_per_frame": 0.08300378650000084,
+    "max_ms_per_frame": 0.10097113400000524,
+    "samples_ms_per_frame": [
+      0.10097113400000524,
+      0.0835755299999903,
+      0.08326362200000403,
+      0.08300378650000084,
+      0.08458349549999866
+    ]
+  },
+  "added_latency_ms_per_frame": 0.018786328999979673,
+  "added_latency_ms_per_frame_min": 0.019730506000001924,
+  "thresholds": {
+    "max_added_latency_ms_per_frame": 1.0
+  },
+  "passes_added_latency": true,
+  "fps_drop": {
+    "measurement_type": "estimated",
+    "is_official": false,
+    "assumed_baseline_fps": 25.0,
+    "estimated_candidate_fps": 24.98826405625752,
+    "estimated_fps_drop_ratio": 0.0004694377496991819,
+    "note": "계약의 FPS 하락률은 두 경로를 같은 영상·같은 조건으로 실행해 얻은 실측 FPS로 계산해야 한다. 이 값은 microbenchmark의 추가 비용을 frame 예산에 더해 역산한 추정치이므로 공식 판정에 쓰지 않는다."
+  }
+}

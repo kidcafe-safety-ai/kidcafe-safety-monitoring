@@ -1,0 +1,1415 @@
+{
+  "unit_cm": 1.0,
+  "clip_count": 5,
+  "clips": [
+    "cam01_clip00_orig_picked",
+    "cam01_clip01_picked",
+    "cam01_img7327_picked",
+    "cam01_img7328_picked",
+    "cam01_img7329_picked"
+  ],
+  "fit_mode": "loo-all",
+  "is_official": false,
+  "fit_selection_rule": "보조 진단: target 점을 제외한 전부로 최소자승",
+  "contract": {
+    "required_holdout_positions": 10,
+    "required_observations": 20,
+    "meets_contract": true
+  },
+  "overall": {
+    "observation_count": 50,
+    "position_count": 10,
+    "point_ids": [
+      "P01",
+      "P02",
+      "P03",
+      "P04",
+      "P05",
+      "P06",
+      "P07",
+      "P08",
+      "P09",
+      "P10"
+    ],
+    "mean_m": 0.013710501,
+    "p95_m": 0.033556312,
+    "max_m": 0.037575493
+  },
+  "interpolation": {
+    "observation_count": 20,
+    "position_count": 4,
+    "point_ids": [
+      "P03",
+      "P05",
+      "P06",
+      "P07"
+    ],
+    "mean_m": 0.012524429,
+    "p95_m": 0.019596241,
+    "max_m": 0.020509062
+  },
+  "extrapolation": {
+    "observation_count": 30,
+    "position_count": 6,
+    "point_ids": [
+      "P01",
+      "P02",
+      "P04",
+      "P08",
+      "P09",
+      "P10"
+    ],
+    "mean_m": 0.014501216,
+    "p95_m": 0.035381047,
+    "max_m": 0.037575493
+  },
+  "per_clip": {
+    "cam01_clip00_orig_picked": {
+      "observation_count": 10,
+      "position_count": 10,
+      "point_ids": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "mean_m": 0.012565837,
+      "p95_m": 0.02299701,
+      "max_m": 0.028419526
+    },
+    "cam01_clip01_picked": {
+      "observation_count": 10,
+      "position_count": 10,
+      "point_ids": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "mean_m": 0.014821831,
+      "p95_m": 0.031505704,
+      "max_m": 0.037575493
+    },
+    "cam01_img7327_picked": {
+      "observation_count": 10,
+      "position_count": 10,
+      "point_ids": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "mean_m": 0.013040101,
+      "p95_m": 0.025630068,
+      "max_m": 0.03240272
+    },
+    "cam01_img7328_picked": {
+      "observation_count": 10,
+      "position_count": 10,
+      "point_ids": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "mean_m": 0.013854499,
+      "p95_m": 0.028318411,
+      "max_m": 0.036101773
+    },
+    "cam01_img7329_picked": {
+      "observation_count": 10,
+      "position_count": 10,
+      "point_ids": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "mean_m": 0.014270238,
+      "p95_m": 0.027771777,
+      "max_m": 0.03450016
+    }
+  },
+  "observations": [
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P01",
+      "fit_points": [
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.06,
+        0.18
+      ],
+      "predicted_m": [
+        0.053112591,
+        0.178780568
+      ],
+      "error_m": 0.006994527,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P02",
+      "fit_points": [
+        "P01",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.19,
+        0.09
+      ],
+      "predicted_m": [
+        0.189060997,
+        0.087375397
+      ],
+      "error_m": 0.00278752,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P03",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.13,
+        0.36
+      ],
+      "predicted_m": [
+        0.137540872,
+        0.357390175
+      ],
+      "error_m": 0.00797972,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P04",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.4,
+        0.31
+      ],
+      "predicted_m": [
+        0.416363123,
+        0.310456573
+      ],
+      "error_m": 0.016369491,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P05",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.32,
+        0.48
+      ],
+      "predicted_m": [
+        0.304884486,
+        0.481898713
+      ],
+      "error_m": 0.015234299,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P06",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.08,
+        0.56
+      ],
+      "predicted_m": [
+        0.088423644,
+        0.561568136
+      ],
+      "error_m": 0.008568362,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P07",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.21,
+        0.73
+      ],
+      "predicted_m": [
+        0.201731261,
+        0.716896873
+      ],
+      "error_m": 0.015493999,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P08",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.44,
+        0.67
+      ],
+      "predicted_m": [
+        0.450154138,
+        0.680371982
+      ],
+      "error_m": 0.014514976,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P09",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "expected_m": [
+        0.05,
+        0.82
+      ],
+      "predicted_m": [
+        0.045072384,
+        0.84798907
+      ],
+      "error_m": 0.028419526,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip00_orig_picked",
+      "point_id": "P10",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "expected_m": [
+        0.36,
+        0.17
+      ],
+      "predicted_m": [
+        0.352554188,
+        0.175565484
+      ],
+      "error_m": 0.009295953,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P01",
+      "fit_points": [
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.06,
+        0.18
+      ],
+      "predicted_m": [
+        0.052486391,
+        0.177000698
+      ],
+      "error_m": 0.008090126,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P02",
+      "fit_points": [
+        "P01",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.19,
+        0.09
+      ],
+      "predicted_m": [
+        0.188753989,
+        0.087822486
+      ],
+      "error_m": 0.002508807,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P03",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.13,
+        0.36
+      ],
+      "predicted_m": [
+        0.137689995,
+        0.360258508
+      ],
+      "error_m": 0.007694339,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P04",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.4,
+        0.31
+      ],
+      "predicted_m": [
+        0.415637755,
+        0.309450295
+      ],
+      "error_m": 0.015647414,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P05",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.32,
+        0.48
+      ],
+      "predicted_m": [
+        0.30559011,
+        0.481750366
+      ],
+      "error_m": 0.014515809,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P06",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.08,
+        0.56
+      ],
+      "predicted_m": [
+        0.088753527,
+        0.561991608
+      ],
+      "error_m": 0.008977235,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P07",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.21,
+        0.73
+      ],
+      "predicted_m": [
+        0.201609623,
+        0.711285748
+      ],
+      "error_m": 0.020509062,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P08",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.44,
+        0.67
+      ],
+      "predicted_m": [
+        0.453309727,
+        0.690075813
+      ],
+      "error_m": 0.024087073,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P09",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "expected_m": [
+        0.05,
+        0.82
+      ],
+      "predicted_m": [
+        0.042073286,
+        0.856729891
+      ],
+      "error_m": 0.037575493,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_clip01_picked",
+      "point_id": "P10",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "expected_m": [
+        0.36,
+        0.17
+      ],
+      "predicted_m": [
+        0.353092269,
+        0.175144522
+      ],
+      "error_m": 0.008612947,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7327_picked",
+      "point_id": "P01",
+      "fit_points": [
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.06,
+        0.18
+      ],
+      "predicted_m": [
+        0.051884322,
+        0.178573935
+      ],
+      "error_m": 0.008240017,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7327_picked",
+      "point_id": "P02",
+      "fit_points": [
+        "P01",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.19,
+        0.09
+      ],
+      "predicted_m": [
+        0.188800671,
+        0.088944446
+      ],
+      "error_m": 0.00159768,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7327_picked",
+      "point_id": "P03",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.13,
+        0.36
+      ],
+      "predicted_m": [
+        0.138603474,
+        0.357127723
+      ],
+      "error_m": 0.009070267,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_img7327_picked",
+      "point_id": "P04",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.4,
+        0.31
+      ],
+      "predicted_m": [
+        0.41732561,
+        0.310963536
+      ],
+      "error_m": 0.017352382,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7327_picked",
+      "point_id": "P05",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.32,
+        0.48
+      ],
+      "predicted_m": [
+        0.304174542,
+        0.483249357
+      ],
+      "error_m": 0.016155601,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_img7327_picked",
+      "point_id": "P06",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.08,
+        0.56
+      ],
+      "predicted_m": [
+        0.088114803,
+        0.560164519
+      ],
+      "error_m": 0.00811647,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_img7327_picked",
+      "point_id": "P07",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.21,
+        0.73
+      ],
+      "predicted_m": [
+        0.201995971,
+        0.715684176
+      ],
+      "error_m": 0.016401442,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_img7327_picked",
+      "point_id": "P08",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.44,
+        0.67
+      ],
+      "predicted_m": [
+        0.448614159,
+        0.679805918
+      ],
+      "error_m": 0.013052194,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7327_picked",
+      "point_id": "P09",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "expected_m": [
+        0.05,
+        0.82
+      ],
+      "predicted_m": [
+        0.044626893,
+        0.851954123
+      ],
+      "error_m": 0.03240272,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7327_picked",
+      "point_id": "P10",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "expected_m": [
+        0.36,
+        0.17
+      ],
+      "predicted_m": [
+        0.352807903,
+        0.173531253
+      ],
+      "error_m": 0.00801224,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7328_picked",
+      "point_id": "P01",
+      "fit_points": [
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.06,
+        0.18
+      ],
+      "predicted_m": [
+        0.052822025,
+        0.17883594
+      ],
+      "error_m": 0.007271751,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7328_picked",
+      "point_id": "P02",
+      "fit_points": [
+        "P01",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.19,
+        0.09
+      ],
+      "predicted_m": [
+        0.188658976,
+        0.087652281
+      ],
+      "error_m": 0.002703725,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7328_picked",
+      "point_id": "P03",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.13,
+        0.36
+      ],
+      "predicted_m": [
+        0.137686844,
+        0.359134602
+      ],
+      "error_m": 0.007735405,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_img7328_picked",
+      "point_id": "P04",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.4,
+        0.31
+      ],
+      "predicted_m": [
+        0.418014969,
+        0.312287423
+      ],
+      "error_m": 0.018159609,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7328_picked",
+      "point_id": "P05",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.32,
+        0.48
+      ],
+      "predicted_m": [
+        0.305701188,
+        0.481031888
+      ],
+      "error_m": 0.014335997,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_img7328_picked",
+      "point_id": "P06",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.08,
+        0.56
+      ],
+      "predicted_m": [
+        0.088187256,
+        0.560108462
+      ],
+      "error_m": 0.008187975,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_img7328_picked",
+      "point_id": "P07",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.21,
+        0.73
+      ],
+      "predicted_m": [
+        0.200660106,
+        0.713677932
+      ],
+      "error_m": 0.018805412,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_img7328_picked",
+      "point_id": "P08",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.44,
+        0.67
+      ],
+      "predicted_m": [
+        0.449258782,
+        0.683531807
+      ],
+      "error_m": 0.016396184,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7328_picked",
+      "point_id": "P09",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "expected_m": [
+        0.05,
+        0.82
+      ],
+      "predicted_m": [
+        0.044549262,
+        0.855687918
+      ],
+      "error_m": 0.036101773,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7328_picked",
+      "point_id": "P10",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "expected_m": [
+        0.36,
+        0.17
+      ],
+      "predicted_m": [
+        0.35196197,
+        0.173696264
+      ],
+      "error_m": 0.008847163,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7329_picked",
+      "point_id": "P01",
+      "fit_points": [
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.06,
+        0.18
+      ],
+      "predicted_m": [
+        0.052562927,
+        0.179999193
+      ],
+      "error_m": 0.007437073,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7329_picked",
+      "point_id": "P02",
+      "fit_points": [
+        "P01",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.19,
+        0.09
+      ],
+      "predicted_m": [
+        0.189639183,
+        0.08645191
+      ],
+      "error_m": 0.00356639,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7329_picked",
+      "point_id": "P03",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.13,
+        0.36
+      ],
+      "predicted_m": [
+        0.139236473,
+        0.356905709
+      ],
+      "error_m": 0.009740999,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_img7329_picked",
+      "point_id": "P04",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.4,
+        0.31
+      ],
+      "predicted_m": [
+        0.417145581,
+        0.311903036
+      ],
+      "error_m": 0.01725087,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7329_picked",
+      "point_id": "P05",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.32,
+        0.48
+      ],
+      "predicted_m": [
+        0.305009813,
+        0.483676719
+      ],
+      "error_m": 0.015434505,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_img7329_picked",
+      "point_id": "P06",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.08,
+        0.56
+      ],
+      "predicted_m": [
+        0.087861201,
+        0.561391995
+      ],
+      "error_m": 0.007983491,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_img7329_picked",
+      "point_id": "P07",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.21,
+        0.73
+      ],
+      "predicted_m": [
+        0.199621528,
+        0.713434392
+      ],
+      "error_m": 0.019548198,
+      "region": "interpolation"
+    },
+    {
+      "clip": "cam01_img7329_picked",
+      "point_id": "P08",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "expected_m": [
+        0.44,
+        0.67
+      ],
+      "predicted_m": [
+        0.4521551,
+        0.681888319
+      ],
+      "error_m": 0.017002311,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7329_picked",
+      "point_id": "P09",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "expected_m": [
+        0.05,
+        0.82
+      ],
+      "predicted_m": [
+        0.044964139,
+        0.854130649
+      ],
+      "error_m": 0.03450016,
+      "region": "extrapolation"
+    },
+    {
+      "clip": "cam01_img7329_picked",
+      "point_id": "P10",
+      "fit_points": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "expected_m": [
+        0.36,
+        0.17
+      ],
+      "predicted_m": [
+        0.350688911,
+        0.174257703
+      ],
+      "error_m": 0.010238379,
+      "region": "extrapolation"
+    }
+  ]
+}
