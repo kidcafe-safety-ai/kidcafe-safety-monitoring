@@ -1,0 +1,5 @@
+review_index,original_filename,contract_filename,actor_ids,primary_actor_id,scenario_type,label,visual_review_status,notes
+1,IMG_7326.MOV,P4_S01_A01_zone_enter_exit_01_cam01.mp4,A01,A01,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-clip01; image_zone=data/zones/image_cam01_clip01.json
+2,IMG_7327.MOV,P4_S01_A02_zone_enter_exit_01_cam01.mp4,A02,A02,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7327; image_zone=data/zones/image_cam01_img7327.json
+3,IMG_7328.MOV,P4_S01_A01_zone_enter_exit_02_cam01.mp4,A01,A01,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7328; image_zone=data/zones/image_cam01_img7328.json
+4,IMG_7329.MOV,P4_S01_A02_zone_enter_exit_02_cam01.mp4,A02,A02,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7329; image_zone=data/zones/image_cam01_img7329.json

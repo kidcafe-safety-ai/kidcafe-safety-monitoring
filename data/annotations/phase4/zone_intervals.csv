@@ -1,0 +1,5 @@
+video_id,zone_id,interval_index,enter_frame,exit_frame,dwell_start_frame,review_status,notes
+P4_S01_A01_zone_enter_exit_01_cam01,play_floor,1,126,372,,reviewed,
+P4_S01_A01_zone_enter_exit_02_cam01,play_floor,1,110,402,,reviewed,
+P4_S01_A02_zone_enter_exit_01_cam01,play_floor,1,125,415,,reviewed,
+P4_S01_A02_zone_enter_exit_02_cam01,play_floor,1,133,444,433,reviewed,
