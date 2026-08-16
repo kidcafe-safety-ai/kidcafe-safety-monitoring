@@ -15,6 +15,7 @@ from typing import Iterable, Mapping, Optional, Sequence
 
 RECORDINGS_MANIFEST_SCHEMA_VERSION = "phase4_recordings_manifest_v1"
 FALL_CAUSE_ANNOTATION_SCHEMA_VERSION = "phase4_fall_cause_v1"
+ZONE_INTERVALS_SCHEMA_VERSION = "phase4_zone_intervals_v1"
 SCENARIO_SEEDED_DRAFT_NOTE = "scenario-seeded draft; frame review required"
 
 MANIFEST_FIELDS = (
@@ -52,6 +53,17 @@ FALL_CAUSE_FIELDS = (
     "review_status",
     "reviewer_id",
     "second_reviewer_id",
+    "notes",
+)
+
+ZONE_INTERVAL_FIELDS = (
+    "video_id",
+    "zone_id",
+    "interval_index",
+    "enter_frame",
+    "exit_frame",
+    "dwell_start_frame",
+    "review_status",
     "notes",
 )
 
@@ -512,4 +524,120 @@ def load_fall_cause_annotations(
 ) -> list[dict[str, str]]:
     rows = load_csv_rows(path, FALL_CAUSE_FIELDS)
     validate_fall_cause_annotations(rows, manifest_rows, require_reviewed=require_reviewed)
+    return rows
+
+
+def validate_zone_intervals(
+    rows: Sequence[Mapping[str, str]],
+    manifest_rows: Sequence[Mapping[str, str]],
+    *,
+    require_reviewed: bool = False,
+) -> None:
+    """Zone 진입·이탈 interval의 frame·순서·중복을 manifest 기준으로 검증한다."""
+    manifest_by_video = {row["video_id"]: row for row in manifest_rows}
+    if len(manifest_by_video) != len(manifest_rows):
+        raise ValueError("manifest에 중복 video_id가 있습니다.")
+    if not rows:
+        raise ValueError(f"{ZONE_INTERVALS_SCHEMA_VERSION}: 행이 없습니다.")
+
+    errors: list[str] = []
+    seen_keys: set[tuple[str, str, int]] = set()
+    indexes_by_video_zone: dict[tuple[str, str], list[int]] = {}
+    seen_video_ids: set[str] = set()
+    for row_number, row in enumerate(rows, start=2):
+        video_id = (row.get("video_id") or "").strip()
+        zone_id = (row.get("zone_id") or "").strip()
+        interval_index_text = (row.get("interval_index") or "").strip()
+        row_name = f"{video_id or f'row {row_number}'}/{zone_id}/{interval_index_text}"
+        seen_video_ids.add(video_id)
+
+        manifest = manifest_by_video.get(video_id)
+        if manifest is None:
+            errors.append(f"{row_name}: manifest에 없는 video_id입니다.")
+            continue
+        frame_count = int(manifest["frame_count"])
+
+        if not zone_id:
+            errors.append(f"{row_name}: zone_id가 비어 있습니다.")
+
+        interval_index: Optional[int] = None
+        try:
+            interval_index = int(interval_index_text)
+            if interval_index < 1:
+                raise ValueError
+        except ValueError:
+            errors.append(f"{row_name}: interval_index는 1 이상의 정수여야 합니다.")
+
+        if interval_index is not None:
+            key = (video_id, zone_id, interval_index)
+            if key in seen_keys:
+                errors.append(f"{row_name}: 중복 (video_id, zone_id, interval_index)입니다.")
+            seen_keys.add(key)
+            indexes_by_video_zone.setdefault((video_id, zone_id), []).append(interval_index)
+
+        review_status = (row.get("review_status") or "").strip()
+        if review_status not in VALID_REVIEW_STATUSES:
+            errors.append(
+                f"{row_name}: review_status는 {sorted(VALID_REVIEW_STATUSES)} 중 하나여야 합니다."
+            )
+        elif require_reviewed and review_status != "reviewed":
+            errors.append(f"{row_name}: 공식 측정 전 review_status=reviewed가 필요합니다.")
+
+        enter_frame = _optional_frame(
+            row.get("enter_frame") or "", "enter_frame", row_name, frame_count, errors
+        )
+        exit_frame = _optional_frame(
+            row.get("exit_frame") or "", "exit_frame", row_name, frame_count, errors
+        )
+        dwell_frame = _optional_frame(
+            row.get("dwell_start_frame") or "",
+            "dwell_start_frame",
+            row_name,
+            frame_count,
+            errors,
+        )
+
+        if review_status == "reviewed" and (enter_frame is None or exit_frame is None):
+            errors.append(f"{row_name}: reviewed 행은 enter_frame·exit_frame이 필요합니다.")
+        if enter_frame is not None and exit_frame is not None and enter_frame >= exit_frame:
+            errors.append(
+                f"{row_name}: enter_frame({enter_frame}) < exit_frame({exit_frame})이어야 합니다."
+            )
+        if dwell_frame is not None:
+            if enter_frame is None or exit_frame is None:
+                errors.append(
+                    f"{row_name}: dwell_start_frame은 enter_frame·exit_frame이 있어야 합니다."
+                )
+            elif not (enter_frame <= dwell_frame < exit_frame):
+                errors.append(
+                    f"{row_name}: dwell_start_frame({dwell_frame})은 "
+                    f"[{enter_frame}, {exit_frame}) 안에 있어야 합니다."
+                )
+
+    for (video_id, zone_id), indexes in sorted(indexes_by_video_zone.items()):
+        expected = list(range(1, len(indexes) + 1))
+        if sorted(indexes) != expected:
+            errors.append(
+                f"{video_id}/{zone_id}: interval_index는 1부터 연속이어야 합니다 "
+                f"(actual={sorted(indexes)}, expected={expected})."
+            )
+
+    missing = sorted(set(manifest_by_video) - seen_video_ids)
+    if missing:
+        errors.append(f"manifest 영상의 zone interval이 누락됐습니다: {missing}")
+    unknown = sorted(seen_video_ids - set(manifest_by_video))
+    if unknown:
+        errors.append(f"manifest에 없는 zone interval이 있습니다: {unknown}")
+
+    _raise_errors(ZONE_INTERVALS_SCHEMA_VERSION, errors)
+
+
+def load_zone_intervals(
+    path: str | Path,
+    manifest_rows: Sequence[Mapping[str, str]],
+    *,
+    require_reviewed: bool = False,
+) -> list[dict[str, str]]:
+    rows = load_csv_rows(path, ZONE_INTERVAL_FIELDS)
+    validate_zone_intervals(rows, manifest_rows, require_reviewed=require_reviewed)
     return rows
