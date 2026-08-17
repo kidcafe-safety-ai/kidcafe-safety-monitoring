@@ -47,6 +47,11 @@ _FRAME_CACHE_JPEG_QUALITY = 82
 _ZONE_COLOR = (220, 220, 0)
 _SETTABLE_FIELDS = ("enter_frame", "exit_frame", "dwell_start_frame")
 DEFAULT_DWELL_THRESHOLD_SEC = 5.0
+_REVIEW_PROVENANCE_PREFIXES = (
+    "review_mode=",
+    "zone_reference=",
+    "dwell_threshold_sec=",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -277,6 +282,10 @@ class ReviewSession:
         self.current["notes"] = _remove_note(
             self.current["notes"], contract.SCENARIO_SEEDED_DRAFT_NOTE
         )
+        self.current["notes"] = _record_review_provenance(
+            self.current["notes"],
+            blind=not bool(self._zone_polygons),
+        )
         return "reviewed"
 
     def _derive_dwell_start_frame(self) -> None:
@@ -329,6 +338,23 @@ def _remove_note(notes: str, message: str) -> str:
     message_parts = [part.strip() for part in message.split(";") if part.strip()]
     if parts[: len(message_parts)] == message_parts:
         parts = parts[len(message_parts):]
+    return "; ".join(parts)
+
+
+def _record_review_provenance(notes: str, *, blind: bool) -> str:
+    parts = [part.strip() for part in notes.split(";") if part.strip()]
+    parts = [
+        part
+        for part in parts
+        if not part.startswith(_REVIEW_PROVENANCE_PREFIXES)
+    ]
+    parts.extend(
+        [
+            f"review_mode={'blind' if blind else 'adjudication'}",
+            f"zone_reference={'hidden' if blind else 'visible'}",
+            f"dwell_threshold_sec={DEFAULT_DWELL_THRESHOLD_SEC:g}",
+        ]
+    )
     return "; ".join(parts)
 
 

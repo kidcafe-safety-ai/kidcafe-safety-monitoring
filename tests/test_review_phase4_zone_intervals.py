@@ -181,7 +181,34 @@ def test_approve_marks_reviewed_and_strips_seeded_note(tmp_path):
 
     assert session.approve() == "reviewed"
     assert session.current["review_status"] == "reviewed"
-    assert session.current["notes"] == ""
+    assert session.current["notes"] == (
+        "review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5"
+    )
+
+
+def test_approve_records_visible_reference_for_adjudication(tmp_path):
+    session = _session(tmp_path, show_zone_reference=True)
+    session.set_frame("enter_frame", 40)
+    session.set_frame("exit_frame", 150)
+
+    session.approve()
+
+    assert session.current["notes"] == (
+        "review_mode=adjudication; zone_reference=visible; dwell_threshold_sec=5"
+    )
+
+
+def test_reapproval_replaces_review_provenance_without_duplicates(tmp_path):
+    session = _session(tmp_path)
+    session.set_frame("enter_frame", 40)
+    session.set_frame("exit_frame", 150)
+
+    session.approve()
+    session.approve()
+
+    assert session.current["notes"] == (
+        "review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5"
+    )
 
 
 def test_approve_clears_dwell_when_threshold_is_not_reached(tmp_path):

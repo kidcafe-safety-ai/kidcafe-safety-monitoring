@@ -77,7 +77,9 @@ truth를 확정했다. 원본과 calibration 대응은 `verify_clip_match.py`로
 네 interval은 모두 `reviewed`다. 기존 image polygon과 Homography 판정 결과를
 표시하지 않은 blind 검수 화면에서 원본의 회색 테이프와 두 발 사이 바닥 중심을
 보고 ENTER·EXIT를 지정했다. `dwell_start_frame`은 5초 threshold와 영상 FPS로
-자동 계산했다.
+자동 계산했다. 각 행의 `notes`에는 `review_mode=blind`,
+`zone_reference=hidden`, `dwell_threshold_sec=5`를 기록해 검수 provenance를
+보존한다.
 
 클립을 더 추가한다면 클립마다 아래가 필요하다.
 
@@ -104,6 +106,33 @@ P4_S<2자리>_A<2자리>_<소문자 scenario>_<2자리 take>_cam<2자리>
 
 원본은 개인정보가 있어 Git에 넣지 않으므로(`.gitignore`의 `data/videos/*`)
 파일명만 여기 기록하고 실물은 별도 저장소에 둔다.
+
+### 측정용 영상 경로 생성
+
+원본 4개를 `data/videos/phase4_zone/`에 둔 뒤 저장소 루트에서 다음 명령을
+실행한다. 원본을 복사하거나 재인코딩하지 않고 상대 symlink만 만든다.
+
+```bash
+mkdir -p data/videos/phase4_zone/contracts
+ln -s ../IMG_7326.MOV data/videos/phase4_zone/contracts/P4_S01_A01_zone_enter_exit_01_cam01.mp4
+ln -s ../IMG_7328.MOV data/videos/phase4_zone/contracts/P4_S01_A01_zone_enter_exit_02_cam01.mp4
+ln -s ../IMG_7327.MOV data/videos/phase4_zone/contracts/P4_S01_A02_zone_enter_exit_01_cam01.mp4
+ln -s ../IMG_7329.MOV data/videos/phase4_zone/contracts/P4_S01_A02_zone_enter_exit_02_cam01.mp4
+```
+
+`.mp4`는 촬영 파일명 계약을 따르는 로컬 별칭이다. symlink 대상은 원본 `.MOV`로
+유지되며 파일 내용과 SHA-256은 바뀌지 않는다. OpenCV·FFmpeg는 확장자가 아니라
+컨테이너 내용을 읽으므로 이 경로를 그대로 사용할 수 있다. 링크가 이미 있으면
+명령이 실패하게 두어 기존 경로를 조용히 덮어쓰지 않는다.
+
+생성 후 다음 명령으로 원본 연결과 SHA-256을 확인한다.
+
+```bash
+python scripts/validate_phase4_zone_intervals.py \
+  --manifest data/annotations/phase4/recordings_manifest.csv \
+  --intervals data/annotations/phase4/zone_intervals.csv \
+  --repo-root . --verify-files --verify-checksums --require-reviewed
+```
 
 네 영상은 한 명이 Zone 밖에서 들어와 내부를 지난 뒤 다시 나가는 완전한 왕복
 구간이다. 기존 직접 촬영 annotation과 복장을 대조해 파란 상의는 `A01`, 회색
