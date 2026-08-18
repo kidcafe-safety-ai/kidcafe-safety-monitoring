@@ -130,7 +130,7 @@ def cache_video(video_path: Path, model: str, confidence: float, expected) -> di
         # 없이도 불려야 입력 검증을 따로 테스트할 수 있다.
         from src.tracking.bytetrack_wrapper import ByteTracker
 
-        tracker = ByteTracker(model_path=model, confidence=confidence)
+        tracker = ByteTracker(model_path=model, conf=confidence, fps=expected["fps"])
         frames: Dict[str, List[dict]] = {}
         frame_number = 0
         while True:

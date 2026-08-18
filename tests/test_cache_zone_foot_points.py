@@ -143,3 +143,51 @@ def test_cache_schema_matches_the_evaluator(tmp_path):
     from scripts import evaluate_zone_paths as ezp
 
     assert czf.CACHE_SCHEMA_VERSION == ezp.CACHE_SCHEMA_VERSION
+
+
+# --- tracker 호출부 ---
+#
+# tracking 경로는 torch가 있어야 실행되므로 위 테스트들이 지나가지 않는다.
+# 그래서 `ByteTracker(...)` 인자 이름이 틀려도 영상을 넣고 돌리기 전에는
+# 드러나지 않았다(실제로 `confidence=`로 썼다가 실행 시점에 TypeError가 났다).
+# 아래 두 검사는 소스를 파싱해 호출부와 시그니처를 대조하므로 torch 없이도
+# 같은 종류의 실수를 잡는다.
+
+
+def tracker_init_params():
+    """`ByteTracker.__init__`이 받는 인자 이름을 소스에서 읽는다."""
+    import ast
+
+    source = ROOT / "src" / "tracking" / "bytetrack_wrapper.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == "ByteTracker":
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef) and item.name == "__init__":
+                    return {a.arg for a in item.args.args} - {"self"}
+    raise AssertionError("ByteTracker.__init__을 찾지 못했습니다")
+
+
+def tracker_call_keywords():
+    """`cache_zone_foot_points.py`가 `ByteTracker(...)`에 넘기는 키워드."""
+    import ast
+
+    tree = ast.parse((ROOT / "scripts" / "cache_zone_foot_points.py").read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "ByteTracker"
+        ):
+            return {kw.arg for kw in node.keywords}
+    raise AssertionError("ByteTracker 호출을 찾지 못했습니다")
+
+
+def test_tracker_is_called_with_arguments_it_accepts():
+    unknown = tracker_call_keywords() - tracker_init_params()
+    assert not unknown, f"ByteTracker가 받지 않는 인자: {sorted(unknown)}"
+
+
+def test_confidence_is_actually_passed_to_the_tracker():
+    """--confidence를 넘겨도 tracker에 닿지 않으면 조용히 기본값으로 돈다."""
+    assert "conf" in tracker_call_keywords()
