@@ -16,6 +16,7 @@
 | `cost_benchmark.json` | frame당 추가 비용 (FPS 하락률은 추정치, `is_official: false`) |
 | `zone_eval_handover.md` | 채택 기준 2~5번 측정에 필요한 영상별 준비 상태·대응표 |
 | `zone_intervals_draft.csv` | Zone 진입·이탈 검수용 초안 (클립 4개 뼈대 행) |
+| `zone_path_comparison.json` | **공식** 채택 기준 2~5번 측정 결과 (영상 12개) |
 | `_checksums.md` | 위 파일과 calibration config의 SHA-256 |
 
 runtime calibration config는 계약 위치인 `configs/camera_calibration/`에 있다.
@@ -53,7 +54,24 @@ python scripts/benchmark_homography_cost.py \
   --image-zones data/zones/image_cam01.json \
   --tracks-per-frame 3 --frames 2000 --baseline-fps 25 \
   --output docs/phase4_homography/cost_benchmark.json
+
+# 채택 기준 2~5번 — 원본 영상이 있어야 한다(zone_eval_handover.md의 경로 생성 절차)
+python scripts/cache_zone_foot_points.py \
+  --manifest data/annotations/phase4/recordings_manifest.csv \
+  --repo-root . \
+  --output outputs/phase4_zone_eval/foot_points.json
+
+python scripts/evaluate_zone_paths.py \
+  --cache outputs/phase4_zone_eval/foot_points.json \
+  --manifest data/annotations/phase4/recordings_manifest.csv \
+  --intervals data/annotations/phase4/zone_intervals.csv \
+  --review-plan data/annotations/phase4/zone_eval/recording_review_plan.csv \
+  --output docs/phase4_homography/zone_path_comparison.json
 ```
+
+`--track-selection gt-overlap`은 진단용이다. ground truth 구간에 오래 머문
+Track을 고르므로 여러 명이 등장하는 영상에서 대상이 아닌 사람을 고를 수 있다
+(`IMG_7385`가 실제로 그렇다). 공식 수치는 기본값 `longest`로 만든다.
 
 ## 재현의 범위
 
@@ -66,6 +84,8 @@ python scripts/benchmark_homography_cost.py \
   나오지만 JSON 바이트는 다를 수 있다. 재현 여부는 이 지표로 판단한다.
 - **`_checksums.md`의 SHA-256은 커밋된 파일의 무결성 검증용이다.** 다른 환경에서
   다시 실행한 결과와 대조하는 값이 아니다.
+- **줄바꿈은 플랫폼과 무관하게 LF다.** 결과 JSON을 바이너리로 쓴다. 예전에는
+  Windows 텍스트 모드가 `\n`을 `\r\n`으로 바꿔 같은 입력에서도 파일이 달라졌다.
 
 ## 읽을 때 주의할 것
 
