@@ -15,11 +15,14 @@
 | `holdout_loo-quad.json` | 보조 진단 (leave-one-out, 최대 면적 4점) |
 | `cost_benchmark.json` | frame당 추가 비용 (FPS 하락률은 추정치, `is_official: false`) |
 | `zone_eval_handover.md` | 채택 기준 2~5번 측정에 필요한 영상별 준비 상태·대응표 |
-| `zone_intervals_draft.csv` | Zone 진입·이탈 검수용 초안 (클립 4개 뼈대 행) |
+| `zone_intervals_draft.csv` | B handover 시점의 Zone interval 빈 뼈대 artifact |
 | `zone_path_comparison.json` | **공식** 채택 기준 2~5번 측정 결과 (영상 12개) |
 | `_checksums.md` | 위 파일과 calibration config의 SHA-256 |
 
 runtime calibration config는 계약 위치인 `configs/camera_calibration/`에 있다.
+최종 촬영 manifest와 reviewed Zone ground truth는 각각
+`data/annotations/phase4/recordings_manifest.csv`,
+`data/annotations/phase4/zone_intervals.csv`에 있다.
 
 ## 재현 명령
 
