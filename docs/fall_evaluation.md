@@ -851,6 +851,8 @@ far_denominator_rule=processed_no_fall_frames_over_fps_v1
 
 - Cause는 raw Track ID가 아닌 reviewed actor mapping으로 채점한다.
 - reviewed ground truth에 매칭된 대표 Event만 Cause 지표 분모에 포함한다.
+- victim actor와 Cause actor는 독립적으로 채점한다. 대표 Event의 victim이
+  틀렸더라도 Cause 예측이 있으면 Cause top-1 분모에서 제외하지 않는다.
 - 후보 없음의 `cause=null`, 후보 있음의 actor top-1을 각각 측정한다.
 - 분모가 0인 지표는 `null/not_evaluable`이며 목표 통과로 해석하지 않는다.
 - ID switch 자체가 아니라 missed·late·duplicate·victim·cause 오류를 실제로
@@ -861,7 +863,19 @@ far_denominator_rule=processed_no_fall_frames_over_fps_v1
 - alias 연결 재생 또는 state diagnostic으로 오류가 해소되는 경우에만
   `caused`로 기록한다.
 - Event 오류가 없으면 같은 영상에 ID switch가 있어도 `none`으로 기록한다.
-- Tracker 비교는 `caused` 오류가 반복 재현될 때만 진행한다.
+- Tracker 비교는 `caused` 오류가 반복 재현되거나 Cause top-1이 목표에
+  미달할 때 진행한다. 동일 영상에서 ByteTrack, appearance ReID를 끈
+  BoT-SORT, ReID를 켠 BoT-SORT를 함께 비교해 tracker 변경 효과와 ReID
+  효과를 분리한다.
+- ReID의 목표는 짧은 detector 누락이나 사람 간 가림 뒤 detection이 다시
+  나타났을 때 외형 특징으로 기존 actor의 Track ID에 재연결하는 것이다.
+  detection이 없는 프레임에 bbox를 생성하거나 사람을 계속 관측하는 기능으로
+  해석하지 않는다.
+- 같은 ID 재연결로 victim·Cause actor 단절, 중복 Event, 낙상 candidate state
+  초기화를 줄이는지 측정한다. 장기 퇴장 후 재입장과 cross-camera identity는
+  이번 비교 범위에서 제외한다.
+- no-fall 영상의 `true_negative`·`false_alarm` 행은 영상 coverage와 FAR를 위한
+  기록이며 Cause 지표 분모에는 포함하지 않는다.
 
 ```text
 cause_null_specificity =
