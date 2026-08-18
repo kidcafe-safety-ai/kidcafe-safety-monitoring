@@ -35,10 +35,11 @@ import cv2
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.tracking.bytetrack_wrapper import ByteTracker  # noqa: E402
-
 CACHE_SCHEMA_VERSION = "phase4_zone_foot_points_v1"
 MANIFEST_FIELDS = ("video_id", "video_path", "fps", "frame_count", "width", "height")
+# 컨테이너가 기록한 fps는 소수점 아래가 미세하게 흔들린다. 같은 영상을
+# 거부하지 않으면서 29.97과 59.94는 구분할 수 있는 폭이다.
+FPS_TOLERANCE = 0.01
 
 
 class CacheError(RuntimeError):
@@ -87,29 +88,47 @@ def load_manifest(path: Path, wanted: List[str] | None) -> List[dict]:
     return rows
 
 
-def cache_video(video_path: Path, model: str, confidence: float, expected) -> dict:
-    """영상 하나의 frame별 Track foot point를 모은다.
+def verify_video_properties(name: str, width: int, height: int, fps: float, expected) -> None:
+    """영상 속성이 manifest와 같은지 확인한다.
 
-    `expected`는 manifest가 기록한 (fps, frame_count, width, height)다. 실제
-    영상과 다르면 ground truth의 frame 번호가 다른 영상을 가리키게 되므로
-    fail-fast한다.
+    ground truth의 frame 번호는 특정 영상에 묶여 있다. fps나 해상도가 다른
+    영상을 넣으면 같은 번호가 다른 시점을 가리키는데, 값이 그럴듯해서 결과만
+    보고는 알아채기 어렵다. 그래서 추론을 시작하기 전에 막는다.
     """
+    if (width, height) != (expected["width"], expected["height"]):
+        raise CacheError(
+            f"{name} 해상도가 manifest와 다릅니다: "
+            f"{width}x{height} != {expected['width']}x{expected['height']}"
+        )
+    if abs(fps - expected["fps"]) > FPS_TOLERANCE:
+        raise CacheError(f"{name} fps가 manifest와 다릅니다: {fps} != {expected['fps']}")
+
+
+def verify_frame_count(name: str, counted: int, expected) -> None:
+    """디코딩한 frame 수가 manifest와 같은지 확인한다."""
+    if counted != expected["frame_count"]:
+        raise CacheError(
+            f"{name} frame 수가 manifest와 다릅니다: {counted} != {expected['frame_count']}"
+        )
+
+
+def cache_video(video_path: Path, model: str, confidence: float, expected) -> dict:
+    """영상 하나의 frame별 Track foot point를 모은다."""
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
         raise CacheError(f"영상을 열 수 없습니다: {video_path}")
     try:
-        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = float(capture.get(cv2.CAP_PROP_FPS))
-        if (width, height) != (expected["width"], expected["height"]):
-            raise CacheError(
-                f"{video_path.name} 해상도가 manifest와 다릅니다: "
-                f"{width}x{height} != {expected['width']}x{expected['height']}"
-            )
-        if abs(fps - expected["fps"]) > 0.01:
-            raise CacheError(
-                f"{video_path.name} fps가 manifest와 다릅니다: {fps} != {expected['fps']}"
-            )
+        verify_video_properties(
+            video_path.name,
+            int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)),
+            int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+            float(capture.get(cv2.CAP_PROP_FPS)),
+            expected,
+        )
+
+        # tracker는 여기서 import한다. 이 모듈의 검증 함수들이 ultralytics
+        # 없이도 불려야 입력 검증을 따로 테스트할 수 있다.
+        from src.tracking.bytetrack_wrapper import ByteTracker
 
         tracker = ByteTracker(model_path=model, confidence=confidence)
         frames: Dict[str, List[dict]] = {}
@@ -133,11 +152,7 @@ def cache_video(video_path: Path, model: str, confidence: float, expected) -> di
     finally:
         capture.release()
 
-    if frame_number != expected["frame_count"]:
-        raise CacheError(
-            f"{video_path.name} frame 수가 manifest와 다릅니다: "
-            f"{frame_number} != {expected['frame_count']}"
-        )
+    verify_frame_count(video_path.name, frame_number, expected)
     return {"frame_count": frame_number, "frames": frames}
 
 
