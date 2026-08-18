@@ -29,10 +29,19 @@
 | img7327 | `IMG_7327.MOV` | `2026-08-07-img7327` | `cam01_img7327.json` | `image_cam01_img7327.json` | `floor_cam01_img7327.json` |
 | img7328 | `IMG_7328.MOV` | `2026-08-07-img7328` | `cam01_img7328.json` | `image_cam01_img7328.json` | `floor_cam01_img7328.json` |
 | img7329 | `IMG_7329.MOV` | `2026-08-07-img7329` | `cam01_img7329.json` | `image_cam01_img7329.json` | `floor_cam01_img7329.json` |
+| img7330 | `IMG_7330.MOV` | `2026-08-07-img7330` | `cam01_img7330.json` | `image_cam01_img7330.json` | `floor_cam01_img7330.json` |
+| img7331 | `IMG_7331.MOV` | `2026-08-07-img7331` | `cam01_img7331.json` | `image_cam01_img7331.json` | `floor_cam01_img7331.json` |
+| img7332 | `IMG_7332.MOV` | `2026-08-07-img7332` | `cam01_img7332.json` | `image_cam01_img7332.json` | `floor_cam01_img7332.json` |
+| img7333 | `IMG_7333.MOV` | `2026-08-07-img7333` | `cam01_img7333.json` | `image_cam01_img7333.json` | `floor_cam01_img7333.json` |
+| img7334 | `IMG_7334.MOV` | `2026-08-07-img7334` | `cam01_img7334.json` | `image_cam01_img7334.json` | `floor_cam01_img7334.json` |
+| img7385 | `IMG_7385.MOV` | `2026-08-07-img7385` | `cam01_img7385.json` | `image_cam01_img7385.json` | `floor_cam01_img7385.json` |
+| img7387 | `IMG_7387.MOV` | `2026-08-07-img7387` | `cam01_img7387.json` | `image_cam01_img7387.json` | `floor_cam01_img7387.json` |
+| img7388 | `IMG_7388.MOV` | `2026-08-07-img7388` | `cam01_img7388.json` | `image_cam01_img7388.json` | `floor_cam01_img7388.json` |
 
 calibration JSON은 `configs/camera_calibration/`, Zone은 `data/zones/` 아래다.
-clip00은 기준점만 촬영한 clip이라 Zone 라벨링 대상이 아니다. **라벨링 대상은
-clip01·img7327·img7328·img7329 네 개다.**
+clip00은 기준점만 촬영한 clip이라 Zone 라벨링 대상이 아니다. **Zone 클립은 12개**이고
+이 중 네 개(`IMG_7326`~`7329`)는 ground truth 검수가 끝났다. `IMG_7386`은 촬영
+상태가 나빠 제외했다.
 
 원본 대응은 `scripts/verify_clip_match.py`로 확인했다. 기록된 기준점 픽셀을
 프레임에 겹쳐 그려 테이프 위에 얹히는지 눈으로 대조하는 방식이다. 클립을 더
@@ -46,34 +55,30 @@ clip01·img7327·img7328·img7329 네 개다.**
 
 ### 클립별 재클릭이 실제로 카메라 이동을 상쇄했다
 
-같은 회색 테이프를 5개 클립에서 각각 찍어 비교했다. 아래는 클립 쌍 10개에서
-나온 값의 범위다.
+같은 회색 테이프를 13개 클립에서 각각 찍어 78개 쌍을 비교했다.
 
-| 좌표계 | 클립 쌍 간 차이 |
-|---|---|
-| image (픽셀) | 평균 12.8~86.8px · 최대 **86.8px** |
-| floor (원단위) | 평균 0.20~0.53 · 최대 **1.00** |
+| 좌표계 | 평균 | 최대 |
+|---|---:|---:|
+| image (픽셀) | 59.6 px | **131.0 px** |
+| floor (원단위) | 0.43 | **1.60** |
 
-img7329가 다른 클립과 픽셀로 72~87px 어긋나 있는데도 floor 좌표로는 0.22~0.44
-안에서 일치한다. 픽셀에서는 카메라가 움직인 만큼 어긋나 있는데 floor 좌표로
-옮기면 일치한다.
+픽셀로는 최대 131px 어긋난 쌍이 있는데, 클립별 calibration을 적용하면 동일한
+물리적 Zone의 floor 좌표 편차가 최대 1.60 원단위 안에서 유지된다. 두 값은 단위가
+달라 직접 비교하지 않는다.
 클립마다 calibration을 다시 만들면 고정되지 않은 카메라로도 같은 물리적 Zone을
 가리킬 수 있다는 뜻이다. 7.3절의 오차 수치와 별개로 얻은 독립적인 근거다.
 
 이 값 자체는 채택 기준 2~5번이 아니다. 두 좌표 경로가 같은 Zone을 얼마나 같게
 표현하는지를 볼 뿐이고, 판정 정확도는 A의 ground truth가 있어야 나온다.
 
-## 비어 있는 것
+## 검수 대기 중인 클립 8개
 
-라벨링에 필요한 자료는 네 클립 모두 준비됐다. 남은 것은 `video_id` 확정
-하나이며, 그것은 `recordings_manifest.csv`가 만들어져야 정해진다.
+`IMG_7330`~`7334`, `IMG_7385`, `7387`, `7388` 여덟 개는 calibration과 floor·image
+Zone을 모두 만들어 뒀고 Zone 진입·이탈 ground truth만 없다. 검수가 되면 측정
+표본이 ENTER·EXIT 8건에서 24건으로 늘어난다.
 
-클립을 더 추가한다면 클립마다 아래가 필요하다.
-
-- [ ] 원본 파일명 확인 (`scripts/verify_clip_match.py`)
-- [ ] 기준점 픽셀 클릭 → `<clip>_picked.csv`
-- [ ] calibration JSON
-- [ ] Zone 꼭짓점 클릭 → floor·image Zone JSON
+클립별 holdout 오차는 13개 전부 1.03~1.17에 모여 있다. 기준점 순서를 잘못 찍은
+클립이 있었다면 그 클립만 값이 튀었을 것이므로 입력 검증 역할도 한다.
 
 ## 원본 파일명 ↔ `video_id` 대응표
 
@@ -83,25 +88,12 @@ img7329가 다른 클립과 픽셀로 72~87px 어긋나 있는데도 floor 좌�
 P4_S<2자리>_A<2자리>_<소문자 scenario>_<2자리 take>_cam<2자리>
 ```
 
-| 원본 파일명 | `video_id` | 용도 |
-|---|---|---|
-| `IMG_7325.MOV` | — | calibration 전용, 시나리오 아님 |
-| `IMG_7326.MOV` | **미정** | Zone 라벨링 대상 |
-| `IMG_7327.MOV` | **미정** | Zone 라벨링 대상 |
-| `IMG_7328.MOV` | **미정** | Zone 라벨링 대상 |
-| `IMG_7329.MOV` | **미정** | Zone 라벨링 대상 |
+`IMG_7326`~`7329`의 `video_id`는 `recordings_manifest.csv`에서 확정됐다. 나머지
+8개는 검수와 함께 부여된다. `IMG_7325`는 기준점만 촬영한 clip이라 `video_id`를
+부여하지 않고 calibration 출처로만 기록한다.
 
 원본은 개인정보가 있어 Git에 넣지 않으므로(`.gitignore`의 `data/videos/*`)
 파일명만 여기 기록하고 실물은 별도 저장소에 둔다.
-
-**`video_id`는 아직 정하지 못했다.** 명명 규칙이 session·actor·scenario를
-요구하는데 그 값이 확정되지 않았고, 실제 `recordings_manifest.csv`도 아직
-없다(`tests/fixtures/phase4_contract/`의 것은 계약 테스트용 예시다). manifest가
-만들어지는 시점에 그 값을 그대로 받아 이 표를 채운다. 그 전까지 `zone_intervals`
-초안의 `video_id`도 비워 둔다.
-
-clip00은 기준점만 촬영한 clip이라 시나리오가 없다. `video_id`를 부여하지 않고
-calibration 출처로만 기록한다.
 
 ## `zone_intervals.csv` 초안
 

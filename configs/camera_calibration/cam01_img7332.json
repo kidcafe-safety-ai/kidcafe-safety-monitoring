@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "calibration_version": "2026-08-07-img7332",
+  "enabled": false,
+  "camera_id": "cam01",
+  "frame_size": {
+    "width": 1920,
+    "height": 1080
+  },
+  "coordinate_unit": "meter",
+  "origin_description": "촬영 구역 좌하단 회색 테이프. x는 오른쪽, y는 카메라에서 멀어지는 방향.",
+  "image_points_px": [
+    [
+      778.0,
+      826.0
+    ],
+    [
+      926.0,
+      523.0
+    ],
+    [
+      690.0,
+      521.0
+    ],
+    [
+      1009.0,
+      750.0
+    ]
+  ],
+  "floor_points": [
+    [
+      0.06,
+      0.18
+    ],
+    [
+      0.44,
+      0.67
+    ],
+    [
+      0.05,
+      0.82
+    ],
+    [
+      0.36,
+      0.17
+    ]
+  ]
+}

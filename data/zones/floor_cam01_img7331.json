@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "camera_id": "cam01",
+  "coordinate_space": "floor_meters",
+  "zones": [
+    {
+      "zone_id": "play_floor",
+      "zone_name": "놀이 구역",
+      "type": "polygon",
+      "zone_type": "play",
+      "points": [
+        [
+          -0.0087,
+          0.8189
+        ],
+        [
+          0.5026,
+          0.8581
+        ],
+        [
+          0.4949,
+          0.0386
+        ],
+        [
+          0.0109,
+          0.0174
+        ]
+      ],
+      "rules": {
+        "enter_alert": true,
+        "dwell_threshold_sec": 5
+      }
+    }
+  ],
+  "diagnostic_only": true,
+  "unit_note": "calibration 좌표 단위 미확인. points는 meter가 아니라 촬영 기록 원단위를 100으로 나눈 값이다. runtime에 사용하지 않는다."
+}
