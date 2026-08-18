@@ -15,7 +15,9 @@ from typing import Iterable, Mapping, Optional, Sequence
 
 RECORDINGS_MANIFEST_SCHEMA_VERSION = "phase4_recordings_manifest_v1"
 FALL_CAUSE_ANNOTATION_SCHEMA_VERSION = "phase4_fall_cause_v1"
+TRACK_ACTOR_REVIEW_SCHEMA_VERSION = "phase4_track_actor_review_v1"
 SCENARIO_SEEDED_DRAFT_NOTE = "scenario-seeded draft; frame review required"
+NON_ACTOR_TRACK_NOTE = "reviewed non-actor track"
 
 MANIFEST_FIELDS = (
     "video_id",
@@ -54,6 +56,57 @@ FALL_CAUSE_FIELDS = (
     "second_reviewer_id",
     "notes",
 )
+
+TRACK_ACTOR_SEGMENT_FIELDS = (
+    "run_id",
+    "video_id",
+    "start_frame",
+    "end_frame",
+    "track_id",
+    "actor_id",
+    "review_status",
+    "notes",
+)
+
+TRACK_ID_SWITCH_FIELDS = (
+    "run_id",
+    "switch_id",
+    "video_id",
+    "actor_id",
+    "from_track_id",
+    "to_track_id",
+    "switch_frame",
+    "review_status",
+    "notes",
+)
+
+EVENT_ATTRIBUTION_REVIEW_FIELDS = (
+    "run_id",
+    "video_id",
+    "event_frame",
+    "victim_track_id",
+    "victim_actor_id",
+    "predicted_cause_track_id",
+    "predicted_cause_actor_id",
+    "related_switch_ids",
+    "id_switch_relation",
+    "event_error_type",
+    "review_status",
+    "notes",
+)
+
+VALID_ID_SWITCH_RELATIONS = {"none", "associated", "caused"}
+VALID_EVENT_ERROR_TYPES = {
+    "none",
+    "true_negative",
+    "false_alarm",
+    "missed_fall",
+    "late_fall",
+    "duplicate_fall",
+    "victim_mismatch",
+    "missed_cause",
+    "false_attribution",
+}
 
 VALID_LABELS = {"fall", "no_fall"}
 VALID_SPLIT_ROLES = {
@@ -119,7 +172,9 @@ def sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
-def load_csv_rows(path: str | Path, expected_fields: Sequence[str]) -> list[dict[str, str]]:
+def load_csv_rows(
+    path: str | Path, expected_fields: Sequence[str], *, allow_empty: bool = False
+) -> list[dict[str, str]]:
     target = Path(path)
     with target.open(encoding="utf-8", newline="") as file:
         reader = csv.DictReader(file)
@@ -130,7 +185,7 @@ def load_csv_rows(path: str | Path, expected_fields: Sequence[str]) -> list[dict
                 f"expected={list(expected_fields)}, actual={list(actual_fields)}"
             )
         rows = [dict(row) for row in reader]
-    if not rows:
+    if not rows and not allow_empty:
         raise ValueError(f"{target}: CSV에 행이 없습니다.")
     return rows
 
@@ -512,4 +567,352 @@ def load_fall_cause_annotations(
 ) -> list[dict[str, str]]:
     rows = load_csv_rows(path, FALL_CAUSE_FIELDS)
     validate_fall_cause_annotations(rows, manifest_rows, require_reviewed=require_reviewed)
+    return rows
+
+
+def _required_int(
+    value: str, field: str, row_name: str, errors: list[str], *, minimum: int = 0
+) -> Optional[int]:
+    text = (value or "").strip()
+    if not text:
+        errors.append(f"{row_name}: {field}가 비어 있습니다.")
+        return None
+    try:
+        parsed = int(text)
+    except ValueError:
+        errors.append(f"{row_name}: {field}={text!r}는 정수여야 합니다.")
+        return None
+    if parsed < minimum:
+        errors.append(f"{row_name}: {field}={parsed}는 {minimum} 이상이어야 합니다.")
+        return None
+    return parsed
+
+
+def validate_track_actor_segments(
+    rows: Sequence[Mapping[str, str]],
+    manifest_rows: Sequence[Mapping[str, str]],
+) -> None:
+    """Track segment의 frame 범위·actor 배정을 manifest 기준으로 검증한다."""
+    manifest_by_video = {row["video_id"]: row for row in manifest_rows}
+    if len(manifest_by_video) != len(manifest_rows):
+        raise ValueError("manifest에 중복 video_id가 있습니다.")
+    if not rows:
+        raise ValueError(f"{TRACK_ACTOR_REVIEW_SCHEMA_VERSION}: 행이 없습니다.")
+
+    errors: list[str] = []
+    segments_by_track: dict[tuple[str, str, int], list[tuple[int, int, str]]] = {}
+    reviewed_segments_by_actor: dict[
+        tuple[str, str, str], list[tuple[int, int, str]]
+    ] = {}
+    for row_number, row in enumerate(rows, start=2):
+        run_id = (row.get("run_id") or "").strip()
+        video_id = (row.get("video_id") or "").strip()
+        row_name = f"{run_id or f'row {row_number}'}/{video_id}"
+        if not run_id:
+            errors.append(f"{row_name}: run_id가 비어 있습니다.")
+
+        manifest = manifest_by_video.get(video_id)
+        if manifest is None:
+            errors.append(f"{row_name}: manifest에 없는 video_id입니다.")
+            continue
+        frame_count = int(manifest["frame_count"])
+
+        track_id = _required_int(
+            row.get("track_id") or "", "track_id", row_name, errors, minimum=1
+        )
+        start_frame = _required_int(
+            row.get("start_frame") or "", "start_frame", row_name, errors, minimum=0
+        )
+        end_frame = _required_int(
+            row.get("end_frame") or "", "end_frame", row_name, errors, minimum=0
+        )
+        if start_frame is not None and start_frame >= frame_count:
+            errors.append(
+                f"{row_name}: start_frame={start_frame}은 frame 범위 [0, {frame_count}) 밖입니다."
+            )
+        if end_frame is not None and end_frame >= frame_count:
+            errors.append(
+                f"{row_name}: end_frame={end_frame}은 frame 범위 [0, {frame_count}) 밖입니다."
+            )
+        if start_frame is not None and end_frame is not None and start_frame > end_frame:
+            errors.append(
+                f"{row_name}: start_frame({start_frame})은 end_frame({end_frame}) 이하여야 합니다."
+            )
+
+        if track_id is not None and start_frame is not None and end_frame is not None:
+            key = (run_id, video_id, track_id)
+            segments_by_track.setdefault(key, []).append((start_frame, end_frame, row_name))
+
+        review_status = (row.get("review_status") or "").strip()
+        if review_status not in VALID_REVIEW_STATUSES:
+            errors.append(
+                f"{row_name}: review_status는 {sorted(VALID_REVIEW_STATUSES)} 중 하나여야 합니다."
+            )
+
+        actor_id = (row.get("actor_id") or "").strip()
+        notes = {
+            part.strip() for part in (row.get("notes") or "").split(";") if part.strip()
+        }
+        is_non_actor_track = NON_ACTOR_TRACK_NOTE in notes
+        if actor_id and _ACTOR_ID_PATTERN.fullmatch(actor_id) is None:
+            errors.append(f"{row_name}: actor_id={actor_id!r} 형식이 잘못됐습니다.")
+        actors = set(split_actor_ids(manifest["actor_ids"]))
+        if actor_id and actor_id not in actors:
+            errors.append(f"{row_name}: actor_id가 manifest actor_ids에 없습니다.")
+        if actor_id and is_non_actor_track:
+            errors.append(
+                f"{row_name}: actor_id와 {NON_ACTOR_TRACK_NOTE!r}를 함께 기록할 수 없습니다."
+            )
+        if review_status == "reviewed" and not actor_id and not is_non_actor_track:
+            errors.append(
+                f"{row_name}: reviewed 행은 actor_id 또는 명시적인 non-actor 판정이 필요합니다."
+            )
+        if (
+            review_status == "reviewed"
+            and actor_id
+            and start_frame is not None
+            and end_frame is not None
+        ):
+            key = (run_id, video_id, actor_id)
+            reviewed_segments_by_actor.setdefault(key, []).append(
+                (start_frame, end_frame, row_name)
+            )
+
+    for (run_id, video_id, track_id), segments in segments_by_track.items():
+        ordered = sorted(segments, key=lambda item: item[0])
+        for (_, prev_end, prev_name), (next_start, _, next_name) in zip(ordered, ordered[1:]):
+            if next_start <= prev_end:
+                errors.append(
+                    f"{run_id}/{video_id}/track_id={track_id}: {prev_name}과 {next_name}의 "
+                    "frame 구간이 겹칩니다."
+                )
+
+    for (run_id, video_id, actor_id), segments in reviewed_segments_by_actor.items():
+        ordered = sorted(segments, key=lambda item: item[0])
+        for (_, prev_end, prev_name), (next_start, _, next_name) in zip(
+            ordered, ordered[1:]
+        ):
+            if next_start <= prev_end:
+                errors.append(
+                    f"{run_id}/{video_id}/actor_id={actor_id}: {prev_name}과 {next_name}의 "
+                    "reviewed frame 구간이 겹칩니다. 한 frame에서 actor 하나를 둘 이상의 "
+                    "Track에 배정할 수 없습니다."
+                )
+
+    _raise_errors(TRACK_ACTOR_REVIEW_SCHEMA_VERSION, errors)
+
+
+def load_track_actor_segments(
+    path: str | Path,
+    manifest_rows: Sequence[Mapping[str, str]],
+) -> list[dict[str, str]]:
+    rows = load_csv_rows(path, TRACK_ACTOR_SEGMENT_FIELDS)
+    validate_track_actor_segments(rows, manifest_rows)
+    return rows
+
+
+def validate_track_id_switches(
+    rows: Sequence[Mapping[str, str]],
+    manifest_rows: Sequence[Mapping[str, str]],
+) -> None:
+    """ID switch 기록의 frame·Track 관계를 manifest 기준으로 검증한다."""
+    manifest_by_video = {row["video_id"]: row for row in manifest_rows}
+    if len(manifest_by_video) != len(manifest_rows):
+        raise ValueError("manifest에 중복 video_id가 있습니다.")
+    if not rows:
+        return
+
+    errors: list[str] = []
+    seen_switch_ids: dict[str, str] = {}
+    for row_number, row in enumerate(rows, start=2):
+        run_id = (row.get("run_id") or "").strip()
+        switch_id = (row.get("switch_id") or "").strip()
+        video_id = (row.get("video_id") or "").strip()
+        row_name = f"{run_id or f'row {row_number}'}/{switch_id or video_id}"
+        if not run_id:
+            errors.append(f"{row_name}: run_id가 비어 있습니다.")
+        if not switch_id:
+            errors.append(f"{row_name}: switch_id가 비어 있습니다.")
+        else:
+            key = f"{run_id}/{switch_id}"
+            if key in seen_switch_ids:
+                errors.append(f"{row_name}: 중복 switch_id입니다.")
+            seen_switch_ids[key] = row_name
+
+        manifest = manifest_by_video.get(video_id)
+        if manifest is None:
+            errors.append(f"{row_name}: manifest에 없는 video_id입니다.")
+            continue
+        frame_count = int(manifest["frame_count"])
+
+        actor_id = (row.get("actor_id") or "").strip()
+        if _ACTOR_ID_PATTERN.fullmatch(actor_id) is None:
+            errors.append(f"{row_name}: actor_id={actor_id!r} 형식이 잘못됐습니다.")
+        elif actor_id not in set(split_actor_ids(manifest["actor_ids"])):
+            errors.append(f"{row_name}: actor_id가 manifest actor_ids에 없습니다.")
+
+        from_track_id = _required_int(
+            row.get("from_track_id") or "", "from_track_id", row_name, errors, minimum=1
+        )
+        to_track_id = _required_int(
+            row.get("to_track_id") or "", "to_track_id", row_name, errors, minimum=1
+        )
+        if (
+            from_track_id is not None
+            and to_track_id is not None
+            and from_track_id == to_track_id
+        ):
+            errors.append(f"{row_name}: from_track_id와 to_track_id는 달라야 합니다.")
+
+        switch_frame = _required_int(
+            row.get("switch_frame") or "", "switch_frame", row_name, errors, minimum=0
+        )
+        if switch_frame is not None and switch_frame >= frame_count:
+            errors.append(
+                f"{row_name}: switch_frame={switch_frame}은 frame 범위 [0, {frame_count}) 밖입니다."
+            )
+
+        review_status = (row.get("review_status") or "").strip()
+        if review_status not in VALID_REVIEW_STATUSES:
+            errors.append(
+                f"{row_name}: review_status는 {sorted(VALID_REVIEW_STATUSES)} 중 하나여야 합니다."
+            )
+
+    _raise_errors(TRACK_ACTOR_REVIEW_SCHEMA_VERSION, errors)
+
+
+def load_track_id_switches(
+    path: str | Path,
+    manifest_rows: Sequence[Mapping[str, str]],
+) -> list[dict[str, str]]:
+    rows = load_csv_rows(path, TRACK_ID_SWITCH_FIELDS, allow_empty=True)
+    validate_track_id_switches(rows, manifest_rows)
+    return rows
+
+
+def _optional_actor(
+    value: str, field: str, row_name: str, manifest: Mapping[str, str], errors: list[str]
+) -> str:
+    actor_id = (value or "").strip()
+    if not actor_id:
+        return ""
+    if _ACTOR_ID_PATTERN.fullmatch(actor_id) is None:
+        errors.append(f"{row_name}: {field}={actor_id!r} 형식이 잘못됐습니다.")
+        return actor_id
+    if actor_id not in set(split_actor_ids(manifest["actor_ids"])):
+        errors.append(f"{row_name}: {field}가 manifest actor_ids에 없습니다.")
+    return actor_id
+
+
+def validate_event_attribution_review(
+    rows: Sequence[Mapping[str, str]],
+    manifest_rows: Sequence[Mapping[str, str]],
+) -> None:
+    """Event별 victim·predicted cause 검수 기록을 manifest 기준으로 검증한다."""
+    manifest_by_video = {row["video_id"]: row for row in manifest_rows}
+    if len(manifest_by_video) != len(manifest_rows):
+        raise ValueError("manifest에 중복 video_id가 있습니다.")
+    if not rows:
+        return
+
+    errors: list[str] = []
+    for row_number, row in enumerate(rows, start=2):
+        run_id = (row.get("run_id") or "").strip()
+        video_id = (row.get("video_id") or "").strip()
+        row_name = f"{run_id or f'row {row_number}'}/{video_id}"
+        if not run_id:
+            errors.append(f"{row_name}: run_id가 비어 있습니다.")
+
+        manifest = manifest_by_video.get(video_id)
+        if manifest is None:
+            errors.append(f"{row_name}: manifest에 없는 video_id입니다.")
+            continue
+        frame_count = int(manifest["frame_count"])
+
+        event_frame = _optional_frame(
+            row.get("event_frame") or "", "event_frame", row_name, frame_count, errors
+        )
+
+        victim_track_id = (row.get("victim_track_id") or "").strip()
+        if victim_track_id and not victim_track_id.lstrip("-").isdigit():
+            errors.append(f"{row_name}: victim_track_id={victim_track_id!r}는 정수여야 합니다.")
+        predicted_track_id = (row.get("predicted_cause_track_id") or "").strip()
+        if predicted_track_id and not predicted_track_id.lstrip("-").isdigit():
+            errors.append(
+                f"{row_name}: predicted_cause_track_id={predicted_track_id!r}는 정수여야 합니다."
+            )
+
+        _optional_actor(
+            row.get("victim_actor_id") or "", "victim_actor_id", row_name, manifest, errors
+        )
+        _optional_actor(
+            row.get("predicted_cause_actor_id") or "",
+            "predicted_cause_actor_id",
+            row_name,
+            manifest,
+            errors,
+        )
+
+        id_switch_relation = (row.get("id_switch_relation") or "").strip()
+        if id_switch_relation and id_switch_relation not in VALID_ID_SWITCH_RELATIONS:
+            errors.append(
+                f"{row_name}: id_switch_relation은 {sorted(VALID_ID_SWITCH_RELATIONS)} "
+                "중 하나이거나 비어 있어야 합니다."
+            )
+
+        event_error_type = (row.get("event_error_type") or "").strip()
+        if event_error_type and event_error_type not in VALID_EVENT_ERROR_TYPES:
+            errors.append(
+                f"{row_name}: event_error_type은 {sorted(VALID_EVENT_ERROR_TYPES)} "
+                "중 하나이거나 비어 있어야 합니다."
+            )
+        if event_error_type not in {"", "missed_fall", "true_negative"} and event_frame is None:
+            errors.append(
+                f"{row_name}: event_error_type={event_error_type!r}는 event_frame이 필요합니다."
+            )
+        label = manifest["label"]
+        empty_event_fields = (
+            event_frame is None
+            and not victim_track_id
+            and not (row.get("victim_actor_id") or "").strip()
+            and not predicted_track_id
+            and not (row.get("predicted_cause_actor_id") or "").strip()
+            and not (row.get("related_switch_ids") or "").strip()
+        )
+        if event_error_type == "true_negative":
+            if label != "no_fall":
+                errors.append(f"{row_name}: true_negative는 no_fall 영상에만 허용됩니다.")
+            if not empty_event_fields:
+                errors.append(
+                    f"{row_name}: true_negative 행의 Event·Track·Cause 필드는 비워야 합니다."
+                )
+        if event_error_type == "false_alarm" and label != "no_fall":
+            errors.append(f"{row_name}: false_alarm은 no_fall 영상에만 허용됩니다.")
+        if event_error_type == "missed_fall":
+            if label != "fall":
+                errors.append(f"{row_name}: missed_fall은 fall 영상에만 허용됩니다.")
+            if not empty_event_fields:
+                errors.append(
+                    f"{row_name}: missed_fall 행의 Event·Track·Cause 필드는 비워야 합니다."
+                )
+
+        review_status = (row.get("review_status") or "").strip()
+        if review_status not in VALID_REVIEW_STATUSES:
+            errors.append(
+                f"{row_name}: review_status는 {sorted(VALID_REVIEW_STATUSES)} 중 하나여야 합니다."
+            )
+        if review_status == "reviewed" and (not event_error_type or not id_switch_relation):
+            errors.append(
+                f"{row_name}: reviewed 행은 event_error_type과 id_switch_relation이 필요합니다."
+            )
+
+    _raise_errors(TRACK_ACTOR_REVIEW_SCHEMA_VERSION, errors)
+
+
+def load_event_attribution_review(
+    path: str | Path,
+    manifest_rows: Sequence[Mapping[str, str]],
+) -> list[dict[str, str]]:
+    rows = load_csv_rows(path, EVENT_ATTRIBUTION_REVIEW_FIELDS, allow_empty=True)
+    validate_event_attribution_review(rows, manifest_rows)
     return rows
