@@ -8,7 +8,7 @@
 
 | 파일 | 내용 |
 |---|---|
-| `cam01_*_picked.csv` | 클립 5개에서 각각 찍은 기준점 10개 픽셀 좌표 |
+| `cam01_*_picked.csv` | 클립 13개에서 각각 찍은 기준점 10개 픽셀 좌표 |
 | `cam01_*_holdout.csv` | 위 파일 중 holdout 점만 실측 좌표와 함께 뽑은 것 |
 | `holdout_designated.json` | **공식** 평가 결과 (role=fit 4점 고정) |
 | `holdout_loo-all.json` | 보조 진단 (leave-one-out, 남은 9점 최소자승) |
@@ -31,6 +31,14 @@ python scripts/evaluate_homography_holdout.py \
   --picked docs/phase4_homography/cam01_img7327_picked.csv \
   --picked docs/phase4_homography/cam01_img7328_picked.csv \
   --picked docs/phase4_homography/cam01_img7329_picked.csv \
+  --picked docs/phase4_homography/cam01_img7330_picked.csv \
+  --picked docs/phase4_homography/cam01_img7331_picked.csv \
+  --picked docs/phase4_homography/cam01_img7332_picked.csv \
+  --picked docs/phase4_homography/cam01_img7333_picked.csv \
+  --picked docs/phase4_homography/cam01_img7334_picked.csv \
+  --picked docs/phase4_homography/cam01_img7385_picked.csv \
+  --picked docs/phase4_homography/cam01_img7387_picked.csv \
+  --picked docs/phase4_homography/cam01_img7388_picked.csv \
   --unit-cm 1 \
   --fit-mode designated \
   --output docs/phase4_homography/holdout_designated.json
@@ -67,7 +75,7 @@ config는 `role == "fit"`인 점만 `image_points_px`에 담으므로 실제 배
 정확도이므로 runtime 후보의 성능이 아니다.
 
 **`contract.meets_contract`가 `false`다.** `phase4_contract_v1`은 holdout
-10위치·20관측을 요구한다. 클립 5개로 관측은 30회가 됐지만 기준점이 10개뿐이라
+10위치·20관측을 요구한다. 클립 13개로 관측은 78회가 됐지만 기준점이 10개뿐이라
 fit 4를 뺀 **위치가 6개로 고정**돼 요건을 채우지 못한다. 수치는 진단으로 읽고
 공식 acceptance 판정에는 쓰지 않는다. 허용값도 동결하지 못했다. 두 사유로 채택
 기준 1번은 판정 불가이고, PoC 전체 판정은 **미채택**이다
@@ -79,8 +87,8 @@ fit 4를 뺀 **위치가 6개로 고정**돼 요건을 채우지 못한다. 수�
 `docs/homography_calibration.md` 7.1절에 있다.
 
 **카메라가 클립마다 움직였다.** 클립 간 최대 8.5도 회전이 측정돼 단일
-calibration을 전 클립에 적용할 수 없다. 클립 5개에서 기준점을 각각 다시 찍어
-평가했다. 클립을 늘려 관측 수는 30회로 계약 요건 20회를 넘겼지만, 기준점이
+calibration을 전 클립에 적용할 수 없다. 클립 13개에서 기준점을 각각 다시 찍어
+평가했다. 클립을 늘려 관측 수는 78회로 계약 요건 20회를 넘겼지만, 기준점이
 10개뿐이라 **holdout 위치는 6개로 고정**된다. 위치 수는 클립이 아니라 촬영
 현장의 기준점 개수가 정하므로 이 데이터로는 더 늘릴 수 없다.
 
