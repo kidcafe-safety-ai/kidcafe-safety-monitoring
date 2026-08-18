@@ -3,3 +3,11 @@ review_index,original_filename,contract_filename,actor_ids,primary_actor_id,scen
 2,IMG_7327.MOV,P4_S01_A02_zone_enter_exit_01_cam01.mp4,A02,A02,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7327; image_zone=data/zones/image_cam01_img7327.json
 3,IMG_7328.MOV,P4_S01_A01_zone_enter_exit_02_cam01.mp4,A01,A01,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7328; image_zone=data/zones/image_cam01_img7328.json
 4,IMG_7329.MOV,P4_S01_A02_zone_enter_exit_02_cam01.mp4,A02,A02,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7329; image_zone=data/zones/image_cam01_img7329.json
+5,IMG_7330.MOV,P4_S01_A02_zone_enter_exit_03_cam01.mp4,A02,A02,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7330; image_zone=data/zones/image_cam01_img7330.json
+6,IMG_7331.MOV,P4_S01_A02_zone_enter_exit_04_cam01.mp4,A02,A02,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7331; image_zone=data/zones/image_cam01_img7331.json
+7,IMG_7332.MOV,P4_S01_A01_zone_enter_exit_03_cam01.mp4,A01,A01,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7332; image_zone=data/zones/image_cam01_img7332.json
+8,IMG_7333.MOV,P4_S01_A02_zone_enter_exit_05_cam01.mp4,A02,A02,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7333; image_zone=data/zones/image_cam01_img7333.json
+9,IMG_7334.MOV,P4_S01_A01_zone_enter_exit_04_cam01.mp4,A01,A01,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7334; image_zone=data/zones/image_cam01_img7334.json
+10,IMG_7385.MOV,P4_S01_A01_zone_enter_exit_06_cam01.mp4,A01|A02,A01,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7385; image_zone=data/zones/image_cam01_img7385.json; ground_truth_actor=A01
+11,IMG_7387.MOV,P4_S01_A01_zone_enter_exit_05_cam01.mp4,A01,A01,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7387; image_zone=data/zones/image_cam01_img7387.json
+12,IMG_7388.MOV,P4_S01_A02_zone_enter_exit_06_cam01.mp4,A02,A02,zone_enter_exit,no_fall,human_confirmed,calibration_version=2026-08-07-img7388; image_zone=data/zones/image_cam01_img7388.json
