@@ -1,0 +1,13 @@
+run_id,video_id,event_frame,victim_track_id,victim_actor_id,predicted_cause_track_id,predicted_cause_actor_id,related_switch_ids,id_switch_relation,event_error_type,review_status,notes
+e1_diagnostic_pose_conf05_recorded_mps,P4_S01_A01_contact_fall_01_cam01,131,4,A01,2,A02,sw_P4_S01_A01_contact_fall_01_cam01_3_4_121,none,none,reviewed,
+e1_diagnostic_pose_conf05_recorded_mps,P4_S01_A01_contact_fall_02_cam01,81,1,A01,2,A02,,none,none,reviewed,
+e1_diagnostic_pose_conf05_recorded_mps,P4_S01_A01_contact_fall_03_cam01,98,1,A01,,,,none,missed_cause,reviewed,
+e1_diagnostic_pose_conf05_recorded_mps,P4_S01_A01_contact_fall_04_cam01,98,1,A01,2,A02,,none,none,reviewed,
+e1_diagnostic_pose_conf05_recorded_mps,P4_S01_A01_occluded_cross_01_cam01,645,20,A01,,,sw_P4_S01_A01_occluded_cross_01_cam01_1_6_143|sw_P4_S01_A01_occluded_cross_01_cam01_6_11_255|sw_P4_S01_A01_occluded_cross_01_cam01_11_13_386|sw_P4_S01_A01_occluded_cross_01_cam01_13_18_596|sw_P4_S01_A01_occluded_cross_01_cam01_18_20_634,none,false_alarm,reviewed,no_fall 영상의 false alarm; cause=null이며 ID switch가 Event 오류를 유발한 근거 없음
+e1_diagnostic_pose_conf05_recorded_mps,P4_S01_A01_near_pass_01_cam01,,,,,,,none,true_negative,reviewed,Event 0건 확인
+e1_diagnostic_pose_conf05_recorded_mps,P4_S01_A01_near_pass_02_cam01,,,,,,,none,true_negative,reviewed,Event 0건 확인
+e1_diagnostic_pose_conf05_recorded_mps,P4_S01_A01_near_pass_03_cam01,,,,,,,none,true_negative,reviewed,Event 0건 확인
+e1_diagnostic_pose_conf05_recorded_mps,P4_S01_A02_contact_fall_01_cam01,,,,,,,none,missed_fall,reviewed,
+e1_diagnostic_pose_conf05_recorded_mps,P4_S01_A02_contact_fall_02_cam01,123,5,,1,A02,,none,victim_mismatch,reviewed,
+e1_diagnostic_pose_conf05_recorded_mps,P4_S01_A02_contact_fall_03_cam01,,,,,,,none,missed_fall,reviewed,
+e1_diagnostic_pose_conf05_recorded_mps,P4_S01_A02_contact_fall_04_cam01,191,6,A02,,,sw_P4_S01_A02_contact_fall_04_cam01_1_6_153,associated,late_fall,reviewed,switch(1->6@153)가 late_fall과 시간적으로 강하게 연관되지만 victim_track_id_aliases를 채운 alias-replay로 검증되지 않아 associated로 기록(caused 아님)
