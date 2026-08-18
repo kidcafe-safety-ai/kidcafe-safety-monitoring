@@ -160,9 +160,11 @@ def write_json_atomic(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     handle, temp_name = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
     try:
-        with os.fdopen(handle, "w", encoding="utf-8") as file:
-            json.dump(payload, file, ensure_ascii=False, indent=2, sort_keys=True)
-            file.write("\n")
+        # 바이너리로 쓴다. 텍스트 모드로 열면 Windows가 \n을 \r\n으로 바꿔
+        # 같은 입력인데 OS에 따라 파일 바이트가 달라진다.
+        with os.fdopen(handle, "wb") as file:
+            text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+            file.write((text + "\n").encode("utf-8"))
             file.flush()
             os.fsync(file.fileno())
         os.replace(temp_name, path)

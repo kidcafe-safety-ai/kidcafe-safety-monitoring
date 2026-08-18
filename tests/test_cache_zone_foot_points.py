@@ -138,6 +138,20 @@ def test_cache_json_is_written_and_readable(tmp_path):
     assert not list(target.parent.glob("*.tmp"))
 
 
+def test_written_bytes_use_lf_on_every_platform(tmp_path):
+    """Windows 텍스트 모드는 \\n을 \\r\\n으로 바꾼다.
+
+    실제로 Windows에서 만든 결과 JSON이 전 줄 CRLF로 나왔다. 커밋되는
+    artifact라 OS마다 바이트가 달라지면 안 되고, 저장소는 이미 CRLF 유입으로
+    `git diff --check`가 걸린 적이 있다. 그래서 바이너리로 쓴다.
+    """
+    target = tmp_path / "cache.json"
+    czf.write_json_atomic(target, {"videos": {}, "note": "한글"})
+    raw = target.read_bytes()
+    assert b"\r\n" not in raw
+    assert raw.endswith(b"\n")
+
+
 def test_cache_schema_matches_the_evaluator(tmp_path):
     """캐시를 만드는 쪽과 읽는 쪽의 schema 이름이 갈리면 안 된다."""
     from scripts import evaluate_zone_paths as ezp

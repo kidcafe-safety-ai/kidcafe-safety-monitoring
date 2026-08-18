@@ -480,3 +480,17 @@ def test_boundary_disagreement_stays_inside_the_rounding_band(clip):
         if image_in != floor_in:
             worst = max(worst, Point(x, y).distance(boundary))
     assert worst <= ROUNDING_BAND_PX, f"{clip}에서 경계 {worst:.3f}px 밖까지 판정이 갈렸다"
+
+
+def test_written_bytes_use_lf_on_every_platform(tmp_path):
+    """결과 JSON은 어느 OS에서 만들어도 같은 바이트여야 한다.
+
+    Windows 텍스트 모드가 \\n을 \\r\\n으로 바꿔, 실제로 전 줄 CRLF인 결과가
+    나왔다. 커밋되는 artifact이고 저장소는 이미 CRLF 유입으로 `git diff
+    --check`가 걸린 적이 있다.
+    """
+    target = tmp_path / "result.json"
+    ezp.write_json_atomic(target, {"schema_version": ezp.RESULT_SCHEMA_VERSION})
+    raw = target.read_bytes()
+    assert b"\r\n" not in raw
+    assert raw.endswith(b"\n")
