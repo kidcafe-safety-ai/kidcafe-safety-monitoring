@@ -336,17 +336,35 @@ def load_track_identity(path: Path) -> Dict[str, dict]:
     return index
 
 
-def verify_track_identity(video_id: str, chosen: int, record: Optional[dict]) -> Optional[dict]:
-    """고른 Track이 사람이 확인한 Track과 같은지 본다."""
+def verify_track_identity(
+    video_id: str, chosen: int, record: Optional[dict], official: bool
+) -> Optional[dict]:
+    """고른 Track이 사람이 확인한 Track과 같은지 본다.
+
+    공식 측정에서는 어긋나면 멈춘다. 캐시나 tracker가 바뀌어 다른 사람이
+    평가되는 것을 공식 수치로 낼 수는 없기 때문이다.
+
+    진단 실행에서는 멈추지 않고 불일치를 결과에 적는다. `gt-overlap`처럼 다른
+    Track을 고르는 규칙을 일부러 돌려보는 것이 진단의 목적이고, 그 규칙이 대상이
+    아닌 사람을 고른다는 사실 자체가 봐야 할 결과다.
+    """
     if record is None:
         return None
-    if chosen != record["track_id"]:
+    entry = dict(record)
+    entry["selected_track_id"] = chosen
+    entry["matches_verified_track"] = chosen == record["track_id"]
+    if entry["matches_verified_track"]:
+        return entry
+    message = (
+        f"{video_id}: 선택된 Track {chosen}이 확인 기록의 Track "
+        f"{record['track_id']}({record['ground_truth_actor']})과 다릅니다."
+    )
+    if official:
         raise ZoneEvalError(
-            f"{video_id}: 선택된 Track {chosen}이 확인 기록의 Track "
-            f"{record['track_id']}({record['ground_truth_actor']})과 다릅니다. "
-            "캐시나 tracker가 바뀌었을 수 있으니 대상 인물을 다시 확인하세요."
+            message + " 캐시나 tracker가 바뀌었을 수 있으니 대상 인물을 다시 확인하세요."
         )
-    return dict(record)
+    print(f"경고: {message} 진단 실행이므로 계속합니다.", flush=True)
+    return entry
 
 
 def judge_frames(
@@ -647,7 +665,9 @@ def evaluate(args: argparse.Namespace) -> dict:
         track_id, selection = pick_track(frames, args.track_selection, enter, exit_)
         if track_id is None:
             raise ZoneEvalError(f"{video_id}: 평가할 Track을 고르지 못했습니다.")
-        verified = verify_track_identity(video_id, track_id, identities.get(video_id))
+        verified = verify_track_identity(
+            video_id, track_id, identities.get(video_id), is_official
+        )
 
         judged = judge_frames(
             frames, track_id, zone_id, width, height,

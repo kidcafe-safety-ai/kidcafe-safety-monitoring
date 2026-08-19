@@ -221,7 +221,7 @@ foot point와 ground truth를 입력으로 받고 Zone 정의만 다르므로, �
 `zone_path_comparison.json`과 `docs/homography_calibration.md` 7.4절에 있다.
 
 두 좌표 경로는 정확도 91.695%, 오판정 552건, ENTER·EXIT Event 오류 0건, 빠른
-반전 2건으로 **완전히 같았다.** 영상별 Event frame 번호까지 동일하다. image
+반전 0건으로 **완전히 같았다.** 영상별 Event frame 번호까지 동일하다. image
 Zone과 floor Zone을 같은 클릭에서 만들어 두 경로가 정의상 같은 판정을 내기
 때문이며, 기준 2·3번 미달·4번 판정 불가·5번 통과로 기록했다.
 

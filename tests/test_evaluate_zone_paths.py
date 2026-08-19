@@ -665,14 +665,39 @@ def test_result_records_the_evaluated_zone(workspace):
 # --- 대상 Track 확인 기록 (종민 4번) ---
 
 
-def test_selected_track_must_match_the_verified_record(workspace):
-    """캐시나 tracker가 바뀌어 다른 사람이 선택되면 걸려야 한다."""
+def set_verified_track(workspace, track_id):
     rows = list(csv.reader(open(workspace["identity"], encoding="utf-8")))
-    rows[1][2] = "99"
+    rows[1][2] = str(track_id)
     with open(workspace["identity"], "w", encoding="utf-8", newline="") as file:
         csv.writer(file, lineterminator="\n").writerows(rows)
+
+
+def test_selected_track_must_match_the_verified_record(workspace):
+    """캐시나 tracker가 바뀌어 다른 사람이 선택되면 공식 실행은 멈춘다."""
+    set_verified_track(workspace, 99)
     with pytest.raises(ezp.ZoneEvalError, match="확인 기록"):
         run(workspace)
+
+
+def test_diagnostic_run_records_the_mismatch_instead_of_failing(workspace):
+    """진단 실행은 멈추지 않는다.
+
+    gt-overlap처럼 다른 Track을 고르는 규칙을 일부러 돌려보는 것이 진단의
+    목적이고, 그 규칙이 대상이 아닌 사람을 고른다는 사실 자체가 결과다.
+    공식 실행에서만 막으면 된다.
+    """
+    set_verified_track(workspace, 99)
+    result = run(workspace, event_tolerance_sec=3.0, allow_nonstandard_tolerances=True)
+    identity = result["per_video"][0]["track_identity"]
+    assert identity["matches_verified_track"] is False
+    assert identity["selected_track_id"] == 7
+    assert identity["track_id"] == 99
+
+
+def test_matching_track_is_marked_as_verified(workspace):
+    identity = run(workspace)["per_video"][0]["track_identity"]
+    assert identity["matches_verified_track"] is True
+    assert identity["selected_track_id"] == 7
 
 
 def test_verified_track_is_carried_into_the_result(workspace):

@@ -540,18 +540,24 @@ tracker: `yolo26n.pt`, confidence 0.5
 그려 대조한 결과 **T2가 파란 상의, 즉 manifest의 `primary_actor_id=A01`이다.**
 공식 수치는 A01을 잰 값이 맞다.
 
-`gt-overlap`이 고른 T3은 A02다. 이 규칙은 ground truth 구간에 오래 머문 Track을
-고르므로 **대상 인물이 아닌 사람을 고를 수 있다.** 그 영상의 오판정과 Event
-오류가 함께 늘어 전체 수치도 나빠진다. 진단용으로만 쓰고 공식 판정에는 쓰지
-않으며, 공식값이 아닌 조건으로 실행하면 결과에 `is_official: false`가 찍힌다.
+`gt-overlap`이 고른 T3은 회색 상의 A02다. 이 규칙은 ground truth 구간에 오래
+머문 Track을 고르므로 **대상 인물이 아닌 사람을 고를 수 있다.** 진단용으로만
+쓰고 공식 판정에는 쓰지 않는다. 공식값이 아닌 조건으로 실행하면 결과에
+`is_official: false`가 찍힌다.
 
 두 규칙 **모두에서** image와 Homography의 수치는 서로 같았다. Track 선택을
 바꿔도 두 경로가 갈리지 않는다는 추가 확인이다.
 
 확인 결과는 `data/annotations/phase4/zone_eval/track_identity.csv`에 남긴다.
 `video_id`·대상 actor·확인된 `track_id`·확인 방법·검수자·확인 시각을 적고,
-평가가 실행될 때마다 고른 Track이 그 기록과 같은지 대조한다. 캐시나 tracker가
-바뀌어 다른 사람이 선택되면 그 자리에서 실패한다.
+평가가 실행될 때마다 고른 Track이 그 기록과 같은지 대조한다.
+
+- **공식 실행**에서 어긋나면 멈춘다. 캐시나 tracker가 바뀌어 다른 사람이
+  평가된 값을 공식 수치로 낼 수는 없다.
+- **진단 실행**에서는 경고만 남기고 계속한다. 결과의 `track_identity`에
+  `matches_verified_track`과 실제 선택된 `selected_track_id`가 적힌다. 다른
+  Track을 고르는 규칙을 일부러 돌려보는 것이 진단의 목적이고, 그 규칙이 대상이
+  아닌 사람을 고른다는 사실 자체가 봐야 할 결과이기 때문이다.
 
 ##### 두 경로 공통으로 얻은 값
 
@@ -655,7 +661,7 @@ microbenchmark의 추가 비용을 `--baseline-fps`가 나타내는 frame 예산
 | 2 | Zone inside/outside 정확도 개선 | **미달** — 두 경로 모두 91.695%, +0.000%p(7.4절) |
 | 3 | Zone 오판정 30% 감소 또는 정확도 5%p 개선 | **미달** — 552건 → 552건 |
 | 4 | ENTER·EXIT Event 오류 30% 감소 | **판정 불가** — 기존 경로 오류 0건이라 감소율 미정의 |
-| 5 | 빠른 ENTER·EXIT 반전 증가 없음 | 통과 (2건 → 2건) |
+| 5 | 빠른 ENTER·EXIT 반전 증가 없음 | 통과 (0건 → 0건) |
 | 6 | frame당 추가 비용 1ms 이하 | 통과 (+0.0237ms) |
 | 7 | FPS 하락률 5% 이내 | **미측정** — 실측이 아닌 추정치만 있음(7.5절) |
 | 8 | camera·해상도 불일치 fail-fast | 통과 (`verify_source()`) |
