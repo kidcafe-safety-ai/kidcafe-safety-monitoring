@@ -727,8 +727,10 @@
       },
       "track_identity": {
         "ground_truth_actor": "A01",
+        "matches_verified_track": true,
         "notes": "scripts/verify_track_identity.py frames=210|300|400|500|560; T2=파란 상의 A01 / T3=회색 상의 A02",
         "reviewer_id": "202178038",
+        "selected_track_id": 2,
         "track_id": 2,
         "verification_method": "bbox_overlay_visual",
         "verified_at": "2026-08-18"
