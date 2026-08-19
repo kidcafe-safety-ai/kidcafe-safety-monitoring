@@ -3,7 +3,7 @@ import { getEvents } from "../api/eventsApi";
 import EventChart from "../components/EventChart";
 import EventTable from "../components/EventTable";
 import EventTimelineChart from "../components/EventTimelineChart";
-import { usePolling } from "../hooks/usePolling";
+import { usePolling, type PollingContext } from "../hooks/usePolling";
 import type { EventType, SafetyEvent } from "../types/event";
 import { getEventDisplayMeta, KNOWN_EVENT_TYPES } from "../utils/eventDisplay";
 
@@ -19,9 +19,17 @@ export default function EventsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasApiError, setHasApiError] = useState(false);
 
-  const loadEvents = useCallback(async () => {
-    const response = await getEvents();
-    setEvents(response.data);
+  const loadEvents = useCallback(async (context: PollingContext) => {
+    const response = await getEvents({ signal: context.signal });
+
+    if (!context.isActive()) {
+      return;
+    }
+
+    if (response.status !== "error") {
+      setEvents(response.data);
+    }
+
     setHasApiError(response.status === "error");
     setIsLoading(false);
   }, []);
@@ -94,7 +102,7 @@ export default function EventsPage() {
       {isLoading ? <div className="state-banner">데이터를 불러오는 중입니다.</div> : null}
       {hasApiError ? (
         <div className="state-banner error">
-          API 연결에 실패했습니다. mock 또는 기본값으로 화면을 표시합니다.
+          API 연결에 실패했습니다. 마지막으로 확인된 실제 데이터가 있으면 유지됩니다.
         </div>
       ) : null}
       <section className="events-grid">

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getEvents } from "../api/eventsApi";
-import { usePolling } from "../hooks/usePolling";
+import { usePolling, type PollingContext } from "../hooks/usePolling";
 import type {
   AlertHistoryItem,
   AlertSeverity,
@@ -204,12 +204,23 @@ export default function AlertHistoryPage({
   const [isLoading, setIsLoading] = useState(true);
   const [hasApiError, setHasApiError] = useState(false);
 
-  const loadAlerts = useCallback(async () => {
-    const response = await getEvents();
+  const loadAlerts = useCallback(async (context: PollingContext) => {
+    const response = await getEvents({ signal: context.signal });
+
+    if (!context.isActive()) {
+      return;
+    }
+
+    if (response.status === "error") {
+      setHasApiError(true);
+      setIsLoading(false);
+      return;
+    }
+
     const mappedAlerts = response.data.map(mapEventToAlertHistoryItem);
 
     setAlerts(mappedAlerts);
-    setHasApiError(response.status === "error");
+    setHasApiError(false);
     setIsLoading(false);
     setSelectedAlertId((currentAlertId) => {
       if (

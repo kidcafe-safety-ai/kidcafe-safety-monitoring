@@ -31,7 +31,7 @@ interface LoadedReportEvents {
   pagesLoaded: number;
 }
 
-function getReportErrorMessage(error: unknown) {
+export function getReportErrorMessage(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") {
     return "요청이 취소되었습니다.";
   }
@@ -55,7 +55,7 @@ function formatReportRange(range: SeoulInclusiveDateRange | null) {
   return `${range.startDateKey} ~ ${range.endDateKey}`;
 }
 
-async function loadAllEventsForReport(
+export async function loadAllEventsForReport(
   range: SeoulInclusiveDateRange,
   signal: AbortSignal,
 ): Promise<LoadedReportEvents> {

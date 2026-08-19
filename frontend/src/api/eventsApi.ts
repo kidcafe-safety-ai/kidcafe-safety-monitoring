@@ -396,6 +396,19 @@ function normalizeSafetyEvents(data: unknown): SafetyEvent[] {
   );
 }
 
+function assertEventListData(data: unknown): void {
+  if (Array.isArray(data) || isPaginatedResponse<unknown>(data)) {
+    return;
+  }
+
+  throw new Error("Event list response format was invalid");
+}
+
+function normalizeSafetyEventsStrict(data: unknown): SafetyEvent[] {
+  assertEventListData(data);
+  return normalizeSafetyEvents(data);
+}
+
 function createEmptyEventListData(params?: GetEventsParams): EventListData {
   return {
     items: [],
@@ -446,6 +459,14 @@ function normalizeEventListData(
   };
 }
 
+function normalizeEventListDataStrict(
+  data: unknown,
+  params?: GetEventsParams,
+): EventListData {
+  assertEventListData(data);
+  return normalizeEventListData(data, params);
+}
+
 function normalizeSummaryStats(value: unknown): SummaryStats {
   const summary = isRecord(value) ? value : {};
 
@@ -459,6 +480,14 @@ function normalizeSummaryStats(value: unknown): SummaryStats {
     dwell_count: readOptionalNumber(summary.dwell_count),
     exit_count: readOptionalNumber(summary.exit_count),
   };
+}
+
+function normalizeSummaryStatsStrict(value: unknown): SummaryStats {
+  if (!isRecord(value)) {
+    throw new Error("Summary response format was invalid");
+  }
+
+  return normalizeSummaryStats(value);
 }
 
 function normalizeZoneOccupancy(value: unknown): ZoneOccupancy {
@@ -486,6 +515,14 @@ function normalizeCurrentStatus(value: unknown): CurrentStatus {
     ),
     updated_at: readNullableString(status.updated_at),
   };
+}
+
+function normalizeCurrentStatusStrict(value: unknown): CurrentStatus {
+  if (!isRecord(value) || !Array.isArray(value.zone_occupancy)) {
+    throw new Error("Current status response format was invalid");
+  }
+
+  return normalizeCurrentStatus(value);
 }
 
 function buildDashboardSummary(summary: SummaryStats): DashboardSummary {
@@ -604,12 +641,19 @@ export function isEventsApiMode() {
   return isApiMode();
 }
 
-export async function getEvents(): Promise<ApiResponse<SafetyEvent[]>> {
+export async function getEvents(options?: {
+  signal?: AbortSignal;
+}): Promise<ApiResponse<SafetyEvent[]>> {
   if (!isApiMode()) {
     return successResponse(mockEvents);
   }
 
-  const result = await loadApiData("/events", normalizeSafetyEvents, []);
+  const result = await loadApiData(
+    "/events",
+    normalizeSafetyEventsStrict,
+    [],
+    options,
+  );
 
   if (result.errorMessage !== null) {
     return fallbackResponse(result.data, result.errorMessage);
@@ -629,7 +673,7 @@ export async function getEventsPage(
   const fallback = createEmptyEventListData(params);
   const result = await loadApiData(
     `/events${buildEventsQuery(params)}`,
-    (data) => normalizeEventListData(data, params),
+    (data) => normalizeEventListDataStrict(data, params),
     fallback,
     options,
   );
@@ -643,7 +687,7 @@ export async function getEventsPage(
 
 export async function getRecentEvents(
   limit = RECENT_EVENT_LIMIT,
-  options?: { minutes?: number },
+  options?: { minutes?: number; signal?: AbortSignal },
 ): Promise<ApiResponse<SafetyEvent[]>> {
   const safeLimit = Math.max(
     1,
@@ -664,8 +708,9 @@ export async function getRecentEvents(
 
   const result = await loadApiData(
     `/events/recent?${searchParams.toString()}`,
-    normalizeSafetyEvents,
+    normalizeSafetyEventsStrict,
     [],
+    { signal: options?.signal },
   );
 
   if (result.errorMessage !== null) {
@@ -675,15 +720,18 @@ export async function getRecentEvents(
   return successResponse(result.data);
 }
 
-export async function getCurrentStatus(): Promise<ApiResponse<CurrentStatus>> {
+export async function getCurrentStatus(options?: {
+  signal?: AbortSignal;
+}): Promise<ApiResponse<CurrentStatus>> {
   if (!isApiMode()) {
     return successResponse(createMockCurrentStatus());
   }
 
   const result = await loadApiData(
     "/status/current",
-    normalizeCurrentStatus,
+    normalizeCurrentStatusStrict,
     createEmptyCurrentStatus(),
+    options,
   );
 
   if (result.errorMessage !== null) {
@@ -693,12 +741,19 @@ export async function getCurrentStatus(): Promise<ApiResponse<CurrentStatus>> {
   return successResponse(result.data);
 }
 
-export async function getDashboardSummary(): Promise<ApiResponse<DashboardSummary>> {
+export async function getDashboardSummary(options?: {
+  signal?: AbortSignal;
+}): Promise<ApiResponse<DashboardSummary>> {
   if (!isApiMode()) {
     return successResponse(mockSummary);
   }
 
-  const summaryResult = await loadApiData("/summary", normalizeSummaryStats, {});
+  const summaryResult = await loadApiData(
+    "/summary",
+    normalizeSummaryStatsStrict,
+    {},
+    options,
+  );
   const dashboardSummary = buildDashboardSummary(summaryResult.data);
 
   if (summaryResult.errorMessage !== null) {
@@ -712,12 +767,14 @@ export async function getSummary(): Promise<ApiResponse<DashboardSummary>> {
   return getDashboardSummary();
 }
 
-export async function getZoneStatus(): Promise<ApiResponse<ZoneStatus[]>> {
+export async function getZoneStatus(options?: {
+  signal?: AbortSignal;
+}): Promise<ApiResponse<ZoneStatus[]>> {
   if (!isApiMode()) {
     return successResponse(mockZoneStatus);
   }
 
-  const response = await getCurrentStatus();
+  const response = await getCurrentStatus(options);
   const zones = response.data.zone_occupancy.map((zone) => ({
     zone_id: zone.zone_id,
     zone_name: zone.zone_name,
