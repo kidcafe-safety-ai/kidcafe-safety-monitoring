@@ -567,6 +567,135 @@ class TestEventAttributionReviewValidation:
         contract.validate_event_attribution_review([row], [_manifest_row(actor_ids="A01|A02")])
 
 
+def _zone_interval_row(**overrides) -> dict[str, str]:
+    row = {
+        "video_id": "P4_S01_A01_fall_backward_01_cam01",
+        "zone_id": "play_floor",
+        "interval_index": "1",
+        "enter_frame": "40",
+        "exit_frame": "150",
+        "dwell_start_frame": "60",
+        "review_status": "reviewed",
+        "notes": "",
+    }
+    row.update(overrides)
+    return row
+
+
+class TestZoneIntervalValidation:
+    def test_accepts_reviewed_interval(self):
+        contract.validate_zone_intervals([_zone_interval_row()], [_manifest_row()])
+
+    def test_accepts_pending_draft_with_blank_frames(self):
+        pending = _zone_interval_row(
+            enter_frame="",
+            exit_frame="",
+            dwell_start_frame="",
+            review_status="pending",
+        )
+
+        contract.validate_zone_intervals([pending], [_manifest_row()])
+
+    def test_require_reviewed_rejects_pending_draft(self):
+        pending = _zone_interval_row(
+            enter_frame="",
+            exit_frame="",
+            dwell_start_frame="",
+            review_status="pending",
+        )
+
+        with pytest.raises(ValueError, match="review_status=reviewed"):
+            contract.validate_zone_intervals(
+                [pending], [_manifest_row()], require_reviewed=True
+            )
+
+    def test_rejects_reviewed_without_enter_or_exit(self):
+        with pytest.raises(ValueError, match="enter_frame"):
+            contract.validate_zone_intervals(
+                [_zone_interval_row(enter_frame="", exit_frame="")],
+                [_manifest_row()],
+            )
+
+    def test_rejects_enter_not_before_exit(self):
+        with pytest.raises(ValueError, match="enter_frame"):
+            contract.validate_zone_intervals(
+                [_zone_interval_row(enter_frame="150", exit_frame="150")],
+                [_manifest_row()],
+            )
+
+    def test_rejects_frame_outside_video(self):
+        with pytest.raises(ValueError, match="frame 범위"):
+            contract.validate_zone_intervals(
+                [_zone_interval_row(exit_frame="300")],
+                [_manifest_row()],
+            )
+
+    def test_rejects_dwell_outside_enter_exit_range(self):
+        with pytest.raises(ValueError, match="dwell_start_frame"):
+            contract.validate_zone_intervals(
+                [_zone_interval_row(dwell_start_frame="150")],
+                [_manifest_row()],
+            )
+
+    def test_rejects_duplicate_interval_key(self):
+        second = _zone_interval_row(
+            enter_frame="160", exit_frame="200", dwell_start_frame=""
+        )
+        with pytest.raises(ValueError, match="중복"):
+            contract.validate_zone_intervals(
+                [_zone_interval_row(), second], [_manifest_row()]
+            )
+
+    def test_rejects_non_contiguous_interval_indexes(self):
+        second = _zone_interval_row(
+            interval_index="3",
+            enter_frame="160",
+            exit_frame="200",
+            dwell_start_frame="",
+        )
+
+        with pytest.raises(ValueError, match="1부터 연속"):
+            contract.validate_zone_intervals(
+                [_zone_interval_row(), second], [_manifest_row()]
+            )
+
+    def test_rejects_unknown_video_id(self):
+        with pytest.raises(ValueError, match="manifest에 없는 video_id"):
+            contract.validate_zone_intervals(
+                [_zone_interval_row(video_id="P4_S01_A99_fall_backward_01_cam01")],
+                [_manifest_row()],
+            )
+
+    def test_requires_interval_for_every_manifest_video(self):
+        second = _manifest_row(
+            video_id="P4_S01_A02_fall_side_01_cam01",
+            actor_ids="A02",
+            primary_actor_id="A02",
+            scenario_type="fall_side",
+            video_path=(
+                "data/datasets/phase4_recordings/a_fall_review/"
+                "P4_S01_A02_fall_side_01_cam01.mp4"
+            ),
+            checksum_sha256="b" * 64,
+        )
+        with pytest.raises(ValueError, match="누락"):
+            contract.validate_zone_intervals(
+                [_zone_interval_row()], [_manifest_row(), second]
+            )
+
+    def test_second_interval_reuses_index_one_for_different_zone(self):
+        other_zone = _zone_interval_row(
+            zone_id="danger_door",
+            enter_frame="200",
+            exit_frame="250",
+            dwell_start_frame="",
+        )
+
+        contract.validate_zone_intervals(
+            [_zone_interval_row(), other_zone], [_manifest_row()]
+        )
+
+
 def test_csv_writer_is_atomic_and_requires_force(tmp_path):
     output = tmp_path / "manifest.csv"
     rows = [_manifest_row()]

@@ -1,0 +1,13 @@
+video_id,zone_id,interval_index,enter_frame,exit_frame,dwell_start_frame,review_status,notes
+P4_S01_A01_zone_enter_exit_01_cam01,play_floor,1,126,372,,reviewed,review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5
+P4_S01_A01_zone_enter_exit_02_cam01,play_floor,1,110,402,,reviewed,review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5
+P4_S01_A02_zone_enter_exit_01_cam01,play_floor,1,125,415,,reviewed,review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5
+P4_S01_A02_zone_enter_exit_02_cam01,play_floor,1,133,444,433,reviewed,review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5
+P4_S01_A01_zone_enter_exit_03_cam01,play_floor,1,127,707,427,reviewed,review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5
+P4_S01_A01_zone_enter_exit_04_cam01,play_floor,1,111,580,411,reviewed,review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5
+P4_S01_A01_zone_enter_exit_05_cam01,play_floor,1,160,724,460,reviewed,review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5
+P4_S01_A01_zone_enter_exit_06_cam01,play_floor,1,197,565,497,reviewed,target_actor=A01; review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5
+P4_S01_A02_zone_enter_exit_03_cam01,play_floor,1,86,372,,reviewed,review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5
+P4_S01_A02_zone_enter_exit_04_cam01,play_floor,1,114,798,414,reviewed,review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5
+P4_S01_A02_zone_enter_exit_05_cam01,play_floor,1,133,721,433,reviewed,review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5
+P4_S01_A02_zone_enter_exit_06_cam01,play_floor,1,141,536,441,reviewed,review_mode=blind; zone_reference=hidden; dwell_threshold_sec=5
