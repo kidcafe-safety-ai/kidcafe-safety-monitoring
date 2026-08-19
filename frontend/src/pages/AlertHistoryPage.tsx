@@ -37,6 +37,10 @@ const API_MODE = typeof import.meta.env.VITE_API_MODE === "string"
   ? import.meta.env.VITE_API_MODE.toLowerCase()
   : "mock";
 
+interface AlertHistoryPageProps {
+  focusedEventId?: string | null;
+}
+
 function isApiMode() {
   return API_MODE === "api";
 }
@@ -188,7 +192,9 @@ function mapEventToAlertHistoryItem(event: SafetyEvent): AlertHistoryItem {
   };
 }
 
-export default function AlertHistoryPage() {
+export default function AlertHistoryPage({
+  focusedEventId = null,
+}: AlertHistoryPageProps) {
   const [alerts, setAlerts] = useState<AlertHistoryItem[]>([]);
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("전체");
   const [zoneFilter, setZoneFilter] = useState("전체");
@@ -207,6 +213,13 @@ export default function AlertHistoryPage() {
     setIsLoading(false);
     setSelectedAlertId((currentAlertId) => {
       if (
+        focusedEventId !== null &&
+        mappedAlerts.some((alert) => alert.alert_id === focusedEventId)
+      ) {
+        return focusedEventId;
+      }
+
+      if (
         currentAlertId !== null &&
         mappedAlerts.some((alert) => alert.alert_id === currentAlertId)
       ) {
@@ -215,7 +228,7 @@ export default function AlertHistoryPage() {
 
       return mappedAlerts[0]?.alert_id ?? null;
     });
-  }, []);
+  }, [focusedEventId]);
 
   usePolling(loadAlerts, ALERT_POLLING_INTERVAL_MS);
 
@@ -241,6 +254,14 @@ export default function AlertHistoryPage() {
 
   useEffect(() => {
     if (
+      focusedEventId !== null &&
+      filteredAlerts.some((alert) => alert.alert_id === focusedEventId)
+    ) {
+      setSelectedAlertId(focusedEventId);
+      return;
+    }
+
+    if (
       selectedAlertId !== null &&
       filteredAlerts.some((alert) => alert.alert_id === selectedAlertId)
     ) {
@@ -248,7 +269,7 @@ export default function AlertHistoryPage() {
     }
 
     setSelectedAlertId(filteredAlerts[0]?.alert_id ?? null);
-  }, [filteredAlerts, selectedAlertId]);
+  }, [filteredAlerts, focusedEventId, selectedAlertId]);
 
   const selectedAlert =
     filteredAlerts.find((alert) => alert.alert_id === selectedAlertId) ??

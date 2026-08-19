@@ -1,10 +1,45 @@
-export type AlertZoneType = "위험구역" | "주의구역" | "관찰구역";
+export type ZoneType = "play" | "exit" | "restricted" | "danger";
 
-export interface AlertZoneSetting {
+export type ZonePoint = [number, number];
+
+export interface ZoneRules {
+  enter_alert: boolean;
+  dwell_threshold_sec: number;
+}
+
+export interface Zone {
   zone_id: string;
   zone_name: string;
-  zone_type: AlertZoneType;
-  dwell_threshold_sec: number;
-  alert_enabled: boolean;
-  points: [number, number][];
+  type: "polygon";
+  zone_type: ZoneType;
+  points: ZonePoint[];
+  rules: ZoneRules;
+}
+
+export interface ZoneConfig {
+  version: string;
+  updated_at: string;
+  zones: Zone[];
+}
+
+export interface PutZonesRequest {
+  expected_version: string;
+  zones: Zone[];
+}
+
+export type ZoneApiErrorType =
+  | "conflict"
+  | "validation"
+  | "server"
+  | "network"
+  | "schema"
+  | "unknown";
+
+export interface ZoneApiResponse<T> {
+  status: "success" | "error";
+  data: T | null;
+  message: string | null;
+  error_type?: ZoneApiErrorType;
+  status_code?: number;
+  details?: string[];
 }

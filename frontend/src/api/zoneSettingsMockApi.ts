@@ -1,23 +1,22 @@
-import { mockZoneSettings } from "../mocks/mockZoneSettings";
-import type { AlertZoneSetting } from "../types/zoneSettings";
+import { mockZoneConfig } from "../mocks/mockZoneSettings";
+import type { ZoneApiResponse, ZoneConfig } from "../types/zoneSettings";
 
-interface MockApiResponse<T> {
-  status: "success";
-  data: T;
-  message: string | null;
-}
-
-function successResponse<T>(data: T): MockApiResponse<T> {
+function cloneZoneConfig(config: ZoneConfig): ZoneConfig {
   return {
-    status: "success",
-    data,
-    message: null,
+    ...config,
+    zones: config.zones.map((zone) => ({
+      ...zone,
+      points: zone.points.map(([x, y]) => [x, y]),
+      rules: { ...zone.rules },
+    })),
   };
 }
 
-// Development fixture only. Phase 4 replaces this path with the Zone Settings API.
-export async function getMockZoneSettings(): Promise<
-  MockApiResponse<AlertZoneSetting[]>
-> {
-  return successResponse(mockZoneSettings);
+// Development fixture only. API mode must use GET /zones and PUT /zones.
+export async function getMockZoneSettings(): Promise<ZoneApiResponse<ZoneConfig>> {
+  return {
+    status: "success",
+    data: cloneZoneConfig(mockZoneConfig),
+    message: null,
+  };
 }
