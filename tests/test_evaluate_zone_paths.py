@@ -18,9 +18,14 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import phase4_recording_contract as contract  # noqa: E402
+
 from scripts import evaluate_zone_paths as ezp  # noqa: E402
 
 FPS = 60.0
+# 계약 파일명 규칙을 따라야 manifest 검증을 통과한다.
+VIDEO_ID = "P4_S01_A01_zone_enter_exit_01_cam01"
+VIDEO_SHA256 = "a" * 64
 
 
 def event(frame, kind):
@@ -252,20 +257,26 @@ def workspace(tmp_path):
     enter, exit_ = 60, 240
     manifest = csv_write(
         "manifest.csv",
-        ["video_id", "video_path", "fps", "frame_count", "width", "height"],
-        [["V1", "data/videos/v1.mp4", FPS, 300, width, height]],
+        list(contract.MANIFEST_FIELDS),
+        [[VIDEO_ID, "S01", "A01", "A01", "cam01", "zone_enter_exit", "no_fall",
+          f"data/videos/{VIDEO_ID}.mp4", FPS, 300, width, height, "indoor",
+          "diagnostic", "reviewed", "confirmed", VIDEO_SHA256]],
     )
     intervals = csv_write(
         "intervals.csv",
-        ["video_id", "zone_id", "interval_index", "enter_frame", "exit_frame",
-         "dwell_start_frame", "review_status", "notes"],
-        [["V1", "play_floor", 1, enter, exit_, "", "reviewed", "review_mode=blind"]],
+        list(contract.ZONE_INTERVAL_FIELDS),
+        [[VIDEO_ID, "play_floor", 1, enter, exit_, "", "reviewed", "review_mode=blind"]],
     )
     plan = csv_write(
         "plan.csv",
         ["review_index", "original_filename", "contract_filename", "notes"],
-        [[1, "IMG_1.MOV", "V1.mp4",
+        [[1, "IMG_1.MOV", f"{VIDEO_ID}.mp4",
           "calibration_version=test-v1; image_zone=data/zones/image_cam01.json"]],
+    )
+    identity = csv_write(
+        "data/annotations/phase4/zone_eval/track_identity.csv",
+        list(ezp.TRACK_IDENTITY_FIELDS),
+        [[VIDEO_ID, "A01", 7, "bbox_overlay_visual", "tester", "2026-08-18", ""]],
     )
 
     # 밖(100) -> 안(500) -> 밖(900). 두 경로 모두 정답과 일치해야 한다.
@@ -280,12 +291,16 @@ def workspace(tmp_path):
     cache.write_text(json.dumps({
         "schema_version": ezp.CACHE_SCHEMA_VERSION,
         "tracker": {"model": "test.pt", "model_sha256": "0" * 64, "confidence": 0.5},
-        "videos": {"V1": {"frame_count": 300, "fps": FPS, "frames": frames}},
+        "videos": {VIDEO_ID: {
+            "frame_count": 300, "fps": FPS, "width": width, "height": height,
+            "video_sha256": VIDEO_SHA256, "frames": frames,
+        }},
     }), encoding="utf-8")
 
     return {
         "root": tmp_path, "cache": cache, "manifest": manifest,
-        "intervals": intervals, "plan": plan, "enter": enter, "exit": exit_,
+        "intervals": intervals, "plan": plan, "identity": identity,
+        "enter": enter, "exit": exit_,
     }
 
 
@@ -294,8 +309,10 @@ def run(workspace, **overrides):
     args = argparse.Namespace(
         cache=str(workspace["cache"]), manifest=str(workspace["manifest"]),
         intervals=str(workspace["intervals"]), review_plan=str(workspace["plan"]),
+        track_identity=str(workspace["identity"]),
         repo_root=str(workspace["root"]), track_selection="longest",
-        event_tolerance_sec=1.0, flip_window_sec=1.0, output="unused",
+        event_tolerance_sec=1.0, flip_window_sec=1.0,
+        allow_nonstandard_tolerances=False, output="unused",
     )
     for key, value in overrides.items():
         setattr(args, key, value)
@@ -340,12 +357,37 @@ def test_zero_baseline_errors_make_ratios_undefined(workspace):
     assert criteria["4_event_error_reduction"]["passes"] is None
 
 
-def test_unreviewed_interval_is_rejected(workspace):
+def rewrite_interval(workspace, column, value):
     rows = list(csv.reader(open(workspace["intervals"], encoding="utf-8")))
-    rows[1][6] = "needs_review"
+    rows[1][list(contract.ZONE_INTERVAL_FIELDS).index(column)] = value
     with open(workspace["intervals"], "w", encoding="utf-8", newline="") as file:
         csv.writer(file, lineterminator="\n").writerows(rows)
-    with pytest.raises(ezp.ZoneEvalError, match="reviewed"):
+
+
+def test_unreviewed_interval_is_rejected(workspace):
+    """동결된 계약 검증을 평가 경로가 그대로 쓴다."""
+    rewrite_interval(workspace, "review_status", "needs_review")
+    with pytest.raises(ValueError, match="reviewed"):
+        run(workspace)
+
+
+def test_interval_with_exit_before_enter_is_rejected(workspace):
+    """enter < exit는 계약이 강제한다. 평가가 이걸 우회하면 안 된다."""
+    rewrite_interval(workspace, "enter_frame", "240")
+    rewrite_interval(workspace, "exit_frame", "60")
+    with pytest.raises(ValueError, match="enter_frame"):
+        run(workspace)
+
+
+def test_interval_frame_outside_the_video_is_rejected(workspace):
+    rewrite_interval(workspace, "exit_frame", "9999")
+    with pytest.raises(ValueError, match="frame 범위"):
+        run(workspace)
+
+
+def test_interval_index_must_start_at_one(workspace):
+    rewrite_interval(workspace, "interval_index", "2")
+    with pytest.raises(ValueError, match="interval_index"):
         run(workspace)
 
 
@@ -494,3 +536,263 @@ def test_written_bytes_use_lf_on_every_platform(tmp_path):
     raw = target.read_bytes()
     assert b"\r\n" not in raw
     assert raw.endswith(b"\n")
+
+
+# --- 캐시·입력 artifact 무결성 (종민 1번) ---
+
+
+def tamper_cache(workspace, **changes):
+    payload = json.loads(workspace["cache"].read_text(encoding="utf-8"))
+    entry = payload["videos"][VIDEO_ID]
+    entry.update(changes)
+    workspace["cache"].write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_cache_from_a_different_video_is_rejected(workspace):
+    """캐시의 영상 SHA-256이 manifest와 다르면 다른 영상으로 만든 캐시다."""
+    tamper_cache(workspace, video_sha256="b" * 64)
+    with pytest.raises(ezp.ZoneEvalError, match="SHA-256"):
+        run(workspace)
+
+
+def test_cache_without_video_checksum_is_rejected(workspace):
+    tamper_cache(workspace, video_sha256="")
+    with pytest.raises(ezp.ZoneEvalError, match="video_sha256"):
+        run(workspace)
+
+
+def test_cache_frame_count_mismatch_is_rejected(workspace):
+    tamper_cache(workspace, frame_count=280)
+    with pytest.raises(ezp.ZoneEvalError, match="frame 수"):
+        run(workspace)
+
+
+def test_cache_fps_mismatch_is_rejected(workspace):
+    """fps가 다르면 같은 frame 번호가 다른 시점을 가리킨다."""
+    tamper_cache(workspace, fps=30.0)
+    with pytest.raises(ezp.ZoneEvalError, match="fps"):
+        run(workspace)
+
+
+def test_cache_built_from_another_manifest_is_rejected(workspace):
+    payload = json.loads(workspace["cache"].read_text(encoding="utf-8"))
+    payload["manifest_sha256"] = "c" * 64
+    workspace["cache"].write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ezp.ZoneEvalError, match="manifest"):
+        run(workspace)
+
+
+@pytest.mark.parametrize("tracker", [None, {}, {"model_sha256": "짧다"}])
+def test_missing_tracker_provenance_is_rejected(workspace, tracker):
+    payload = json.loads(workspace["cache"].read_text(encoding="utf-8"))
+    if tracker is None:
+        payload.pop("tracker")
+    else:
+        payload["tracker"] = tracker
+    workspace["cache"].write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ezp.ZoneEvalError, match="tracker"):
+        run(workspace)
+
+
+def test_result_records_every_input_artifact(workspace):
+    """어떤 입력으로 만든 결과인지 파일만 보고 감사할 수 있어야 한다."""
+    result = run(workspace)
+    digests = result["input_artifacts_sha256"]
+    assert set(digests) == {
+        "cache", "manifest", "intervals", "review_plan", "track_identity"
+    }
+    assert all(len(v) == 64 for v in digests.values())
+    assert digests["manifest"] == ezp.sha256_file(workspace["manifest"])
+    assert result["tracker"]["model_sha256"] == "0" * 64
+    assert result["per_video"][0]["video_sha256"] == VIDEO_SHA256
+
+
+# --- Zone 선택 (종민 3번) ---
+
+
+def add_decoy_zone(workspace, first: bool):
+    """같은 파일에 다른 Zone을 하나 더 넣는다."""
+    decoy_image = {
+        "zone_id": "decoy", "name": "미끼", "type": "polygon", "zone_type": "play",
+        "points": [[0.0, 0.0], [0.05, 0.0], [0.05, 0.05], [0.0, 0.05]],
+        "rules": {"enter_alert": True, "dwell_threshold_sec": 5},
+    }
+    image_path = workspace["root"] / "data/zones/image_cam01.json"
+    zones = json.loads(image_path.read_text(encoding="utf-8"))
+    zones = [decoy_image] + zones if first else zones + [decoy_image]
+    image_path.write_text(json.dumps(zones), encoding="utf-8")
+
+    floor_path = workspace["root"] / "data/zones/floor_cam01.json"
+    config = json.loads(floor_path.read_text(encoding="utf-8"))
+    decoy_floor = dict(decoy_image)
+    decoy_floor["zone_name"] = decoy_floor.pop("name")
+    config["zones"] = (
+        [decoy_floor] + config["zones"] if first else config["zones"] + [decoy_floor]
+    )
+    floor_path.write_text(json.dumps(config), encoding="utf-8")
+
+
+def test_zone_order_does_not_change_the_result(workspace):
+    """예전에는 zones[0]을 써서 Zone 순서가 Event 평가 대상을 바꿨다."""
+    baseline = run(workspace)
+    add_decoy_zone(workspace, first=True)
+    with_decoy_first = run(workspace)
+    assert with_decoy_first["totals"] == baseline["totals"]
+    assert (
+        with_decoy_first["per_video"][0]["image"]["event_list"]
+        == baseline["per_video"][0]["image"]["event_list"]
+    )
+
+
+def test_missing_zone_id_is_rejected(workspace):
+    rewrite_interval(workspace, "zone_id", "does_not_exist")
+    with pytest.raises(ezp.ZoneEvalError, match="zone_id"):
+        run(workspace)
+
+
+def test_duplicate_zone_id_is_rejected(workspace):
+    image_path = workspace["root"] / "data/zones/image_cam01.json"
+    zones = json.loads(image_path.read_text(encoding="utf-8"))
+    image_path.write_text(json.dumps(zones + [dict(zones[0])]), encoding="utf-8")
+    with pytest.raises((ezp.ZoneEvalError, ValueError), match="중복|duplicate|zone_id"):
+        run(workspace)
+
+
+def test_result_records_the_evaluated_zone(workspace):
+    assert run(workspace)["per_video"][0]["zone_id"] == "play_floor"
+
+
+# --- 대상 Track 확인 기록 (종민 4번) ---
+
+
+def test_selected_track_must_match_the_verified_record(workspace):
+    """캐시나 tracker가 바뀌어 다른 사람이 선택되면 걸려야 한다."""
+    rows = list(csv.reader(open(workspace["identity"], encoding="utf-8")))
+    rows[1][2] = "99"
+    with open(workspace["identity"], "w", encoding="utf-8", newline="") as file:
+        csv.writer(file, lineterminator="\n").writerows(rows)
+    with pytest.raises(ezp.ZoneEvalError, match="확인 기록"):
+        run(workspace)
+
+
+def test_verified_track_is_carried_into_the_result(workspace):
+    identity = run(workspace)["per_video"][0]["track_identity"]
+    assert identity["track_id"] == 7
+    assert identity["ground_truth_actor"] == "A01"
+    assert identity["reviewer_id"] == "tester"
+    assert identity["verified_at"] == "2026-08-18"
+
+
+def test_track_identity_requires_a_reviewer(tmp_path):
+    path = tmp_path / "identity.csv"
+    with open(path, "w", encoding="utf-8", newline="") as file:
+        writer = csv.writer(file, lineterminator="\n")
+        writer.writerow(list(ezp.TRACK_IDENTITY_FIELDS))
+        writer.writerow(["V1", "A01", 2, "visual", "", "2026-08-18", ""])
+    with pytest.raises(ezp.ZoneEvalError, match="reviewer_id"):
+        ezp.load_track_identity(path)
+
+
+def test_track_identity_for_an_unknown_video_is_rejected(workspace):
+    rows = list(csv.reader(open(workspace["identity"], encoding="utf-8")))
+    rows.append(["P4_S09_A09_zone_enter_exit_09_cam09", "A09", 1, "visual", "t", "2026-08-18", ""])
+    with open(workspace["identity"], "w", encoding="utf-8", newline="") as file:
+        csv.writer(file, lineterminator="\n").writerows(rows)
+    with pytest.raises(ezp.ZoneEvalError, match="manifest에 없는"):
+        run(workspace)
+
+
+# --- 실행 옵션 동결 (현수 3번) ---
+
+
+def test_nonstandard_tolerance_needs_an_explicit_flag(workspace):
+    with pytest.raises(ezp.ZoneEvalError, match="공식 측정 조건"):
+        run(workspace, event_tolerance_sec=3.0)
+
+
+def test_nonstandard_flip_window_needs_an_explicit_flag(workspace):
+    with pytest.raises(ezp.ZoneEvalError, match="공식 측정 조건"):
+        run(workspace, flip_window_sec=0.2)
+
+
+def test_diagnostic_run_is_marked_not_official(workspace):
+    result = run(workspace, event_tolerance_sec=3.0, allow_nonstandard_tolerances=True)
+    assert result["is_official"] is False
+
+
+def test_official_run_is_marked_official(workspace):
+    assert run(workspace)["is_official"] is True
+
+
+def test_gt_overlap_selection_is_not_official(workspace):
+    result = run(
+        workspace, track_selection="gt-overlap", allow_nonstandard_tolerances=True
+    )
+    assert result["is_official"] is False
+
+
+@pytest.mark.parametrize("value", [0.0, -1.0, float("nan"), float("inf")])
+def test_impossible_time_options_are_rejected(workspace, value):
+    with pytest.raises(ezp.ZoneEvalError, match="finite 양수"):
+        run(workspace, event_tolerance_sec=value, allow_nonstandard_tolerances=True)
+
+
+# --- 빠른 반전 정의 (현수 1번) ---
+
+
+def test_dwell_then_exit_is_not_a_fast_flip():
+    """체류하다 나가는 것은 경계에서 흔들린 것이 아니다.
+
+    실측에서 빠른 반전 2건이 전부 DWELL -> EXIT였다. 기준 5번은 ENTER·EXIT
+    반전을 묻는 항목이므로 이 조합은 세지 않는다.
+    """
+    events = [event(100, "ENTER"), event(400, "DWELL"), event(430, "EXIT")]
+    assert ezp.count_flips(events, FPS, 1.0) == 0
+
+
+def test_exit_then_enter_is_a_fast_flip():
+    assert ezp.count_flips([event(100, "EXIT"), event(120, "ENTER")], FPS, 1.0) == 1
+
+
+def test_restricted_entry_counts_as_an_entry():
+    events = [event(100, "ENTER_RESTRICTED"), event(120, "EXIT")]
+    assert ezp.count_flips(events, FPS, 1.0) == 1
+
+
+def test_dwell_pair_is_not_a_flip():
+    events = [event(100, "DWELL"), event(120, "DWELL_ALERT")]
+    assert ezp.count_flips(events, FPS, 1.0) == 0
+
+
+# --- Track이 끊긴 구간 (현수 2번) ---
+
+
+def drop_track_after(workspace, frame: int):
+    """지정 frame 이후로 Track이 사라지게 캐시를 고친다."""
+    payload = json.loads(workspace["cache"].read_text(encoding="utf-8"))
+    frames = payload["videos"][VIDEO_ID]["frames"]
+    for text in list(frames):
+        if int(text) > frame:
+            del frames[text]
+    workspace["cache"].write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_lost_track_still_produces_an_exit(workspace):
+    """runtime은 Track이 사라지면 flush_stale_tracks로 EXIT를 만든다.
+
+    평가가 Track이 있는 frame만 훑으면 이 경로가 돌지 않아 EXIT가 아예 없는
+    결과가 나온다. 실제 pipeline과 다른 수치를 공식 결과로 쓰게 된다.
+    """
+    drop_track_after(workspace, workspace["enter"] + 60)
+    result = run(workspace)
+    types = [e["type"] for e in result["per_video"][0]["image"]["event_list"]]
+    assert "ENTER" in types
+    assert "EXIT" in types, "Track이 끊긴 뒤 EXIT가 나오지 않았다"
+
+
+def test_events_are_bounded_by_the_manifest_frame_count(workspace):
+    """영상 전체를 순회하지만 frame 수를 넘어가지는 않는다."""
+    result = run(workspace)
+    for path in ezp.PATHS:
+        for entry in result["per_video"][0][path]["event_list"]:
+            assert 0 <= entry["frame"] < 300

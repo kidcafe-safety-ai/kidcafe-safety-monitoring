@@ -36,7 +36,15 @@ import cv2
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 CACHE_SCHEMA_VERSION = "phase4_zone_foot_points_v1"
-MANIFEST_FIELDS = ("video_id", "video_path", "fps", "frame_count", "width", "height")
+MANIFEST_FIELDS = (
+    "video_id",
+    "video_path",
+    "fps",
+    "frame_count",
+    "width",
+    "height",
+    "checksum_sha256",
+)
 # 컨테이너가 기록한 fps는 소수점 아래가 미세하게 흔들린다. 같은 영상을
 # 거부하지 않으면서 29.97과 59.94는 구분할 수 있는 폭이다.
 FPS_TOLERANCE = 0.01
@@ -109,6 +117,19 @@ def verify_frame_count(name: str, counted: int, expected) -> None:
     if counted != expected["frame_count"]:
         raise CacheError(
             f"{name} frame 수가 manifest와 다릅니다: {counted} != {expected['frame_count']}"
+        )
+
+
+def verify_checksum(name: str, actual: str, expected: str) -> None:
+    """영상 파일이 manifest가 가리키는 바로 그 파일인지 확인한다.
+
+    해상도·fps·frame 수가 같아도 다른 영상일 수 있다. 계약이 checksum을 들고
+    있으므로 추론을 시작하기 전에 대조한다. 여기서 걸러내지 않으면 ground truth의
+    frame 번호가 다른 영상에 적용된 채로 결과가 그럴듯하게 나온다.
+    """
+    if actual != expected:
+        raise CacheError(
+            f"{name} SHA-256이 manifest와 다릅니다: {actual} != {expected}"
         )
 
 
@@ -192,10 +213,15 @@ def main() -> None:
                 "width": int(row["width"]),
                 "height": int(row["height"]),
             }
+            # checksum을 먼저 본다. 다른 영상이면 추론에 쓴 시간이 통째로 버려진다.
+            digest = sha256_file(video_path)
+            verify_checksum(video_path.name, digest, row["checksum_sha256"].strip())
             print(f"tracking {row['video_id']} ...", flush=True)
             entry = cache_video(video_path, args.model, args.confidence, expected)
-            entry["video_sha256"] = sha256_file(video_path)
+            entry["video_sha256"] = digest
             entry["fps"] = expected["fps"]
+            entry["width"] = expected["width"]
+            entry["height"] = expected["height"]
             videos[row["video_id"]] = entry
     except CacheError as exc:
         raise SystemExit(str(exc)) from exc
@@ -207,6 +233,9 @@ def main() -> None:
             "model_sha256": sha256_file(model_path),
             "confidence": args.confidence,
         },
+        # 어떤 manifest를 보고 만든 캐시인지 남긴다. 평가 단계가 같은 manifest를
+        # 쓰는지 대조할 수 있어야 캐시를 바꿔치기해도 드러난다.
+        "manifest_sha256": sha256_file(Path(args.manifest)),
         "videos": videos,
     }
     write_json_atomic(Path(args.output), payload)

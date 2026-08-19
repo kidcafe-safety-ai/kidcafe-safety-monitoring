@@ -37,14 +37,19 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
+import math
 import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import phase4_recording_contract as contract  # noqa: E402
 
 from src.common.types import Track  # noqa: E402
 from src.events.event_manager import EventManager  # noqa: E402
@@ -65,8 +70,31 @@ PATHS = ("image", "homography")
 # 오류로 세지 않도록 기본값을 확정 지연보다 넉넉히 잡는다. 부호 있는 오차도
 # 함께 기록해 지연 자체를 볼 수 있게 한다.
 DEFAULT_EVENT_TOLERANCE_SEC = 1.0
-# 이 시간 안에 ENTER 다음 EXIT(또는 반대)가 오면 빠른 반전으로 센다.
+# 이 시간 안에 진입 계열과 EXIT가 뒤집히면 빠른 반전으로 센다.
 DEFAULT_FLIP_WINDOW_SEC = 1.0
+
+# 공식 측정에 쓰는 값. 이 두 값은 결과를 바꿀 수 있다. tolerance를 키우면 기준
+# 4번의 누락·오검출이 줄고, flip window를 바꾸면 기준 5번의 반전 수가 달라진다.
+# 같은 데이터로도 실행 옵션에 따라 판정이 뒤집히므로, 공식 결과에는 이 값만
+# 허용하고 다르면 `--allow-nonstandard-tolerances`를 명시하게 한다.
+OFFICIAL_EVENT_TOLERANCE_SEC = 1.0
+OFFICIAL_FLIP_WINDOW_SEC = 1.0
+
+# 채택 기준 5번은 "빠른 ENTER·EXIT 반전 증가 없음"이다. 진입 계열과 EXIT
+# 사이의 전환만 반전으로 센다. DWELL은 체류 중에 나오는 Event라 DWELL 다음
+# EXIT는 반전이 아니라 정상적인 이탈이다.
+ENTRY_EVENT_TYPES = ("ENTER", "ENTER_RESTRICTED")
+EXIT_EVENT_TYPES = ("EXIT",)
+
+TRACK_IDENTITY_FIELDS = (
+    "video_id",
+    "ground_truth_actor",
+    "track_id",
+    "verification_method",
+    "reviewer_id",
+    "verified_at",
+    "notes",
+)
 
 
 class ZoneEvalError(RuntimeError):
@@ -91,11 +119,61 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--track-identity",
+        default=None,
+        help=(
+            "다중 인원 영상의 대상 Track을 사람이 확인해 적어둔 CSV. 여기 있는 "
+            "영상은 선택된 Track이 기록과 같은지 검증한다. 기본값은 "
+            "data/annotations/phase4/zone_eval/track_identity.csv."
+        ),
+    )
+    parser.add_argument(
         "--event-tolerance-sec", type=float, default=DEFAULT_EVENT_TOLERANCE_SEC
     )
     parser.add_argument("--flip-window-sec", type=float, default=DEFAULT_FLIP_WINDOW_SEC)
+    parser.add_argument(
+        "--allow-nonstandard-tolerances",
+        action="store_true",
+        help=(
+            "공식값과 다른 tolerance·flip window로 실행한다. 결과는 "
+            "is_official=false로 표시된다."
+        ),
+    )
     parser.add_argument("--output", required=True)
     return parser.parse_args()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def check_positive_seconds(name: str, value: float) -> None:
+    """시간 옵션이 실수로 음수·NaN이 되면 판정이 조용히 뒤집힌다."""
+    if not math.isfinite(value) or value <= 0:
+        raise ZoneEvalError(f"{name}는 finite 양수여야 합니다: {value}")
+
+
+def resolve_officiality(args: argparse.Namespace) -> bool:
+    """실행 옵션이 공식 측정 조건인지 판단한다."""
+    check_positive_seconds("--event-tolerance-sec", args.event_tolerance_sec)
+    check_positive_seconds("--flip-window-sec", args.flip_window_sec)
+    standard = (
+        args.event_tolerance_sec == OFFICIAL_EVENT_TOLERANCE_SEC
+        and args.flip_window_sec == OFFICIAL_FLIP_WINDOW_SEC
+        and args.track_selection == "longest"
+    )
+    if not standard and not args.allow_nonstandard_tolerances:
+        raise ZoneEvalError(
+            "공식 측정 조건이 아닙니다. event-tolerance-sec="
+            f"{OFFICIAL_EVENT_TOLERANCE_SEC}, flip-window-sec="
+            f"{OFFICIAL_FLIP_WINDOW_SEC}, track-selection=longest가 공식값입니다. "
+            "진단 목적이면 --allow-nonstandard-tolerances를 붙이세요."
+        )
+    return standard
 
 
 def read_csv(path: Path, required: Sequence[str]) -> List[dict]:
@@ -213,6 +291,64 @@ def pick_track(
     }
 
 
+def select_zone(zones: Sequence, zone_id: str, label: str):
+    """요청된 `zone_id`와 같은 Zone을 명시적으로 고른다.
+
+    예전에는 `zones[0]`을 썼다. Zone이 하나일 때는 맞지만 여러 개가 되거나 파일
+    안의 순서가 바뀌면 frame 판정과 Event 판정이 서로 다른 Zone을 보게 된다.
+    """
+    matched = [zone for zone in zones if zone.zone_id == zone_id]
+    if not matched:
+        available = sorted(zone.zone_id for zone in zones)
+        raise ZoneEvalError(f"{label}에 zone_id가 없습니다: {zone_id} (있는 것: {available})")
+    if len(matched) > 1:
+        raise ZoneEvalError(f"{label}에 zone_id가 중복입니다: {zone_id}")
+    return matched[0]
+
+
+def load_track_identity(path: Path) -> Dict[str, dict]:
+    """사람이 확인한 대상 Track 기록을 읽는다.
+
+    다중 인원 영상은 Track 선택 규칙이 어느 사람을 고를지가 절대 수치를 바꾼다.
+    누가 언제 무엇으로 확인했는지를 파일로 남겨야 나중에 캐시나 tracker가 바뀌어도
+    같은 확인을 다시 할 수 있다.
+    """
+    rows = read_csv(path, TRACK_IDENTITY_FIELDS)
+    index: Dict[str, dict] = {}
+    for row in rows:
+        video_id = row["video_id"].strip()
+        if video_id in index:
+            raise ZoneEvalError(f"track identity에 중복 video_id가 있습니다: {video_id}")
+        try:
+            track_id = int(row["track_id"])
+        except (TypeError, ValueError):
+            raise ZoneEvalError(f"{video_id}: track_id가 정수가 아닙니다: {row['track_id']!r}")
+        if not row["reviewer_id"].strip() or not row["verified_at"].strip():
+            raise ZoneEvalError(f"{video_id}: reviewer_id와 verified_at이 필요합니다.")
+        index[video_id] = {
+            "ground_truth_actor": row["ground_truth_actor"].strip(),
+            "track_id": track_id,
+            "verification_method": row["verification_method"].strip(),
+            "reviewer_id": row["reviewer_id"].strip(),
+            "verified_at": row["verified_at"].strip(),
+            "notes": row["notes"].strip(),
+        }
+    return index
+
+
+def verify_track_identity(video_id: str, chosen: int, record: Optional[dict]) -> Optional[dict]:
+    """고른 Track이 사람이 확인한 Track과 같은지 본다."""
+    if record is None:
+        return None
+    if chosen != record["track_id"]:
+        raise ZoneEvalError(
+            f"{video_id}: 선택된 Track {chosen}이 확인 기록의 Track "
+            f"{record['track_id']}({record['ground_truth_actor']})과 다릅니다. "
+            "캐시나 tracker가 바뀌었을 수 있으니 대상 인물을 다시 확인하세요."
+        )
+    return dict(record)
+
+
 def judge_frames(
     frames: Dict[str, List[dict]],
     track_id: int,
@@ -252,15 +388,36 @@ def judge_frames(
 
 
 def run_events(
-    judged: Sequence[dict], zones, fps: float, path: str, video_id: str
+    judged: Sequence[dict],
+    zone,
+    fps: float,
+    path: str,
+    video_id: str,
+    frame_count: int,
 ) -> List[dict]:
-    """한 경로의 판정 결과를 EventManager에 넣어 ENTER·EXIT를 만든다."""
-    manager = EventManager(zones=zones, fps=fps)
+    """한 경로의 판정 결과를 EventManager에 넣어 ENTER·EXIT를 만든다.
+
+    **runtime과 같은 순서로 돈다.** `src/main.py`는 frame마다 `process()` 뒤에
+    `flush_stale_tracks()`를 부른다. 후자는 Track이 사라진 채로 grace period가
+    지나면 EXIT를 만든다. 평가가 Track이 있는 frame만 훑으면 이 경로가 아예 돌지
+    않아, Track이 끊기는 영상에서 실제 pipeline과 ENTER·EXIT 결과가 갈린다.
+
+    그래서 영상 전체 frame을 순회하고, 선택한 Track이 없는 frame에서도
+    `flush_stale_tracks()`를 부른다.
+    """
+    manager = EventManager(zones=[zone], fps=fps)
+    by_frame = {row["frame"]: row for row in judged}
     events: List[dict] = []
-    for row in judged:
-        zones_in = [zones[0].zone_id] if row[path] else []
-        for event in manager.process(row["track"], zones_in, row["frame"], video_id):
-            events.append({"frame": row["frame"], "type": str(event.event_type)})
+    for frame in range(frame_count):
+        row = by_frame.get(frame)
+        active: Set[int] = set()
+        if row is not None:
+            active = {int(row["track"].track_id)}
+            zones_in = [zone.zone_id] if row[path] else []
+            for event in manager.process(row["track"], zones_in, frame, video_id):
+                events.append({"frame": frame, "type": str(event.event_type)})
+        for event in manager.flush_stale_tracks(active, frame, video_id):
+            events.append({"frame": frame, "type": str(event.event_type)})
     return events
 
 
@@ -315,11 +472,21 @@ def score_events(
 
 
 def count_flips(events: Sequence[dict], fps: float, window_sec: float) -> int:
-    """짧은 시간 안의 ENTER↔EXIT 반전 수 (채택 기준 5번)."""
+    """짧은 시간 안의 진입↔EXIT 반전 수 (채택 기준 5번).
+
+    기준 5번은 "빠른 ENTER·EXIT 반전 증가 없음"이다. 따라서 진입 계열(ENTER,
+    ENTER_RESTRICTED)과 EXIT 사이의 전환만 센다. 예전에는 인접 Event의 type이
+    다르기만 하면 셌는데, 그러면 DWELL 다음 EXIT처럼 반전이 아닌 조합까지
+    들어간다. 체류하다 나가는 것은 정상적인 이탈이지 경계에서 흔들린 것이 아니다.
+    """
     window = window_sec * fps
     flips = 0
     for earlier, later in zip(events, events[1:]):
-        if earlier["type"] != later["type"] and later["frame"] - earlier["frame"] <= window:
+        pair = (earlier["type"], later["type"])
+        reversal = (
+            pair[0] in ENTRY_EVENT_TYPES and pair[1] in EXIT_EVENT_TYPES
+        ) or (pair[0] in EXIT_EVENT_TYPES and pair[1] in ENTRY_EVENT_TYPES)
+        if reversal and later["frame"] - earlier["frame"] <= window:
             flips += 1
     return flips
 
@@ -348,24 +515,96 @@ def write_json_atomic(path: Path, payload: dict) -> None:
         raise
 
 
+def verify_cache_against_manifest(video_id: str, entry: dict, meta: dict) -> None:
+    """캐시가 manifest가 가리키는 영상으로 만들어졌는지 확인한다.
+
+    캐시는 tracking 결과를 그대로 담고 있어서 안을 봐도 어느 영상인지 알기
+    어렵다. 다른 영상으로 만든 캐시를 넣으면 ground truth의 frame 번호가 다른
+    시점을 가리키는데 수치는 그럴듯하게 나온다. 그래서 계약 값과 대조한다.
+    """
+    expected_digest = (meta.get("checksum_sha256") or "").strip()
+    actual_digest = (entry.get("video_sha256") or "").strip()
+    if not actual_digest:
+        raise ZoneEvalError(f"{video_id}: 캐시에 video_sha256이 없습니다.")
+    if actual_digest != expected_digest:
+        raise ZoneEvalError(
+            f"{video_id}: 캐시의 영상 SHA-256이 manifest와 다릅니다: "
+            f"{actual_digest} != {expected_digest}"
+        )
+    expected_frames = int(meta["frame_count"])
+    if int(entry.get("frame_count", -1)) != expected_frames:
+        raise ZoneEvalError(
+            f"{video_id}: 캐시 frame 수가 manifest와 다릅니다: "
+            f"{entry.get('frame_count')} != {expected_frames}"
+        )
+    cached_fps = entry.get("fps")
+    if cached_fps is None or abs(float(cached_fps) - float(meta["fps"])) > 0.01:
+        raise ZoneEvalError(
+            f"{video_id}: 캐시 fps가 manifest와 다릅니다: {cached_fps} != {meta['fps']}"
+        )
+
+
+def verify_tracker_provenance(cache: dict) -> dict:
+    """어떤 모델로 만든 캐시인지 결과에 남길 수 있는 형태로 확인한다."""
+    tracker = cache.get("tracker")
+    if not isinstance(tracker, dict):
+        raise ZoneEvalError("캐시에 tracker 정보가 없습니다.")
+    digest = str(tracker.get("model_sha256") or "")
+    if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+        raise ZoneEvalError(f"캐시의 tracker model_sha256 형식이 잘못됐습니다: {digest!r}")
+    if tracker.get("confidence") is None:
+        raise ZoneEvalError("캐시에 tracker confidence가 없습니다.")
+    return tracker
+
+
 def evaluate(args: argparse.Namespace) -> dict:
     root = Path(args.repo_root).resolve()
-    cache = json.loads(Path(args.cache).read_text(encoding="utf-8"))
+    is_official = resolve_officiality(args)
+
+    cache_path = Path(args.cache)
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
     if cache.get("schema_version") != CACHE_SCHEMA_VERSION:
         raise ZoneEvalError(f"지원하지 않는 캐시 schema입니다: {cache.get('schema_version')}")
+    tracker = verify_tracker_provenance(cache)
 
-    manifest = {
-        r["video_id"]: r
-        for r in read_csv(Path(args.manifest), ("video_id", "fps", "width", "height"))
-    }
-    intervals = read_csv(
-        Path(args.intervals),
-        ("video_id", "zone_id", "enter_frame", "exit_frame", "review_status"),
+    # 동결된 계약 검증을 그대로 쓴다. 여기서 직접 CSV를 읽어 필드 존재만 보면
+    # enter<exit, frame 범위, interval index 연속성, manifest 대조 같은 계약이
+    # 평가 경로에만 적용되지 않는 상태가 된다.
+    manifest_path = Path(args.manifest)
+    intervals_path = Path(args.intervals)
+    manifest_rows = contract.load_recordings_manifest(manifest_path)
+    interval_rows = contract.load_zone_intervals(
+        intervals_path, manifest_rows, require_reviewed=True
     )
-    plan = read_csv(
-        Path(args.review_plan), ("contract_filename", "original_filename", "notes")
-    )
+    manifest = {row["video_id"]: row for row in manifest_rows}
+    intervals = list(interval_rows)
+
+    plan_path = Path(args.review_plan)
+    plan = read_csv(plan_path, ("contract_filename", "original_filename", "notes"))
     inputs = build_video_inputs(plan, root)
+
+    identity_path = Path(
+        args.track_identity
+        or root / "data" / "annotations" / "phase4" / "zone_eval" / "track_identity.csv"
+    )
+    identities = load_track_identity(identity_path)
+    unknown = sorted(set(identities) - set(manifest))
+    if unknown:
+        raise ZoneEvalError(f"track identity에 manifest에 없는 video_id가 있습니다: {unknown}")
+
+    artifacts = {
+        "cache": sha256_file(cache_path),
+        "manifest": sha256_file(manifest_path),
+        "intervals": sha256_file(intervals_path),
+        "review_plan": sha256_file(plan_path),
+        "track_identity": sha256_file(identity_path),
+    }
+    cached_manifest_digest = cache.get("manifest_sha256")
+    if cached_manifest_digest and cached_manifest_digest != artifacts["manifest"]:
+        raise ZoneEvalError(
+            "캐시를 만들 때 쓴 manifest와 지금 manifest가 다릅니다: "
+            f"{cached_manifest_digest} != {artifacts['manifest']}"
+        )
 
     per_video: List[dict] = []
     totals = {p: {"frames": 0, "wrong": 0, "correct": 0, "event_errors": 0, "flips": 0}
@@ -373,18 +612,18 @@ def evaluate(args: argparse.Namespace) -> dict:
 
     for row in intervals:
         video_id = row["video_id"]
-        if row["review_status"] != "reviewed":
-            raise ZoneEvalError(f"{video_id}: reviewed가 아닌 interval은 측정에 쓸 수 없습니다.")
-        if video_id not in manifest:
-            raise ZoneEvalError(f"{video_id}: manifest에 없습니다.")
         if video_id not in inputs:
             raise ZoneEvalError(f"{video_id}: 대응표에 없습니다.")
         if video_id not in cache["videos"]:
             raise ZoneEvalError(f"{video_id}: 캐시에 없습니다.")
 
         meta = manifest[video_id]
+        cache_entry = cache["videos"][video_id]
+        verify_cache_against_manifest(video_id, cache_entry, meta)
+
         fps = float(meta["fps"])
         width, height = int(meta["width"]), int(meta["height"])
+        frame_count = int(meta["frame_count"])
         enter, exit_ = int(row["enter_frame"]), int(row["exit_frame"])
         zone_id = row["zone_id"]
         entry = inputs[video_id]
@@ -397,11 +636,18 @@ def evaluate(args: argparse.Namespace) -> dict:
         image_checker = ZoneChecker(image_zones, width, height)
         floor_checker = FloorZoneChecker(floor_config)
         transformer = FloorPlaneTransformer(calibration)
+        zone_by_path = {
+            "image": select_zone(image_zones, zone_id, f"{video_id} image Zone"),
+            "homography": select_zone(
+                floor_config.zones, zone_id, f"{video_id} floor Zone"
+            ),
+        }
 
-        frames = cache["videos"][video_id]["frames"]
+        frames = cache_entry["frames"]
         track_id, selection = pick_track(frames, args.track_selection, enter, exit_)
         if track_id is None:
             raise ZoneEvalError(f"{video_id}: 평가할 Track을 고르지 못했습니다.")
+        verified = verify_track_identity(video_id, track_id, identities.get(video_id))
 
         judged = judge_frames(
             frames, track_id, zone_id, width, height,
@@ -414,12 +660,16 @@ def evaluate(args: argparse.Namespace) -> dict:
             "video_id": video_id,
             "original_filename": entry["original_filename"],
             "calibration_version": entry["calibration_version"],
+            "zone_id": zone_id,
             "ground_truth": {"enter_frame": enter, "exit_frame": exit_},
             "track": selection,
+            "track_identity": verified,
+            "video_sha256": cache_entry["video_sha256"],
         }
         for path in PATHS:
-            events = run_events(judged, image_zones if path == "image" else
-                                floor_config.zones, fps, path, video_id)
+            events = run_events(
+                judged, zone_by_path[path], fps, path, video_id, frame_count
+            )
             frame_score = score_frames(judged, enter, exit_, path)
             event_score = score_events(events, enter, exit_, fps, args.event_tolerance_sec)
             flips = count_flips(events, fps, args.flip_window_sec)
@@ -478,11 +728,20 @@ def evaluate(args: argparse.Namespace) -> dict:
     boundaries = len(per_video) * 2
     return {
         "schema_version": RESULT_SCHEMA_VERSION,
-        "tracker": cache.get("tracker"),
+        "is_official": is_official,
+        "tracker": tracker,
+        "input_artifacts_sha256": artifacts,
         "settings": {
             "track_selection": args.track_selection,
             "event_tolerance_sec": args.event_tolerance_sec,
             "flip_window_sec": args.flip_window_sec,
+            "official_event_tolerance_sec": OFFICIAL_EVENT_TOLERANCE_SEC,
+            "official_flip_window_sec": OFFICIAL_FLIP_WINDOW_SEC,
+            "flip_definition": "진입 계열(ENTER·ENTER_RESTRICTED)과 EXIT 사이의 전환만 센다",
+            "event_scope": (
+                "영상 전체 frame을 순회하며 runtime과 같이 flush_stale_tracks를 부른다. "
+                "frame 정확도는 선택한 Track이 있는 frame만 채점한다."
+            ),
         },
         "sample": {
             "videos": len(per_video),

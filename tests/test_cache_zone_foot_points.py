@@ -76,8 +76,8 @@ def write_manifest(path: Path, rows, header=None):
 
 def sample_rows():
     return [
-        ["V1", "data/videos/a.mp4", 59.94006, 506, 1920, 1080],
-        ["V2", "data/videos/b.mp4", 59.94006, 526, 1920, 1080],
+        ["V1", "data/videos/a.mp4", 59.94006, 506, 1920, 1080, "a" * 64],
+        ["V2", "data/videos/b.mp4", 59.94006, 526, 1920, 1080, "b" * 64],
     ]
 
 
@@ -205,3 +205,31 @@ def test_tracker_is_called_with_arguments_it_accepts():
 def test_confidence_is_actually_passed_to_the_tracker():
     """--confidence를 넘겨도 tracker에 닿지 않으면 조용히 기본값으로 돈다."""
     assert "conf" in tracker_call_keywords()
+
+
+# --- 영상 checksum ---
+
+
+def test_matching_checksum_passes():
+    czf.verify_checksum("v.mp4", "a" * 64, "a" * 64)
+
+
+def test_different_video_is_rejected():
+    """해상도·fps·frame 수가 같아도 다른 영상일 수 있다.
+
+    manifest가 checksum을 들고 있으므로 추론을 시작하기 전에 대조한다. 여기서
+    막지 않으면 ground truth의 frame 번호가 다른 영상에 적용된 채로 결과만
+    그럴듯하게 나온다.
+    """
+    with pytest.raises(czf.CacheError, match="SHA-256"):
+        czf.verify_checksum("v.mp4", "a" * 64, "b" * 64)
+
+
+def test_manifest_requires_the_checksum_column(tmp_path):
+    path = write_manifest(
+        tmp_path / "m.csv",
+        [["V1", "data/videos/a.mp4", 59.94006, 506, 1920, 1080]],
+        header=["video_id", "video_path", "fps", "frame_count", "width", "height"],
+    )
+    with pytest.raises(czf.CacheError, match="checksum_sha256"):
+        czf.load_manifest(path, None)
