@@ -20,11 +20,19 @@
       "reduction_ratio": null
     },
     "5_fast_flips_not_increased": {
-      "homography_fast_flips": 2,
-      "image_fast_flips": 2,
+      "homography_fast_flips": 0,
+      "image_fast_flips": 0,
       "passes": true
     }
   },
+  "input_artifacts_sha256": {
+    "cache": "da0edd513502a4ca2b7988048cbe7bff49fc395695447233085b8af67e1f957b",
+    "intervals": "778e340834aaff7a8f7d3ad11740e2ad3b6357698ae2137a5917bc2874249e2d",
+    "manifest": "f8dbe4345311c5594537a4cf47bf09373d06012b6b02bbac9749aa2e06e34dc7",
+    "review_plan": "787439386effc5e029eb91558b6220de009ab1eb4f2c26edb6435bcfd6366863",
+    "track_identity": "4ef8f68ee4fd093a10494afd324f528bd74bcf44b9d5d6390874af0134748652"
+  },
+  "is_official": true,
   "per_video": [
     {
       "calibration_version": "2026-08-07-clip01",
@@ -104,7 +112,10 @@
         "selection": "longest",
         "track_id": 1
       },
-      "video_id": "P4_S01_A01_zone_enter_exit_01_cam01"
+      "track_identity": null,
+      "video_id": "P4_S01_A01_zone_enter_exit_01_cam01",
+      "video_sha256": "d40ae36ec3f8fd1aee3edaae052678935f253b7481fd8a66344a2a25dcdd1086",
+      "zone_id": "play_floor"
     },
     {
       "calibration_version": "2026-08-07-img7328",
@@ -184,7 +195,10 @@
         "selection": "longest",
         "track_id": 2
       },
-      "video_id": "P4_S01_A01_zone_enter_exit_02_cam01"
+      "track_identity": null,
+      "video_id": "P4_S01_A01_zone_enter_exit_02_cam01",
+      "video_sha256": "9ef5b70d88b4b98b32c4a7d950eb96ccf912ae979151acfca0cd7d63c51bbf14",
+      "zone_id": "play_floor"
     },
     {
       "calibration_version": "2026-08-07-img7327",
@@ -264,7 +278,10 @@
         "selection": "longest",
         "track_id": 1
       },
-      "video_id": "P4_S01_A02_zone_enter_exit_01_cam01"
+      "track_identity": null,
+      "video_id": "P4_S01_A02_zone_enter_exit_01_cam01",
+      "video_sha256": "b2e2d17f48adc97a7055631b3f02e5269f1dfca57b37a0800db3f5b16e4d7680",
+      "zone_id": "play_floor"
     },
     {
       "calibration_version": "2026-08-07-img7329",
@@ -344,7 +361,10 @@
         "selection": "longest",
         "track_id": 1
       },
-      "video_id": "P4_S01_A02_zone_enter_exit_02_cam01"
+      "track_identity": null,
+      "video_id": "P4_S01_A02_zone_enter_exit_02_cam01",
+      "video_sha256": "63b511f579532c2b02d7129162e6a58d07c8b8b8232fdf5ddc76e0c6c393eb59",
+      "zone_id": "play_floor"
     },
     {
       "calibration_version": "2026-08-07-img7332",
@@ -432,7 +452,10 @@
         "selection": "longest",
         "track_id": 2
       },
-      "video_id": "P4_S01_A01_zone_enter_exit_03_cam01"
+      "track_identity": null,
+      "video_id": "P4_S01_A01_zone_enter_exit_03_cam01",
+      "video_sha256": "0c02cf2b581f22a980ed64720d996de5677e8fcd105799628bf0e174de1282da",
+      "zone_id": "play_floor"
     },
     {
       "calibration_version": "2026-08-07-img7334",
@@ -520,7 +543,10 @@
         "selection": "longest",
         "track_id": 1
       },
-      "video_id": "P4_S01_A01_zone_enter_exit_04_cam01"
+      "track_identity": null,
+      "video_id": "P4_S01_A01_zone_enter_exit_04_cam01",
+      "video_sha256": "ff5b115838e52649263ae3637b14e926ebe54d41ea8692fef797f34ec10b8567",
+      "zone_id": "play_floor"
     },
     {
       "calibration_version": "2026-08-07-img7387",
@@ -539,7 +565,7 @@
             "type": "DWELL"
           },
           {
-            "frame": 726,
+            "frame": 737,
             "type": "EXIT"
           }
         ],
@@ -549,7 +575,7 @@
           "missed": 0,
           "onset_error_sec": {
             "enter": 0.684,
-            "exit": 0.0334
+            "exit": 0.2169
           },
           "total_errors": 0
         },
@@ -574,7 +600,7 @@
             "type": "DWELL"
           },
           {
-            "frame": 726,
+            "frame": 737,
             "type": "EXIT"
           }
         ],
@@ -584,7 +610,7 @@
           "missed": 0,
           "onset_error_sec": {
             "enter": 0.684,
-            "exit": 0.0334
+            "exit": 0.2169
           },
           "total_errors": 0
         },
@@ -608,7 +634,10 @@
         "selection": "longest",
         "track_id": 1
       },
-      "video_id": "P4_S01_A01_zone_enter_exit_05_cam01"
+      "track_identity": null,
+      "video_id": "P4_S01_A01_zone_enter_exit_05_cam01",
+      "video_sha256": "4556f3c3a50e33403d24ce62fb06f083df7ff74338ae71090247eaae37878dab",
+      "zone_id": "play_floor"
     },
     {
       "calibration_version": "2026-08-07-img7385",
@@ -641,7 +670,7 @@
           },
           "total_errors": 0
         },
-        "fast_flips": 1,
+        "fast_flips": 0,
         "frames": {
           "accuracy": 0.908163,
           "correct": 445,
@@ -676,7 +705,7 @@
           },
           "total_errors": 0
         },
-        "fast_flips": 1,
+        "fast_flips": 0,
         "frames": {
           "accuracy": 0.908163,
           "correct": 445,
@@ -696,7 +725,17 @@
         "selection": "longest",
         "track_id": 2
       },
-      "video_id": "P4_S01_A01_zone_enter_exit_06_cam01"
+      "track_identity": {
+        "ground_truth_actor": "A01",
+        "notes": "scripts/verify_track_identity.py frames=210|300|400|500|560; T2=파란 상의 A01 / T3=회색 상의 A02",
+        "reviewer_id": "202178038",
+        "track_id": 2,
+        "verification_method": "bbox_overlay_visual",
+        "verified_at": "2026-08-18"
+      },
+      "video_id": "P4_S01_A01_zone_enter_exit_06_cam01",
+      "video_sha256": "527d8beacec6bee5d0f9a9f6c97b46505d6e6cb3982feec4232c6283147894c0",
+      "zone_id": "play_floor"
     },
     {
       "calibration_version": "2026-08-07-img7330",
@@ -711,7 +750,7 @@
             "type": "ENTER"
           },
           {
-            "frame": 372,
+            "frame": 385,
             "type": "EXIT"
           }
         ],
@@ -721,7 +760,7 @@
           "missed": 0,
           "onset_error_sec": {
             "enter": 0.5005,
-            "exit": 0.0
+            "exit": 0.2169
           },
           "total_errors": 0
         },
@@ -742,7 +781,7 @@
             "type": "ENTER"
           },
           {
-            "frame": 372,
+            "frame": 385,
             "type": "EXIT"
           }
         ],
@@ -752,7 +791,7 @@
           "missed": 0,
           "onset_error_sec": {
             "enter": 0.5005,
-            "exit": 0.0
+            "exit": 0.2169
           },
           "total_errors": 0
         },
@@ -776,7 +815,10 @@
         "selection": "longest",
         "track_id": 1
       },
-      "video_id": "P4_S01_A02_zone_enter_exit_03_cam01"
+      "track_identity": null,
+      "video_id": "P4_S01_A02_zone_enter_exit_03_cam01",
+      "video_sha256": "f2f7119ba046dca88e5aed232f19b06500d4a6e39799d2ac342bab3715ea6c32",
+      "zone_id": "play_floor"
     },
     {
       "calibration_version": "2026-08-07-img7331",
@@ -864,7 +906,10 @@
         "selection": "longest",
         "track_id": 1
       },
-      "video_id": "P4_S01_A02_zone_enter_exit_04_cam01"
+      "track_identity": null,
+      "video_id": "P4_S01_A02_zone_enter_exit_04_cam01",
+      "video_sha256": "1c4e2948e1f009a0294b83290e2f347125400287897450cbf542a787f62a529e",
+      "zone_id": "play_floor"
     },
     {
       "calibration_version": "2026-08-07-img7333",
@@ -952,7 +997,10 @@
         "selection": "longest",
         "track_id": 1
       },
-      "video_id": "P4_S01_A02_zone_enter_exit_05_cam01"
+      "track_identity": null,
+      "video_id": "P4_S01_A02_zone_enter_exit_05_cam01",
+      "video_sha256": "4bd17c8ad7706902ed8cf631a3485f5007bb07297c03c1bae23ff2648fc3a90c",
+      "zone_id": "play_floor"
     },
     {
       "calibration_version": "2026-08-07-img7388",
@@ -963,11 +1011,11 @@
       "homography": {
         "event_list": [
           {
-            "frame": 178,
+            "frame": 196,
             "type": "ENTER"
           },
           {
-            "frame": 478,
+            "frame": 496,
             "type": "DWELL"
           },
           {
@@ -980,12 +1028,12 @@
           "false": 0,
           "missed": 0,
           "onset_error_sec": {
-            "enter": 0.6173,
+            "enter": 0.9176,
             "exit": -0.1668
           },
           "total_errors": 0
         },
-        "fast_flips": 1,
+        "fast_flips": 0,
         "frames": {
           "accuracy": 0.896959,
           "correct": 531,
@@ -998,11 +1046,11 @@
       "image": {
         "event_list": [
           {
-            "frame": 178,
+            "frame": 196,
             "type": "ENTER"
           },
           {
-            "frame": 478,
+            "frame": 496,
             "type": "DWELL"
           },
           {
@@ -1015,12 +1063,12 @@
           "false": 0,
           "missed": 0,
           "onset_error_sec": {
-            "enter": 0.6173,
+            "enter": 0.9176,
             "exit": -0.1668
           },
           "total_errors": 0
         },
-        "fast_flips": 1,
+        "fast_flips": 0,
         "frames": {
           "accuracy": 0.896959,
           "correct": 531,
@@ -1040,7 +1088,10 @@
         "selection": "longest",
         "track_id": 1
       },
-      "video_id": "P4_S01_A02_zone_enter_exit_06_cam01"
+      "track_identity": null,
+      "video_id": "P4_S01_A02_zone_enter_exit_06_cam01",
+      "video_sha256": "307aa34c7069480abf5140e61c153cc8cfc8fb4e365be98e9038e71614088790",
+      "zone_id": "play_floor"
     }
   ],
   "sample": {
@@ -1051,8 +1102,12 @@
   },
   "schema_version": "phase4_zone_path_comparison_v1",
   "settings": {
+    "event_scope": "영상 전체 frame을 순회하며 runtime과 같이 flush_stale_tracks를 부른다. frame 정확도는 선택한 Track이 있는 frame만 채점한다.",
     "event_tolerance_sec": 1.0,
+    "flip_definition": "진입 계열(ENTER·ENTER_RESTRICTED)과 EXIT 사이의 전환만 센다",
     "flip_window_sec": 1.0,
+    "official_event_tolerance_sec": 1.0,
+    "official_flip_window_sec": 1.0,
     "track_selection": "longest"
   },
   "totals": {
@@ -1060,7 +1115,7 @@
       "accuracy": 0.916955,
       "correct": 6095,
       "event_errors": 0,
-      "flips": 2,
+      "flips": 0,
       "frames": 6647,
       "wrong": 552
     },
@@ -1068,7 +1123,7 @@
       "accuracy": 0.916955,
       "correct": 6095,
       "event_errors": 0,
-      "flips": 2,
+      "flips": 0,
       "frames": 6647,
       "wrong": 552
     }

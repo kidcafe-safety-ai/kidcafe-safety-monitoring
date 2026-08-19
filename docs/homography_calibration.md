@@ -504,11 +504,12 @@ tracker: `yolo26n.pt`, confidence 0.5
 
 | 경로 | 정확도 | 오판정 frame | ENTER·EXIT Event 오류 | 빠른 반전 |
 |---|---:|---:|---:|---:|
-| 기존 image | 91.695% | 552 | 0 | 2 |
-| Homography | 91.695% | 552 | 0 | 2 |
+| 기존 image | 91.695% | 552 | 0 | 0 |
+| Homography | 91.695% | 552 | 0 | 0 |
 
 채점 대상은 6,647 frame이다(8,486 frame 중 Track이 잡힌 6,662 frame에서
-평가 대상 Track이 있는 구간).
+평가 대상 Track이 있는 구간). Event는 영상 전체 frame을 순회하며 runtime과 같은
+순서로 만든다.
 
 **두 경로의 수치가 소수점까지 같고, 영상별 ENTER·EXIT·DWELL Event의 frame
 번호까지 12개 전부 동일하다.** 위에서 설명한 구조적 성질이 합성 표본이 아니라
@@ -519,10 +520,15 @@ tracker: `yolo26n.pt`, confidence 0.5
 | 2 | inside/outside 정확도 개선 | +0.000%p | 미달 |
 | 3 | 오판정 30% 감소 또는 정확도 5%p 개선 | 552 → 552 (0%) | 미달 |
 | 4 | ENTER·EXIT Event 오류 30% 감소 | 0 → 0 | 판정 불가 |
-| 5 | 빠른 반전 증가 없음 | 2 → 2 | 통과 |
+| 5 | 빠른 반전 증가 없음 | 0 → 0 | 통과 |
 
 4번은 기존 경로의 오류가 0건이라 감소율을 정의할 수 없다. 24건 표본에서 오류
 0건이 나온 것이지 오류가 발생하지 않는다는 뜻이 아니다.
+
+5번의 반전은 **진입 계열(ENTER·ENTER_RESTRICTED)과 EXIT 사이의 전환만** 센다.
+처음에는 인접 Event의 type이 다르기만 하면 세어 2건이 나왔는데, 그 2건은 전부
+`DWELL` 다음 `EXIT`였다. 체류하다 나가는 것은 경계에서 흔들린 것이 아니므로
+기준 5번이 묻는 반전이 아니다. 정의를 좁힌 뒤 두 경로 모두 0건이다.
 
 ##### Track 선택 규칙이 영향을 준 영상이 하나 있다
 
@@ -534,13 +540,18 @@ tracker: `yolo26n.pt`, confidence 0.5
 그려 대조한 결과 **T2가 파란 상의, 즉 manifest의 `primary_actor_id=A01`이다.**
 공식 수치는 A01을 잰 값이 맞다.
 
-`gt-overlap`은 A02를 골랐고 그 영상의 오판정이 45 → 124건, Event 오류가
-0 → 2건으로 늘어 전체 수치도 90.412%·631건으로 바뀐다. 이 규칙은 ground truth
-구간에 오래 머문 Track을 고르므로 **대상 인물이 아닌 사람을 고를 수 있다.**
-진단용으로만 쓰고 공식 판정에는 쓰지 않는다.
+`gt-overlap`이 고른 T3은 A02다. 이 규칙은 ground truth 구간에 오래 머문 Track을
+고르므로 **대상 인물이 아닌 사람을 고를 수 있다.** 그 영상의 오판정과 Event
+오류가 함께 늘어 전체 수치도 나빠진다. 진단용으로만 쓰고 공식 판정에는 쓰지
+않으며, 공식값이 아닌 조건으로 실행하면 결과에 `is_official: false`가 찍힌다.
 
 두 규칙 **모두에서** image와 Homography의 수치는 서로 같았다. Track 선택을
 바꿔도 두 경로가 갈리지 않는다는 추가 확인이다.
+
+확인 결과는 `data/annotations/phase4/zone_eval/track_identity.csv`에 남긴다.
+`video_id`·대상 actor·확인된 `track_id`·확인 방법·검수자·확인 시각을 적고,
+평가가 실행될 때마다 고른 Track이 그 기록과 같은지 대조한다. 캐시나 tracker가
+바뀌어 다른 사람이 선택되면 그 자리에서 실패한다.
 
 ##### 두 경로 공통으로 얻은 값
 
@@ -548,13 +559,18 @@ tracker: `yolo26n.pt`, confidence 0.5
 
 | 항목 | 값 |
 |---|---|
-| ENTER 확정 지연 | 평균 **+0.638초** (0.50~0.72초) |
-| EXIT 오차 | 평균 +0.071초 (−0.17~+0.33초) |
+| ENTER 확정 지연 | 평균 **+0.663초** (0.50~0.92초) |
+| EXIT 오차 | 평균 +0.104초 (−0.17~+0.33초) |
 | 오판정 방향 | `false_outside` 552건 / `false_inside` **0건** |
 
 오판정이 전부 한 방향이다. ENTER가 늦게 확정되는 동안 실제로는 Zone 안인
-frame들이 밖으로 판정된다. `enter_confirm_sec=0.3`이 설명하는 것은 절반이고,
-나머지 약 0.34초는 탐지·foot point 쪽 지연이다.
+frame들이 밖으로 판정된다. `enter_confirm_sec=0.3`이 설명하는 것은 절반이 안
+되고, 나머지 약 0.36초는 탐지·foot point 쪽 지연과 Track 끊김이다.
+
+Track이 끊기면 확정이 더 밀린다. `EventManager`는 Track이 사라진 frame에서
+진행 중이던 전환 후보를 지우기 때문이다. `IMG_7388`의 ENTER 지연이 0.92초로
+가장 큰 것이 그 경우이고, `IMG_7387`·`IMG_7330`의 EXIT도 같은 이유로 뒤로
+밀린다. 이 지연은 실제 pipeline에서도 그대로 일어난다.
 
 이 지연은 DWELL에도 영향이 있다. ground truth의 DWELL 8건 중 7건은 발생했지만
 `IMG_7329`는 발생하지 않았다. ENTER가 172 frame에서 확정돼 5초 뒤인 472
@@ -562,12 +578,37 @@ frame이 되어야 하는데 452 frame에서 EXIT가 났다(ground truth는 133 
 이탈로 dwell 성립). 경계에 가까운 체류는 이 지연 때문에 놓칠 수 있다. DWELL은
 채택 기준 2~5번의 채점 대상이 아니라 별도로 기록한다.
 
+##### 이 수치가 공식값이 되기 위해 검증하는 것
+
+측정 도구는 결과를 내기 전에 다음을 확인하고, 하나라도 어긋나면 실행을 멈춘다.
+다른 입력으로도 공식 결과처럼 보이는 파일이 만들어지는 것을 막기 위해서다.
+
+| 확인 | 방법 |
+|---|---|
+| 영상이 계약이 가리키는 그 파일인가 | 추론 전에 실제 파일 SHA-256을 manifest와 대조 |
+| 캐시가 그 영상으로 만들어졌는가 | 캐시의 영상 SHA-256·fps·frame 수를 manifest와 재대조 |
+| 캐시가 같은 manifest로 만들어졌는가 | 캐시에 적힌 manifest SHA-256 대조 |
+| 어떤 모델로 만들었는가 | tracker `model_sha256`·confidence 확인 후 결과에 기록 |
+| ground truth가 계약을 지키는가 | `load_zone_intervals(require_reviewed=True)` 재사용 |
+| frame과 Event가 같은 Zone을 보는가 | `zone_id`로 Zone을 명시 선택, 누락·중복 거부 |
+| 대상 인물이 맞는가 | `track_identity.csv`와 선택된 Track 대조 |
+| 공식 실행 조건인가 | tolerance·flip window·Track 선택이 공식값과 다르면 명시적 플래그 요구 |
+
+결과 JSON에는 입력 artifact 5개(캐시·manifest·interval·review plan·track
+identity)의 SHA-256과 영상별 `video_sha256`을 함께 적는다. 파일만 보고 어떤
+입력으로 만든 결과인지 되짚을 수 있다.
+
 ##### 표본 규모
 
 경계 표본이 24건이므로 **오류 1건이 4.17%p로 움직인다.** 계획서 15절에 따라
 비율과 원시 건수를 함께 적었고, 결과 JSON에도 같은 주의를 남겼다. 이 수치로
 두 경로의 우열을 논하지 않는다. 애초에 우열이 나올 수 없는 Zone 구성이라는
 것이 위 구조적 분석의 요지다.
+
+frame 정확도는 **선택한 Track이 잡힌 frame만** 채점한다. 탐지가 없는 frame은
+inside·outside를 판정할 근거가 없기 때문이다. 따라서 기준 2·3번은 production
+E2E 지표가 아니라 Track이 있는 구간의 좌표 경로 비교 지표다. 반면 Event는 영상
+전체 frame을 순회해 만들므로 Track이 끊긴 구간의 동작까지 포함한다.
 
 ### 7.5 runtime 비용
 
