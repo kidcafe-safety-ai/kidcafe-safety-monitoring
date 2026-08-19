@@ -22,7 +22,16 @@ from src.geofencing.zone_checker import ZoneChecker
 from src.geofencing.zone_loader import load_zones
 from src.input.base import InputSource
 from src.input.file_source import FileVideoSource
-from src.input.rtsp_source import RTSPSource
+from src.input.rtsp_source import (
+    DEFAULT_RTSP_HOST,
+    DEFAULT_RTSP_MAIN_PATH,
+    DEFAULT_RTSP_PORT,
+    DEFAULT_RTSP_SUB_PATH,
+    RTSPConnectionConfig,
+    RTSPCredentialError,
+    RTSPSource,
+    describe_rtsp_log_context,
+)
 from src.input.webcam_source import WebcamSource
 from src.integrations.async_event_dispatcher import AsyncEventDispatcher
 from src.integrations.live_frame_client import LiveFrameClient
@@ -155,7 +164,7 @@ def run_pipeline_from_source(
     overlay_writer = None
     writer = None
     metrics = PipelineMetrics() if metrics_output_path is not None else None
-    frame_number = 0
+    processed_frame_number = 0
     total_events = 0
     fps = source.fps
     try:
@@ -287,7 +296,18 @@ def run_pipeline_from_source(
                 break
 
             # 1. Detection + Tracking
-            result = tracker.update(frame, frame_number, source.source_id)
+            #
+            # RTSPSource는 지연 누적을 막기 위해 오래된 frame을 drop하고 최신
+            # frame만 전달한다. 이때 처리 loop 횟수를 safety/event 시간축으로
+            # 사용하면 dwell/fall/cause 규칙 시간이 실제 카메라 시간보다 느려진다.
+            # 따라서 RTSP처럼 capture_sequence를 제공하는 source는 원본 캡처
+            # frame_number를 사용하고, file/webcam은 기존 처리 frame_number를
+            # 그대로 사용한다.
+            source_frame_number = _resolve_source_frame_number(
+                source,
+                processed_frame_number,
+            )
+            result = tracker.update(frame, source_frame_number, source.source_id)
 
             # 2. Geofencing + Events
             frame_events = []
@@ -296,7 +316,7 @@ def run_pipeline_from_source(
                 events = event_manager.process(
                     track=track,
                     zones_in=zones_in,
-                    frame_number=frame_number,
+                    frame_number=source_frame_number,
                     video_source=source.source_id,
                 )
                 frame_events.extend(events)
@@ -304,7 +324,7 @@ def run_pipeline_from_source(
             active_ids = {track.track_id for track in result.tracks}
             stale_events = event_manager.flush_stale_tracks(
                 active_track_ids=active_ids,
-                frame_number=frame_number,
+                frame_number=source_frame_number,
                 video_source=source.source_id,
             )
             frame_events.extend(stale_events)
@@ -320,7 +340,7 @@ def run_pipeline_from_source(
                 for event in frame_events:
                     LOGGER.info(
                         "[Frame %05d] %s | track_id=%s | zone=%s",
-                        frame_number,
+                        source_frame_number,
                         event.event_type,
                         event.track_id,
                         event.zone_id,
@@ -335,7 +355,7 @@ def run_pipeline_from_source(
                 if _now - _last_status_time >= _STATUS_UPDATE_INTERVAL_SEC:
                     status = _build_current_status(
                         source_id=source.source_id,
-                        frame_number=frame_number,
+                        frame_number=source_frame_number,
                         active_track_count=len(result.tracks),
                         zone_occupancy=event_manager.get_zone_occupancy(),
                         zones=zones,
@@ -352,7 +372,7 @@ def run_pipeline_from_source(
                     dispatcher.update_live_frame(
                         live_frame,
                         source=source.source_id,
-                        frame_number=frame_number,
+                        frame_number=source_frame_number,
                         captured_at=_utc_now_iso_z(),
                     )
 
@@ -377,9 +397,9 @@ def run_pipeline_from_source(
                 metrics.record(processing_time)
             processing_fps = 1.0 / processing_time if processing_time > 0 else 0.0
 
-            if frame_number % 30 == 0:
+            if processed_frame_number % 30 == 0:
                 elapsed = time.perf_counter() - pipeline_start
-                processed = frame_number + 1
+                processed = processed_frame_number + 1
                 if processed > 0 and target_frames:
                     avg_time = elapsed / processed
                     eta_seconds = max(target_frames - processed, 0) * avg_time
@@ -397,8 +417,8 @@ def run_pipeline_from_source(
                     format_eta(eta_seconds) if target_frames else "-",
                 )
 
-            frame_number += 1
-            if frames_limit is not None and frame_number >= frames_limit:
+            processed_frame_number += 1
+            if frames_limit is not None and processed_frame_number >= frames_limit:
                 LOGGER.info("frames_limit=%s에 도달해 처리를 종료합니다.", frames_limit)
                 break
 
@@ -415,7 +435,37 @@ def run_pipeline_from_source(
         if metrics is not None and metrics_output_path is not None:
             metrics.write_json(metrics_output_path)
 
-    LOGGER.info("Processed %s frames, %s events", frame_number, total_events)
+    LOGGER.info("Processed %s frames, %s events", processed_frame_number, total_events)
+
+
+def _resolve_source_frame_number(
+    source: InputSource,
+    processed_frame_number: int,
+) -> int:
+    """안전 규칙에 사용할 입력 source 기준 frame_number를 반환한다.
+
+    FileVideoSource/WebcamSource는 read()마다 순차 처리되므로 처리 loop 번호가
+    source frame_number와 같다. RTSPSource는 최신 프레임 유지를 위해 처리되지
+    않은 오래된 프레임을 버릴 수 있으므로, read()로 전달된 frame의 원본 캡처
+    sequence를 우선 사용한다.
+    """
+
+    metadata_getter = getattr(source, "get_last_frame_metadata", None)
+    if not callable(metadata_getter):
+        return processed_frame_number
+
+    metadata = metadata_getter()
+    capture_sequence = getattr(metadata, "capture_sequence", None)
+    if (
+        isinstance(capture_sequence, int)
+        and not isinstance(capture_sequence, bool)
+        and capture_sequence > 0
+    ):
+        # RTSP capture_sequence는 1부터 증가한다. 기존 Event frame_number 계약은
+        # 0-based이므로 첫 번째 캡처 프레임은 frame_number=0으로 변환한다.
+        return capture_sequence - 1
+
+    return processed_frame_number
 
 
 def _utc_now_iso_z() -> str:
@@ -501,7 +551,7 @@ def main() -> None:
     parser.add_argument(
         "--source",
         default=None,
-        help="소스 경로 또는 ID. webcam: 카메라 인덱스(0), rtsp: URL, file: 파일 경로.",
+        help="소스 경로 또는 ID. webcam: 카메라 인덱스(0), rtsp: 카메라 IP/host, file: 파일 경로.",
     )
     parser.add_argument(
         "--video",
@@ -653,6 +703,38 @@ def main() -> None:
         default=None,
         help="RTSP source_id 별칭. 지정 시 URL 대신 이 값이 이벤트/로그에 기록된다. 예: camera_01",
     )
+    parser.add_argument(
+        "--rtsp-host",
+        default=DEFAULT_RTSP_HOST,
+        help="RTSP 카메라 IP/host. --source-type rtsp에서 --source 미지정 시 사용.",
+    )
+    parser.add_argument(
+        "--rtsp-port",
+        type=int,
+        default=DEFAULT_RTSP_PORT,
+        help="RTSP 포트.",
+    )
+    parser.add_argument(
+        "--rtsp-stream",
+        choices=["main", "sub"],
+        default="main",
+        help="RTSP 스트림 선택. main=/media/video1, sub=/media/video2.",
+    )
+    parser.add_argument(
+        "--rtsp-path",
+        default=None,
+        help="RTSP stream path 직접 지정. 지정하면 --rtsp-stream보다 우선한다.",
+    )
+    parser.add_argument(
+        "--rtsp-username-env",
+        default="KIDCAFE_RTSP_USERNAME",
+        help="RTSP 사용자 이름을 읽을 환경변수 이름. 미설정 시 admin fallback.",
+    )
+    parser.add_argument(
+        "--rtsp-password-env",
+        default="KIDCAFE_RTSP_PASSWORD",
+        help="RTSP 비밀번호를 읽을 환경변수 이름.",
+    )
 
     # 기타
     parser.add_argument("--frames-limit", type=int, default=None)
@@ -672,7 +754,11 @@ def main() -> None:
     LOGGER.info("KidCafe Safety AI v0.3.0")
     LOGGER.info("=" * 50)
 
-    source = _build_source(args)
+    try:
+        source = _build_source(args)
+    except (RTSPCredentialError, ValueError) as exc:
+        LOGGER.error("%s", exc)
+        raise SystemExit(2) from None
 
     run_pipeline_from_source(
         source=source,
@@ -956,10 +1042,49 @@ def _build_source(args) -> InputSource:
         return WebcamSource(device=device, width=args.width, height=args.height)
 
     if args.source_type == "rtsp":
-        if not args.source:
-            raise ValueError("--source-type rtsp 사용 시 --source URL을 지정해야 합니다.")
-        LOGGER.info("RTSP 입력 선택: %s (alias=%s)", args.source, args.rtsp_alias or "없음")
-        return RTSPSource(url=args.source, alias=args.rtsp_alias)
+        rtsp_path = (
+            args.rtsp_path
+            if args.rtsp_path
+            else DEFAULT_RTSP_MAIN_PATH
+            if args.rtsp_stream == "main"
+            else DEFAULT_RTSP_SUB_PATH
+        )
+
+        # 하위 호환: 이미 조립된 RTSP URL을 넘긴 경우도 동작은 유지한다.
+        # 다만 새 권장 방식은 인증정보를 환경변수에서 읽어 내부 조립하는 것이다.
+        if args.source and str(args.source).startswith("rtsp://"):
+            host, port, path, username_set, password_set = describe_rtsp_log_context(
+                args.source
+            )
+            LOGGER.info(
+                "RTSP 입력 선택: camera_ip=%s, port=%s, path=%s, "
+                "username_set=%s, password_set=%s, alias=%s",
+                host,
+                port or "기본",
+                path,
+                username_set,
+                password_set,
+                args.rtsp_alias or "없음",
+            )
+            return RTSPSource(url=args.source, alias=args.rtsp_alias)
+
+        rtsp_host = args.source if args.source else args.rtsp_host
+        LOGGER.info(
+            "RTSP 입력 선택: camera_ip=%s, path=%s, alias=%s",
+            rtsp_host,
+            rtsp_path,
+            args.rtsp_alias or "없음",
+        )
+        return RTSPSource.from_env(
+            RTSPConnectionConfig(
+                host=rtsp_host,
+                port=args.rtsp_port,
+                path=rtsp_path,
+                alias=args.rtsp_alias,
+            ),
+            username_env=args.rtsp_username_env,
+            password_env=args.rtsp_password_env,
+        )
 
     # file (default)
     path = args.source if args.source else args.video

@@ -70,7 +70,11 @@ export default function MonitoringPage() {
     const eventData = await getRecentEvents(RECENT_EVENT_LIMIT, {
       minutes: RECENT_EVENT_MINUTES,
     });
-    setRecentEvents(eventData.data);
+
+    if (eventData.status !== "error") {
+      setRecentEvents(eventData.data);
+    }
+
     setApiErrors((previous) => ({
       ...previous,
       recentEvents: eventData.status === "error",
@@ -155,10 +159,11 @@ export default function MonitoringPage() {
       <section className="monitoring-grid">
         <LiveFrameView />
         <aside className="side-stack">
-          {!isLoading && recentEvents.length === 0 ? (
-            <div className="state-banner empty">표시할 이벤트가 없습니다.</div>
-          ) : null}
-          <RecentEventList events={recentEvents} />
+          <RecentEventList
+            events={recentEvents}
+            hasError={apiErrors.recentEvents}
+            isLoading={isLoading}
+          />
           <ZoneStatusPanel zones={zones} />
         </aside>
       </section>
