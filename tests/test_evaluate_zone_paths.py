@@ -278,6 +278,14 @@ def workspace(tmp_path):
         list(ezp.TRACK_IDENTITY_FIELDS),
         [[VIDEO_ID, "A01", 7, "bbox_overlay_visual", "tester", "2026-08-18", ""]],
     )
+    checksums = csv_write(
+        "data/annotations/phase4/zone_eval/input_checksums.csv",
+        list(ezp.INPUT_CHECKSUM_FIELDS),
+        [[VIDEO_ID, "test-v1",
+          ezp.sha256_file(tmp_path / "configs/camera_calibration/cam01.json"),
+          ezp.sha256_file(tmp_path / "data/zones/image_cam01.json"),
+          ezp.sha256_file(tmp_path / "data/zones/floor_cam01.json")]],
+    )
 
     # 밖(100) -> 안(500) -> 밖(900). 두 경로 모두 정답과 일치해야 한다.
     frames = {}
@@ -287,10 +295,17 @@ def workspace(tmp_path):
             "track_id": 7, "bbox": [x - 10, 0, x + 10, 100],
             "foot_point": [x, 500.0], "confidence": 0.9,
         }]
+    # 공식 실행으로 도는 fixture이므로 tracker provenance와 manifest 지문도
+    # 동결값을 그대로 담는다. 이 값을 흔드는 것이 아래 fail-closed 테스트다.
     cache = tmp_path / "cache.json"
     cache.write_text(json.dumps({
         "schema_version": ezp.CACHE_SCHEMA_VERSION,
-        "tracker": {"model": "test.pt", "model_sha256": "0" * 64, "confidence": 0.5},
+        "manifest_sha256": ezp.sha256_file(manifest),
+        "tracker": {
+            "model": ezp.OFFICIAL_TRACKER_MODEL,
+            "model_sha256": ezp.OFFICIAL_TRACKER_MODEL_SHA256,
+            "confidence": ezp.OFFICIAL_TRACKER_CONFIDENCE,
+        },
         "videos": {VIDEO_ID: {
             "frame_count": 300, "fps": FPS, "width": width, "height": height,
             "video_sha256": VIDEO_SHA256, "frames": frames,
@@ -300,8 +315,23 @@ def workspace(tmp_path):
     return {
         "root": tmp_path, "cache": cache, "manifest": manifest,
         "intervals": intervals, "plan": plan, "identity": identity,
-        "enter": enter, "exit": exit_,
+        "checksums": checksums, "enter": enter, "exit": exit_,
     }
+
+
+def refresh_checksums(workspace):
+    """Zone·calibration 파일을 일부러 바꾼 뒤 동결 기록을 다시 맞춘다.
+
+    revision 대조는 "모르는 사이에 바뀐 것"을 막는 장치다. 테스트가 의도적으로
+    입력을 바꾸는 경우는 그 상황이 아니므로 기록도 같이 갱신한다.
+    """
+    root = workspace["root"]
+    rows = list(csv.reader(open(workspace["checksums"], encoding="utf-8")))
+    rows[1][2] = ezp.sha256_file(root / "configs/camera_calibration/cam01.json")
+    rows[1][3] = ezp.sha256_file(root / "data/zones/image_cam01.json")
+    rows[1][4] = ezp.sha256_file(root / "data/zones/floor_cam01.json")
+    with open(workspace["checksums"], "w", encoding="utf-8", newline="") as file:
+        csv.writer(file, lineterminator="\n").writerows(rows)
 
 
 def run(workspace, **overrides):
@@ -310,6 +340,7 @@ def run(workspace, **overrides):
         cache=str(workspace["cache"]), manifest=str(workspace["manifest"]),
         intervals=str(workspace["intervals"]), review_plan=str(workspace["plan"]),
         track_identity=str(workspace["identity"]),
+        input_checksums=str(workspace["checksums"]),
         repo_root=str(workspace["root"]), track_selection="longest",
         event_tolerance_sec=1.0, flip_window_sec=1.0,
         allow_nonstandard_tolerances=False, output="unused",
@@ -414,6 +445,7 @@ def test_shifted_floor_zone_shows_up_as_homography_errors(workspace):
     config = json.loads(path.read_text(encoding="utf-8"))
     config["zones"][0]["points"] = [[x + 0.45, y] for x, y in config["zones"][0]["points"]]
     path.write_text(json.dumps(config), encoding="utf-8")
+    refresh_checksums(workspace)
 
     totals = run(workspace)["totals"]
     assert totals["image"]["wrong"] == 0
@@ -599,11 +631,12 @@ def test_result_records_every_input_artifact(workspace):
     result = run(workspace)
     digests = result["input_artifacts_sha256"]
     assert set(digests) == {
-        "cache", "manifest", "intervals", "review_plan", "track_identity"
+        "cache", "manifest", "intervals", "review_plan", "track_identity",
+        "input_checksums",
     }
     assert all(len(v) == 64 for v in digests.values())
     assert digests["manifest"] == ezp.sha256_file(workspace["manifest"])
-    assert result["tracker"]["model_sha256"] == "0" * 64
+    assert result["tracker"]["model_sha256"] == ezp.OFFICIAL_TRACKER_MODEL_SHA256
     assert result["per_video"][0]["video_sha256"] == VIDEO_SHA256
 
 
@@ -636,6 +669,7 @@ def test_zone_order_does_not_change_the_result(workspace):
     """예전에는 zones[0]을 써서 Zone 순서가 Event 평가 대상을 바꿨다."""
     baseline = run(workspace)
     add_decoy_zone(workspace, first=True)
+    refresh_checksums(workspace)
     with_decoy_first = run(workspace)
     assert with_decoy_first["totals"] == baseline["totals"]
     assert (
@@ -654,6 +688,7 @@ def test_duplicate_zone_id_is_rejected(workspace):
     image_path = workspace["root"] / "data/zones/image_cam01.json"
     zones = json.loads(image_path.read_text(encoding="utf-8"))
     image_path.write_text(json.dumps(zones + [dict(zones[0])]), encoding="utf-8")
+    refresh_checksums(workspace)
     with pytest.raises((ezp.ZoneEvalError, ValueError), match="중복|duplicate|zone_id"):
         run(workspace)
 
@@ -821,3 +856,185 @@ def test_events_are_bounded_by_the_manifest_frame_count(workspace):
     for path in ezp.PATHS:
         for entry in result["per_video"][0][path]["event_list"]:
             assert 0 <= entry["frame"] < 300
+
+# --- tracker provenance 동결 (종민 재검수 1번) ---
+
+
+def set_tracker(workspace, **changes):
+    payload = json.loads(workspace["cache"].read_text(encoding="utf-8"))
+    payload["tracker"].update(changes)
+    workspace["cache"].write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_wellformed_but_different_tracker_sha_is_rejected(workspace):
+    """형식만 보면 64자리 hex 아무 값이나 통과한다.
+
+    그래서 캐시의 tracker SHA를 유효한 형식의 다른 값으로 바꾸는 것만으로 다른
+    모델로 만든 캐시가 공식 결과가 될 수 있었다.
+    """
+    set_tracker(workspace, model_sha256="a" * 64)
+    with pytest.raises(ezp.ZoneEvalError, match="model_sha256이 동결값과"):
+        run(workspace)
+
+
+def test_different_tracker_model_name_is_rejected(workspace):
+    set_tracker(workspace, model="other.pt")
+    with pytest.raises(ezp.ZoneEvalError, match="model이 동결값과"):
+        run(workspace)
+
+
+def test_different_tracker_confidence_is_rejected(workspace):
+    set_tracker(workspace, confidence=0.25)
+    with pytest.raises(ezp.ZoneEvalError, match="confidence가 동결값과"):
+        run(workspace)
+
+
+def test_cache_without_manifest_digest_is_rejected(workspace):
+    """예전에는 값이 있을 때만 비교해서, 필드를 지우면 검증을 건너뛰었다."""
+    payload = json.loads(workspace["cache"].read_text(encoding="utf-8"))
+    payload.pop("manifest_sha256")
+    workspace["cache"].write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ezp.ZoneEvalError, match="manifest_sha256이 없습니다"):
+        run(workspace)
+
+
+def test_diagnostic_run_allows_another_tracker(workspace):
+    """다른 모델을 넣어보는 것이 진단의 목적이므로 형식만 본다."""
+    set_tracker(workspace, model="other.pt", model_sha256="a" * 64)
+    result = run(workspace, event_tolerance_sec=3.0, allow_nonstandard_tolerances=True)
+    assert result["is_official"] is False
+    assert result["tracker"]["model"] == "other.pt"
+
+
+# --- calibration·Zone revision 동결 (종민 재검수 2번) ---
+
+
+def test_modified_calibration_file_is_rejected(workspace):
+    """경로를 그대로 둔 채 내용만 바꾸면 다른 입력으로 공식 결과가 나왔다."""
+    path = workspace["root"] / "configs/camera_calibration/cam01.json"
+    config = json.loads(path.read_text(encoding="utf-8"))
+    config["origin_description"] = "다른 원점"
+    path.write_text(json.dumps(config), encoding="utf-8")
+    with pytest.raises(ezp.ZoneEvalError, match="calibration_sha256가 동결값과"):
+        run(workspace)
+
+
+def test_modified_image_zone_file_is_rejected(workspace):
+    path = workspace["root"] / "data/zones/image_cam01.json"
+    zones = json.loads(path.read_text(encoding="utf-8"))
+    zones[0]["points"][0][0] = 0.25
+    path.write_text(json.dumps(zones), encoding="utf-8")
+    with pytest.raises(ezp.ZoneEvalError, match="image_zone_sha256가 동결값과"):
+        run(workspace)
+
+
+def test_modified_floor_zone_file_is_rejected(workspace):
+    path = workspace["root"] / "data/zones/floor_cam01.json"
+    config = json.loads(path.read_text(encoding="utf-8"))
+    config["zones"][0]["points"][0][0] = 0.25
+    path.write_text(json.dumps(config), encoding="utf-8")
+    with pytest.raises(ezp.ZoneEvalError, match="floor_zone_sha256가 동결값과"):
+        run(workspace)
+
+
+def test_official_run_requires_a_checksum_record(workspace):
+    """기록이 없으면 변조 여부를 판단할 근거가 아예 없다."""
+    rows = list(csv.reader(open(workspace["checksums"], encoding="utf-8")))
+    with open(workspace["checksums"], "w", encoding="utf-8", newline="") as file:
+        csv.writer(file, lineterminator="\n").writerows(rows[:1] + [
+            ["P4_S09_A09_zone_enter_exit_09_cam09", "test-v1", "a" * 64, "b" * 64, "c" * 64]
+        ])
+    with pytest.raises(ezp.ZoneEvalError, match="manifest에 없는"):
+        run(workspace)
+
+
+def test_result_records_the_input_revisions(workspace):
+    revisions = run(workspace)["per_video"][0]["input_revisions"]
+    assert revisions["verified"] is True
+    assert revisions["calibration_version"] == "test-v1"
+    assert revisions["calibration_sha256"] == ezp.sha256_file(
+        workspace["root"] / "configs/camera_calibration/cam01.json"
+    )
+    assert revisions["image_zone_sha256"] == ezp.sha256_file(
+        workspace["root"] / "data/zones/image_cam01.json"
+    )
+    assert revisions["floor_zone_sha256"] == ezp.sha256_file(
+        workspace["root"] / "data/zones/floor_cam01.json"
+    )
+
+
+def test_malformed_checksum_record_is_rejected(workspace):
+    rows = list(csv.reader(open(workspace["checksums"], encoding="utf-8")))
+    rows[1][2] = "짧다"
+    with open(workspace["checksums"], "w", encoding="utf-8", newline="") as file:
+        csv.writer(file, lineterminator="\n").writerows(rows)
+    with pytest.raises(ezp.ZoneEvalError, match="형식이 잘못됐습니다"):
+        run(workspace)
+
+
+# --- Track identity와 actor 연결 (종민 재검수 3번) ---
+
+
+def set_identity_actor(workspace, actor):
+    rows = list(csv.reader(open(workspace["identity"], encoding="utf-8")))
+    rows[1][1] = actor
+    with open(workspace["identity"], "w", encoding="utf-8", newline="") as file:
+        csv.writer(file, lineterminator="\n").writerows(rows)
+
+
+def test_identity_actor_must_match_the_review_plan(workspace):
+    """Track ID만 대조하면 actor를 바꿔치기해도 통과했다."""
+    set_identity_actor(workspace, "A02")
+    with pytest.raises(ezp.ZoneEvalError, match="대응표와 다릅니다"):
+        run(workspace)
+
+
+def test_identity_actor_must_exist_in_the_manifest():
+    """대응표가 가리키는 actor 자체가 그 영상에 없는 사람이면 막는다.
+
+    manifest 계약이 `primary_actor_id`를 필수로 강제하므로 실제 입력에서는 위
+    대응표 검사가 먼저 걸린다. 이 검사는 그 뒤를 받치는 두 번째 그물이라
+    단위로 확인한다.
+    """
+    record = {
+        "ground_truth_actor": "A09", "track_id": 7, "verification_method": "visual",
+        "reviewer_id": "tester", "verified_at": "2026-08-18", "notes": "",
+    }
+    with pytest.raises(ezp.ZoneEvalError, match="actor_ids에 없습니다"):
+        ezp.verify_track_identity(
+            "V1", 7, record, True, "", ["A01", "A02"], ""
+        )
+
+
+def test_identity_requires_a_ground_truth_actor(tmp_path):
+    path = tmp_path / "identity.csv"
+    with open(path, "w", encoding="utf-8", newline="") as file:
+        writer = csv.writer(file, lineterminator="\n")
+        writer.writerow(list(ezp.TRACK_IDENTITY_FIELDS))
+        writer.writerow(["V1", "", 2, "visual", "tester", "2026-08-18", ""])
+    with pytest.raises(ezp.ZoneEvalError, match="ground_truth_actor"):
+        ezp.load_track_identity(path)
+
+
+def test_multi_actor_video_requires_an_identity_record(workspace):
+    """인원이 둘 이상이면 어느 사람을 평가했는지가 절대 수치를 바꾼다."""
+    rows = list(csv.reader(open(workspace["manifest"], encoding="utf-8")))
+    rows[1][list(contract.MANIFEST_FIELDS).index("actor_ids")] = "A01|A02"
+    with open(workspace["manifest"], "w", encoding="utf-8", newline="") as file:
+        csv.writer(file, lineterminator="\n").writerows(rows)
+    identity_rows = list(csv.reader(open(workspace["identity"], encoding="utf-8")))
+    with open(workspace["identity"], "w", encoding="utf-8", newline="") as file:
+        csv.writer(file, lineterminator="\n").writerows(identity_rows[:1])
+    payload = json.loads(workspace["cache"].read_text(encoding="utf-8"))
+    payload["manifest_sha256"] = ezp.sha256_file(workspace["manifest"])
+    workspace["cache"].write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ezp.ZoneEvalError, match="track identity 기록이"):
+        run(workspace)
+
+
+def test_result_carries_the_actor_linkage(workspace):
+    identity = run(workspace)["per_video"][0]["track_identity"]
+    assert identity["ground_truth_actor"] == "A01"
+    assert identity["expected_actor"] == "A01"
+    assert identity["actor_ids"] == ["A01"]
+    assert identity["primary_actor_id"] == "A01"

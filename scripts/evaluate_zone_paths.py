@@ -80,6 +80,16 @@ DEFAULT_FLIP_WINDOW_SEC = 1.0
 OFFICIAL_EVENT_TOLERANCE_SEC = 1.0
 OFFICIAL_FLIP_WINDOW_SEC = 1.0
 
+# 공식 캐시를 만든 detector·tracker. 형식만 보면 64자리 hex 아무 값이나 통과해
+# 다른 모델로 만든 캐시가 공식 결과로 둔갑할 수 있다. 실제 값을 여기 동결하고
+# 정확히 일치할 때만 공식으로 인정한다. 모델을 바꾸면 이 상수와 문서 7.4절을
+# 함께 고쳐야 하고, 그것이 공식 수치를 다시 내야 한다는 신호가 된다.
+OFFICIAL_TRACKER_MODEL = "yolo26n.pt"
+OFFICIAL_TRACKER_MODEL_SHA256 = (
+    "9b09cc8bf347f0fc8a5f7657480587f25db09b34bf33b0652110fb03a8ad4fef"
+)
+OFFICIAL_TRACKER_CONFIDENCE = 0.5
+
 # 채택 기준 5번은 "빠른 ENTER·EXIT 반전 증가 없음"이다. 진입 계열과 EXIT
 # 사이의 전환만 반전으로 센다. DWELL은 체류 중에 나오는 Event라 DWELL 다음
 # EXIT는 반전이 아니라 정상적인 이탈이다.
@@ -94,6 +104,17 @@ TRACK_IDENTITY_FIELDS = (
     "reviewer_id",
     "verified_at",
     "notes",
+)
+
+# 영상별 calibration·Zone 파일의 동결 SHA-256. 경로는 review plan에 있지만
+# 경로만 맞추고 내용을 바꾸면 다른 입력으로 공식 결과를 만들 수 있다. 판정에
+# 실제로 쓰이는 세 파일의 revision을 여기서 대조한다.
+INPUT_CHECKSUM_FIELDS = (
+    "video_id",
+    "calibration_version",
+    "calibration_sha256",
+    "image_zone_sha256",
+    "floor_zone_sha256",
 )
 
 
@@ -125,6 +146,14 @@ def parse_args() -> argparse.Namespace:
             "다중 인원 영상의 대상 Track을 사람이 확인해 적어둔 CSV. 여기 있는 "
             "영상은 선택된 Track이 기록과 같은지 검증한다. 기본값은 "
             "data/annotations/phase4/zone_eval/track_identity.csv."
+        ),
+    )
+    parser.add_argument(
+        "--input-checksums",
+        default=None,
+        help=(
+            "영상별 calibration·image Zone·floor Zone의 동결 SHA-256 CSV. "
+            "기본값은 data/annotations/phase4/zone_eval/input_checksums.csv."
         ),
     )
     parser.add_argument(
@@ -176,14 +205,18 @@ def resolve_officiality(args: argparse.Namespace) -> bool:
     return standard
 
 
-def read_csv(path: Path, required: Sequence[str]) -> List[dict]:
+def read_csv(
+    path: Path, required: Sequence[str], allow_empty: bool = False
+) -> List[dict]:
     if not path.is_file():
         raise ZoneEvalError(f"파일이 없습니다: {path}")
     with open(path, "r", encoding="utf-8", newline="") as file:
-        rows = list(csv.DictReader(file))
-    if not rows:
+        reader = csv.DictReader(file)
+        header = reader.fieldnames or []
+        rows = list(reader)
+    if not rows and not allow_empty:
         raise ZoneEvalError(f"{path}에 행이 없습니다.")
-    missing = [f for f in required if f not in rows[0]]
+    missing = [f for f in required if f not in header]
     if missing:
         raise ZoneEvalError(f"{path}에 필드가 없습니다: {missing}")
     return rows
@@ -313,7 +346,9 @@ def load_track_identity(path: Path) -> Dict[str, dict]:
     누가 언제 무엇으로 확인했는지를 파일로 남겨야 나중에 캐시나 tracker가 바뀌어도
     같은 확인을 다시 할 수 있다.
     """
-    rows = read_csv(path, TRACK_IDENTITY_FIELDS)
+    # 확인이 필요한 영상이 아직 없으면 헤더만 있는 파일이 정상이다. 다중 인원
+    # 영상에 기록이 없는 경우는 verify_track_identity가 따로 막는다.
+    rows = read_csv(path, TRACK_IDENTITY_FIELDS, allow_empty=True)
     index: Dict[str, dict] = {}
     for row in rows:
         video_id = row["video_id"].strip()
@@ -325,6 +360,8 @@ def load_track_identity(path: Path) -> Dict[str, dict]:
             raise ZoneEvalError(f"{video_id}: track_id가 정수가 아닙니다: {row['track_id']!r}")
         if not row["reviewer_id"].strip() or not row["verified_at"].strip():
             raise ZoneEvalError(f"{video_id}: reviewer_id와 verified_at이 필요합니다.")
+        if not row["ground_truth_actor"].strip():
+            raise ZoneEvalError(f"{video_id}: ground_truth_actor가 필요합니다.")
         index[video_id] = {
             "ground_truth_actor": row["ground_truth_actor"].strip(),
             "track_id": track_id,
@@ -336,10 +373,29 @@ def load_track_identity(path: Path) -> Dict[str, dict]:
     return index
 
 
+def parse_actor_ids(text: str) -> List[str]:
+    """manifest·review plan의 `A01|A02` 형태를 목록으로 읽는다."""
+    return [chunk.strip() for chunk in str(text or "").split("|") if chunk.strip()]
+
+
 def verify_track_identity(
-    video_id: str, chosen: int, record: Optional[dict], official: bool
+    video_id: str,
+    chosen: int,
+    record: Optional[dict],
+    official: bool,
+    target_actor: str,
+    actor_ids: Sequence[str],
+    primary_actor_id: str,
 ) -> Optional[dict]:
-    """고른 Track이 사람이 확인한 Track과 같은지 본다.
+    """고른 Track이 사람이 확인한 **그 사람**인지 본다.
+
+    Track ID만 대조하면 절반만 막힌다. `track_identity.csv`의
+    `ground_truth_actor`를 A01에서 A02로 바꿔도 Track ID가 같으면 통과하므로,
+    기록이 어느 사람을 가리키는지는 아무도 검증하지 않는 상태가 된다. 그래서
+    actor를 review plan·manifest와 함께 묶어 확인한다.
+
+    다중 인원 영상은 확인 기록 자체를 필수로 본다. 어느 사람을 평가했는지가
+    절대 수치를 바꾸는데 기록이 없으면 재검증할 방법이 없기 때문이다.
 
     공식 측정에서는 어긋나면 멈춘다. 캐시나 tracker가 바뀌어 다른 사람이
     평가되는 것을 공식 수치로 낼 수는 없기 때문이다.
@@ -348,16 +404,41 @@ def verify_track_identity(
     Track을 고르는 규칙을 일부러 돌려보는 것이 진단의 목적이고, 그 규칙이 대상이
     아닌 사람을 고른다는 사실 자체가 봐야 할 결과다.
     """
+    multi_actor = len(actor_ids) > 1
     if record is None:
+        if multi_actor and official:
+            raise ZoneEvalError(
+                f"{video_id}: 인원이 {len(actor_ids)}명인데 track identity 기록이 "
+                "없습니다. 대상 Track을 확인해 기록하세요."
+            )
         return None
+
+    actor = record["ground_truth_actor"]
+    # actor는 세 artifact가 같은 사람을 가리킬 때만 유효하다. review plan에
+    # ground_truth_actor가 없는 단일 인원 영상은 manifest의 대표 actor를 쓴다.
+    expected_actor = target_actor.strip() or primary_actor_id.strip()
+    if expected_actor and actor != expected_actor:
+        raise ZoneEvalError(
+            f"{video_id}: track identity의 ground_truth_actor가 대응표와 다릅니다: "
+            f"{actor!r} != {expected_actor!r}"
+        )
+    if actor_ids and actor not in actor_ids:
+        raise ZoneEvalError(
+            f"{video_id}: track identity의 ground_truth_actor가 manifest의 "
+            f"actor_ids에 없습니다: {actor!r} not in {list(actor_ids)}"
+        )
+
     entry = dict(record)
     entry["selected_track_id"] = chosen
+    entry["expected_actor"] = expected_actor
+    entry["actor_ids"] = list(actor_ids)
+    entry["primary_actor_id"] = primary_actor_id
     entry["matches_verified_track"] = chosen == record["track_id"]
     if entry["matches_verified_track"]:
         return entry
     message = (
         f"{video_id}: 선택된 Track {chosen}이 확인 기록의 Track "
-        f"{record['track_id']}({record['ground_truth_actor']})과 다릅니다."
+        f"{record['track_id']}({actor})과 다릅니다."
     )
     if official:
         raise ZoneEvalError(
@@ -562,8 +643,15 @@ def verify_cache_against_manifest(video_id: str, entry: dict, meta: dict) -> Non
         )
 
 
-def verify_tracker_provenance(cache: dict) -> dict:
-    """어떤 모델로 만든 캐시인지 결과에 남길 수 있는 형태로 확인한다."""
+def verify_tracker_provenance(cache: dict, official: bool) -> dict:
+    """어떤 모델로 만든 캐시인지 확인한다.
+
+    형식 검사만으로는 부족하다. 64자리 hex이기만 하면 `000...000`도 통과하므로
+    캐시의 tracker 항목을 유효한 형식의 다른 값으로 바꿔 공식 결과를 만들 수
+    있다. 공식 실행에서는 동결 상수와 **정확히** 일치할 때만 통과시킨다.
+
+    진단 실행은 다른 모델을 일부러 넣어보는 것이 목적이므로 형식만 본다.
+    """
     tracker = cache.get("tracker")
     if not isinstance(tracker, dict):
         raise ZoneEvalError("캐시에 tracker 정보가 없습니다.")
@@ -572,7 +660,88 @@ def verify_tracker_provenance(cache: dict) -> dict:
         raise ZoneEvalError(f"캐시의 tracker model_sha256 형식이 잘못됐습니다: {digest!r}")
     if tracker.get("confidence") is None:
         raise ZoneEvalError("캐시에 tracker confidence가 없습니다.")
+    if not official:
+        return tracker
+
+    model = str(tracker.get("model") or "")
+    if model != OFFICIAL_TRACKER_MODEL:
+        raise ZoneEvalError(
+            f"공식 캐시의 tracker model이 동결값과 다릅니다: "
+            f"{model!r} != {OFFICIAL_TRACKER_MODEL!r}"
+        )
+    if digest != OFFICIAL_TRACKER_MODEL_SHA256:
+        raise ZoneEvalError(
+            f"공식 캐시의 tracker model_sha256이 동결값과 다릅니다: "
+            f"{digest} != {OFFICIAL_TRACKER_MODEL_SHA256}"
+        )
+    confidence = float(tracker["confidence"])
+    if abs(confidence - OFFICIAL_TRACKER_CONFIDENCE) > 1e-9:
+        raise ZoneEvalError(
+            f"공식 캐시의 tracker confidence가 동결값과 다릅니다: "
+            f"{confidence} != {OFFICIAL_TRACKER_CONFIDENCE}"
+        )
     return tracker
+
+
+def load_input_checksums(path: Path) -> Dict[str, dict]:
+    """영상별 calibration·Zone 파일의 동결 SHA-256을 읽는다."""
+    rows = read_csv(path, INPUT_CHECKSUM_FIELDS)
+    index: Dict[str, dict] = {}
+    for row in rows:
+        video_id = row["video_id"].strip()
+        if video_id in index:
+            raise ZoneEvalError(f"input checksum에 중복 video_id가 있습니다: {video_id}")
+        entry = {}
+        for field in INPUT_CHECKSUM_FIELDS[1:]:
+            value = (row[field] or "").strip()
+            if not value:
+                raise ZoneEvalError(f"{video_id}: input checksum의 {field}가 비어 있습니다.")
+            if field.endswith("_sha256") and (
+                len(value) != 64 or any(c not in "0123456789abcdef" for c in value)
+            ):
+                raise ZoneEvalError(
+                    f"{video_id}: input checksum의 {field} 형식이 잘못됐습니다: {value!r}"
+                )
+            entry[field] = value
+        index[video_id] = entry
+    return index
+
+
+def verify_input_checksums(
+    video_id: str, entry: dict, record: Optional[dict], official: bool
+) -> dict:
+    """판정에 실제로 쓰는 calibration·Zone 파일의 revision을 대조한다.
+
+    review plan은 경로만 담고 있어서, 경로를 그대로 둔 채 calibration이나 Zone
+    파일의 내용만 바꾸면 다른 입력으로 만든 결과가 공식값처럼 나온다. 동결
+    manifest의 SHA-256과 대조해 그 경로를 막는다.
+
+    공식 실행에서는 기록이 없으면 그 자체로 실패다. 기록이 없는 영상은
+    변조 여부를 판단할 근거가 아예 없기 때문이다.
+    """
+    actual = {
+        "calibration_version": entry["calibration_version"],
+        "calibration_sha256": sha256_file(entry["calibration"]),
+        "image_zone_sha256": sha256_file(entry["image_zone"]),
+        "floor_zone_sha256": sha256_file(entry["floor_zone"]),
+    }
+    if record is None:
+        if official:
+            raise ZoneEvalError(
+                f"{video_id}: 공식 실행인데 input checksum 기록이 없습니다. "
+                "calibration·Zone 파일의 SHA-256을 동결 manifest에 추가하세요."
+            )
+        actual["verified"] = False
+        return actual
+
+    for field in INPUT_CHECKSUM_FIELDS[1:]:
+        if actual[field] != record[field]:
+            raise ZoneEvalError(
+                f"{video_id}: {field}가 동결값과 다릅니다: "
+                f"{actual[field]} != {record[field]}"
+            )
+    actual["verified"] = True
+    return actual
 
 
 def evaluate(args: argparse.Namespace) -> dict:
@@ -583,7 +752,7 @@ def evaluate(args: argparse.Namespace) -> dict:
     cache = json.loads(cache_path.read_text(encoding="utf-8"))
     if cache.get("schema_version") != CACHE_SCHEMA_VERSION:
         raise ZoneEvalError(f"지원하지 않는 캐시 schema입니다: {cache.get('schema_version')}")
-    tracker = verify_tracker_provenance(cache)
+    tracker = verify_tracker_provenance(cache, is_official)
 
     # 동결된 계약 검증을 그대로 쓴다. 여기서 직접 CSV를 읽어 필드 존재만 보면
     # enter<exit, frame 범위, interval index 연속성, manifest 대조 같은 계약이
@@ -610,14 +779,30 @@ def evaluate(args: argparse.Namespace) -> dict:
     if unknown:
         raise ZoneEvalError(f"track identity에 manifest에 없는 video_id가 있습니다: {unknown}")
 
+    checksum_path = Path(
+        args.input_checksums
+        or root / "data" / "annotations" / "phase4" / "zone_eval" / "input_checksums.csv"
+    )
+    input_checksums = load_input_checksums(checksum_path)
+    unknown = sorted(set(input_checksums) - set(manifest))
+    if unknown:
+        raise ZoneEvalError(f"input checksum에 manifest에 없는 video_id가 있습니다: {unknown}")
+
     artifacts = {
         "cache": sha256_file(cache_path),
         "manifest": sha256_file(manifest_path),
         "intervals": sha256_file(intervals_path),
         "review_plan": sha256_file(plan_path),
         "track_identity": sha256_file(identity_path),
+        "input_checksums": sha256_file(checksum_path),
     }
     cached_manifest_digest = cache.get("manifest_sha256")
+    # 공식 실행에서는 필수다. 없으면 비교를 건너뛰게 되므로 캐시에서 이 필드만
+    # 지우면 manifest 대조를 통째로 우회할 수 있다.
+    if is_official and not cached_manifest_digest:
+        raise ZoneEvalError(
+            "공식 캐시에 manifest_sha256이 없습니다. 캐시를 다시 만드세요."
+        )
     if cached_manifest_digest and cached_manifest_digest != artifacts["manifest"]:
         raise ZoneEvalError(
             "캐시를 만들 때 쓴 manifest와 지금 manifest가 다릅니다: "
@@ -645,6 +830,9 @@ def evaluate(args: argparse.Namespace) -> dict:
         enter, exit_ = int(row["enter_frame"]), int(row["exit_frame"])
         zone_id = row["zone_id"]
         entry = inputs[video_id]
+        input_revisions = verify_input_checksums(
+            video_id, entry, input_checksums.get(video_id), is_official
+        )
 
         calibration = load_calibration(str(entry["calibration"]))
         if (calibration.frame_width, calibration.frame_height) != (width, height):
@@ -666,7 +854,13 @@ def evaluate(args: argparse.Namespace) -> dict:
         if track_id is None:
             raise ZoneEvalError(f"{video_id}: 평가할 Track을 고르지 못했습니다.")
         verified = verify_track_identity(
-            video_id, track_id, identities.get(video_id), is_official
+            video_id,
+            track_id,
+            identities.get(video_id),
+            is_official,
+            entry["target_actor"],
+            parse_actor_ids(meta.get("actor_ids", "")),
+            str(meta.get("primary_actor_id", "") or ""),
         )
 
         judged = judge_frames(
@@ -685,6 +879,7 @@ def evaluate(args: argparse.Namespace) -> dict:
             "track": selection,
             "track_identity": verified,
             "video_sha256": cache_entry["video_sha256"],
+            "input_revisions": input_revisions,
         }
         for path in PATHS:
             events = run_events(

@@ -24,6 +24,12 @@ runtime calibration config는 계약 위치인 `configs/camera_calibration/`에 
 `data/annotations/phase4/recordings_manifest.csv`,
 `data/annotations/phase4/zone_intervals.csv`에 있다.
 
+Zone 경로 비교(`zone_path_comparison.json`)가 공식 실행에서 대조하는 동결 입력은
+`data/annotations/phase4/zone_eval/`에 있다. `track_identity.csv`는 다중 인원
+영상의 대상 Track과 그 사람을 누가 언제 확인했는지, `input_checksums.csv`는
+영상별 calibration·image Zone·floor Zone의 SHA-256을 담는다. 경로만 맞고 내용이
+바뀐 파일로 공식 결과가 만들어지는 것을 이 두 파일이 막는다.
+
 ## 재현 명령
 
 ```bash

@@ -593,16 +593,29 @@ frame이 되어야 하는데 452 frame에서 EXIT가 났다(ground truth는 133 
 |---|---|
 | 영상이 계약이 가리키는 그 파일인가 | 추론 전에 실제 파일 SHA-256을 manifest와 대조 |
 | 캐시가 그 영상으로 만들어졌는가 | 캐시의 영상 SHA-256·fps·frame 수를 manifest와 재대조 |
-| 캐시가 같은 manifest로 만들어졌는가 | 캐시에 적힌 manifest SHA-256 대조 |
-| 어떤 모델로 만들었는가 | tracker `model_sha256`·confidence 확인 후 결과에 기록 |
+| 캐시가 같은 manifest로 만들어졌는가 | 캐시에 적힌 manifest SHA-256 대조. 공식 실행에서는 이 필드가 **없으면 실패** |
+| 어떤 모델로 만들었는가 | tracker 이름·`model_sha256`·confidence가 동결값과 **정확히 일치**해야 한다 |
+| 판정에 쓰는 Zone·calibration이 그 revision인가 | `input_checksums.csv`의 calibration·image Zone·floor Zone SHA-256 대조 |
 | ground truth가 계약을 지키는가 | `load_zone_intervals(require_reviewed=True)` 재사용 |
 | frame과 Event가 같은 Zone을 보는가 | `zone_id`로 Zone을 명시 선택, 누락·중복 거부 |
 | 대상 인물이 맞는가 | `track_identity.csv`와 선택된 Track 대조 |
+| 그 기록이 가리키는 사람이 맞는가 | `ground_truth_actor`가 대응표·manifest `actor_ids`와 일치. 다중 인원 영상은 기록이 **필수** |
 | 공식 실행 조건인가 | tolerance·flip window·Track 선택이 공식값과 다르면 명시적 플래그 요구 |
 
-결과 JSON에는 입력 artifact 5개(캐시·manifest·interval·review plan·track
-identity)의 SHA-256과 영상별 `video_sha256`을 함께 적는다. 파일만 보고 어떤
-입력으로 만든 결과인지 되짚을 수 있다.
+동결 tracker는 `yolo26n.pt`,
+`9b09cc8bf347f0fc8a5f7657480587f25db09b34bf33b0652110fb03a8ad4fef`,
+confidence 0.5다. 형식만 보면 64자리 hex 아무 값이나 통과하므로 값을 코드에
+동결하고 정확히 일치할 때만 공식으로 인정한다. 모델을 바꾸면 이 값과 공식
+수치를 함께 다시 내야 한다.
+
+Zone·calibration은 review plan에 **경로만** 있어서, 경로를 그대로 둔 채 파일
+내용만 바꾸면 다른 입력으로 공식 결과를 만들 수 있었다.
+`data/annotations/phase4/zone_eval/input_checksums.csv`에 영상별로 세 파일의
+SHA-256을 동결하고 실행할 때마다 대조한다.
+
+결과 JSON에는 입력 artifact 6개(캐시·manifest·interval·review plan·track
+identity·input checksums)의 SHA-256과 영상별 `video_sha256`·`input_revisions`를
+함께 적는다. 파일만 보고 어떤 입력으로 만든 결과인지 되짚을 수 있다.
 
 ##### 표본 규모
 
