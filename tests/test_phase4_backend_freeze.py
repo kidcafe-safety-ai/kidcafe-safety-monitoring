@@ -89,6 +89,234 @@ def test_event_debounce_constants_match_the_freeze(name, expected, doc):
     assert f"`{name}`" in doc
 
 
+# --- Vision AI -> API 통합 계층 ---
+
+
+@pytest.mark.parametrize(
+    "module, name, expected",
+    [
+        ("src.integrations.async_event_dispatcher", "_DEFAULT_EVENT_QUEUE_MAXSIZE", 100),
+        ("src.integrations.async_event_dispatcher", "_WAIT_POLL_SEC", 0.5),
+        ("src.integrations.event_api_client", "_DEFAULT_CONNECT_TIMEOUT_SEC", 0.5),
+        ("src.integrations.event_api_client", "_DEFAULT_READ_TIMEOUT_SEC", 1.0),
+        ("src.integrations.event_api_client", "_LOG_COOLDOWN_SEC", 5.0),
+    ],
+)
+def test_dispatch_constants_match_the_freeze(module, name, expected, doc):
+    """timeout이 길어지면 추론 루프의 프레임 예산이 깨진다."""
+    import importlib
+
+    assert getattr(importlib.import_module(module), name) == expected
+    assert f"`{name}`" in doc
+
+
+def test_failed_event_path_matches_the_freeze(doc):
+    """API가 죽어도 Event를 잃지 않는다는 계약의 저장 위치다."""
+    from src.integrations import async_event_dispatcher
+
+    path = async_event_dispatcher._DEFAULT_FAILED_EVENTS_PATH
+    assert path == "outputs/api_failed_events.jsonl"
+    assert path in doc
+
+
+# --- Live Frame ---
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("_TARGET_WIDTH", 640),
+        ("_TARGET_HEIGHT", 480),
+        ("_DEFAULT_QUALITY", 75),
+        ("_DEFAULT_MIN_INTERVAL_SEC", 0.5),
+    ],
+)
+def test_live_frame_client_constants_match_the_freeze(name, expected, doc):
+    from src.integrations import live_frame_client
+
+    assert getattr(live_frame_client, name) == expected
+
+
+def test_live_frame_stale_timeout_matches_the_freeze(doc):
+    """stale이면 204다. 빈 이미지를 만들어 내려주지 않는다."""
+    from src.api import live_frame_store
+
+    assert live_frame_store.DEFAULT_STALE_AFTER_SEC == 3.0
+    assert "`DEFAULT_STALE_AFTER_SEC`" in doc
+
+
+def test_live_frame_is_opt_in(doc):
+    main_source = (ROOT / "src" / "main.py").read_text(encoding="utf-8")
+    assert '"--live-frame-enabled"' in main_source
+    assert "live_frame_enabled: bool = False" in main_source
+    assert "기본 **꺼짐**" in doc
+
+
+def test_live_frame_fps_becomes_an_interval(doc):
+    """1.5fps는 0.667초 간격이 된다. 클라이언트 상수 0.5는 대체값일 뿐이다."""
+    main_source = (ROOT / "src" / "main.py").read_text(encoding="utf-8")
+    assert "min_interval_sec = 1.0 / live_frame_fps" in main_source
+    assert "0.667" in doc
+
+
+# --- RTSP 조립 기본값 ---
+
+
+def test_rtsp_host_default_is_documented_as_site_specific(doc):
+    """특정 망의 사설 IP가 기본값이라 다른 곳에서는 반드시 덮어써야 한다."""
+    from src.input import rtsp_source
+
+    assert rtsp_source.DEFAULT_RTSP_HOST == "192.168.0.4"
+    assert rtsp_source.DEFAULT_RTSP_PORT == 554
+    assert "192.168.0.4" in doc
+    assert "덮어써야" in doc
+
+
+# --- Zone 저장 계약 ---
+
+
+def test_zone_store_constants_match_the_freeze(doc):
+    from src.api import zone_store
+
+    assert zone_store.VERSION_PREFIX == "sha256:"
+    assert zone_store.MAX_DWELL_THRESHOLD_SEC == 3600
+    assert zone_store.NORMALIZED_RANGE == (0.0, 1.0)
+    assert zone_store.DEFAULT_RUNTIME_FILE_MODE == 0o644
+    assert "`3600`초" in doc
+    assert "`0o644`" in doc
+
+
+def test_zone_save_is_atomic(doc):
+    """같은 디렉터리 임시 파일 -> fsync -> chmod -> replace 순서를 유지한다.
+
+    순서가 중요하다. replace 뒤에 chmod를 하면 그 사이에 읽는 쪽이 0600 파일을
+    보게 되고, fsync를 빼면 전원이 끊겼을 때 빈 파일이 남는다.
+    """
+    import inspect
+
+    from src.api import zone_store
+
+    # 파일 전체에서 찾으면 docstring에 쓰인 os.replace를 먼저 집는다.
+    # 실제 실행되는 문장만 남기고 본다.
+    source = inspect.getsource(zone_store._atomic_write)
+    statements = source[source.index("path.parent.mkdir"):]
+
+    calls = ("tempfile.mkstemp", "os.fsync", "os.chmod", "os.replace")
+    positions = []
+    for call in calls:
+        assert call in statements, f"{call}이 _atomic_write에 없습니다"
+        assert call in doc, f"{call}이 동결 문서에 없습니다"
+        positions.append(statements.index(call))
+    assert positions == sorted(positions), f"저장 순서가 바뀌었습니다: {calls}"
+
+
+def test_polygon_minimum_points_matches_the_freeze(doc):
+    from src.geofencing import polygon_rules
+
+    assert polygon_rules.MIN_POLYGON_POINTS == 3
+    assert "polygon 최소 점 수" in doc
+
+
+# --- API 앱 설정 ---
+
+
+def test_api_app_metadata_matches_the_freeze(doc):
+    source = (ROOT / "src" / "api" / "main.py").read_text(encoding="utf-8")
+    assert 'title="KidCafe Safety API"' in source
+    assert 'version="0.3.0"' in source
+    assert "`KidCafe Safety API`" in doc
+    assert "`0.3.0`" in doc
+
+
+def cors_origins() -> list:
+    """`add_middleware(CORSMiddleware, allow_origins=[...])`의 실제 목록을 읽는다.
+
+    정규식으로 localhost 패턴만 찾으면 외부 host를 추가해도 검사에 걸리지 않는다.
+    origin을 여는 변경이 바로 그 경우라 목록 자체를 파싱한다.
+    """
+    import ast
+
+    tree = ast.parse((ROOT / "src" / "api" / "main.py").read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "add_middleware"
+        ):
+            for keyword in node.keywords:
+                if keyword.arg == "allow_origins":
+                    return ast.literal_eval(keyword.value)
+    raise AssertionError("CORS allow_origins를 찾지 못했습니다")
+
+
+def test_cors_origins_match_the_freeze(doc):
+    """origin을 더 열면 문서와 갈린다. 운영 배포는 Phase 4 범위가 아니다."""
+    origins = cors_origins()
+    assert sorted(origins) == [
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ], f"허용 origin이 동결과 다릅니다: {origins}"
+    for origin in origins:
+        assert origin in doc
+
+
+def test_container_images_and_ports_match_the_freeze(doc):
+    api_dockerfile = (ROOT / "Dockerfile.api").read_text(encoding="utf-8")
+    frontend_dockerfile = (ROOT / "frontend" / "Dockerfile").read_text(encoding="utf-8")
+    assert "FROM python:3.10-slim" in api_dockerfile
+    assert "EXPOSE 8000" in api_dockerfile
+    assert "EXPOSE 3000" in frontend_dockerfile
+    assert "`python:3.10-slim`" in doc
+    assert "`8000`" in doc and "`3000`" in doc
+
+
+# --- 출력 파일 기본값 ---
+
+
+@pytest.mark.parametrize(
+    "option, expected",
+    [
+        ("--output", "outputs/events.jsonl"),
+        ("--csv-output", "outputs/events.csv"),
+        ("--summary-output", "outputs/summary.json"),
+        ("--overlay-output", "outputs/result.mp4"),
+        ("--api-failed-events-output", "outputs/api_failed_events.jsonl"),
+        ("--zones", "data/zones/sample.json"),
+        ("--infer-device", "auto"),
+        ("--log-level", "INFO"),
+    ],
+)
+def test_cli_default_matches_the_freeze(option, expected, doc):
+    """제출물의 실행 안내가 실제 기본값과 어긋나지 않게 고정한다."""
+    assert cli_defaults().get(option) == expected
+    assert f"`{expected}`" in doc
+
+
+def cli_defaults() -> dict:
+    """`src/main.py`의 add_argument 기본값을 소스에서 읽는다."""
+    import ast
+
+    tree = ast.parse((ROOT / "src" / "main.py").read_text(encoding="utf-8"))
+    defaults = {}
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "add_argument"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+        ):
+            for keyword in node.keywords:
+                if keyword.arg == "default":
+                    try:
+                        defaults[node.args[0].value] = ast.literal_eval(keyword.value)
+                    except ValueError:
+                        pass
+    return defaults
+
+
 # --- Backend 경로 ---
 
 
