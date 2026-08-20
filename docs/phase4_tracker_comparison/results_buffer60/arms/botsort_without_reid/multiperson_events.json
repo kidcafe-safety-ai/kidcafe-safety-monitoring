@@ -1,0 +1,206 @@
+{
+  "selected_execution_profile_sha256": "042372cd0ed6749a69e19421a60b408eecb944bd7ecc4eee3838181d7287bf5f",
+  "cache_manifest_sha256": "4d21a400637a7219b3064cbd3060000e93979d2b7be410d9eb70e851e7996e0a",
+  "recordings_manifest_sha256": "acfd84cf68641bafa268e18d2e09aba7e2b1579426cf41f65b40b23e3c524e42",
+  "fall_cause_annotations_sha256": "318a16602bc194e796d5e89eb0ebf87a769eb31f8eae5c6a2d1aa9bf443d5f13",
+  "config_path": "configs/fall_detection.json",
+  "config_sha256": "50ebecd28772d9ee81a2d79afd75f3ebbb8dfe4f19a7365ed03cf1039bdef8a6",
+  "fall_model_iou_threshold": 0.3,
+  "fall_model_interval_frames": 3,
+  "fall_pose_normal_gate_enabled": true,
+  "videos": [
+    {
+      "video_id": "P4_S01_A01_contact_fall_01_cam01",
+      "frame_count": 298,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 92,
+          "timestamp": "00:00:03.070",
+          "track_id": 1,
+          "confidence": 0.8198342605641014,
+          "event_confidence": 0.5250960265317043,
+          "cause": {
+            "type": "NEARBY_TRACK",
+            "track_id": 2,
+            "score": 0.6151085360402855,
+            "evidence": {
+              "min_distance_norm": 0.21812483553379733,
+              "closing_speed_norm": 0.3756336291031026,
+              "time_to_fall_sec": 0.20020000000000016
+            }
+          }
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_contact_fall_02_cam01",
+      "frame_count": 271,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 81,
+          "timestamp": "00:00:02.703",
+          "track_id": 1,
+          "confidence": 0.885917329788208,
+          "event_confidence": 0.4088693918794166,
+          "cause": {
+            "type": "NEARBY_TRACK",
+            "track_id": 2,
+            "score": 0.591900330499059,
+            "evidence": {
+              "min_distance_norm": 0.18419004481832799,
+              "closing_speed_norm": 0.3065940242103367,
+              "time_to_fall_sec": 0.5004999999999997
+            }
+          }
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_contact_fall_03_cam01",
+      "frame_count": 271,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 98,
+          "timestamp": "00:00:03.270",
+          "track_id": 1,
+          "confidence": 0.8827751987966997,
+          "event_confidence": 0.48715817306501313,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_contact_fall_04_cam01",
+      "frame_count": 278,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 98,
+          "timestamp": "00:00:03.270",
+          "track_id": 1,
+          "confidence": 0.8604009367268661,
+          "event_confidence": 0.4141162647662803,
+          "cause": {
+            "type": "NEARBY_TRACK",
+            "track_id": 2,
+            "score": 0.5246534248413341,
+            "evidence": {
+              "min_distance_norm": 0.17281141864687466,
+              "closing_speed_norm": 0.16451446211391801,
+              "time_to_fall_sec": 0.40039999999999987
+            }
+          }
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_near_pass_01_cam01",
+      "frame_count": 530,
+      "fps": 29.97002997002997,
+      "event_count": 0,
+      "events": []
+    },
+    {
+      "video_id": "P4_S01_A01_near_pass_02_cam01",
+      "frame_count": 626,
+      "fps": 29.97002997002997,
+      "event_count": 0,
+      "events": []
+    },
+    {
+      "video_id": "P4_S01_A01_near_pass_03_cam01",
+      "frame_count": 512,
+      "fps": 29.97002997002997,
+      "event_count": 0,
+      "events": []
+    },
+    {
+      "video_id": "P4_S01_A01_occluded_cross_01_cam01",
+      "frame_count": 682,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 645,
+          "timestamp": "00:00:21.521",
+          "track_id": 20,
+          "confidence": 0.8958399891853333,
+          "event_confidence": 0.5964420393135853,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_contact_fall_01_cam01",
+      "frame_count": 232,
+      "fps": 29.97002997002997,
+      "event_count": 0,
+      "events": []
+    },
+    {
+      "video_id": "P4_S01_A02_contact_fall_02_cam01",
+      "frame_count": 261,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 123,
+          "timestamp": "00:00:04.104",
+          "track_id": 1,
+          "confidence": 0.8192037828898026,
+          "event_confidence": 0.5640338083016211,
+          "cause": {
+            "type": "NEARBY_TRACK",
+            "track_id": 4,
+            "score": 0.5024601698767706,
+            "evidence": {
+              "min_distance_norm": 0.19986828639484158,
+              "closing_speed_norm": 0.13816586401676897,
+              "time_to_fall_sec": 0.36703333333333354
+            }
+          }
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_contact_fall_03_cam01",
+      "frame_count": 265,
+      "fps": 29.97002997002997,
+      "event_count": 0,
+      "events": []
+    },
+    {
+      "video_id": "P4_S01_A02_contact_fall_04_cam01",
+      "frame_count": 325,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 191,
+          "timestamp": "00:00:06.373",
+          "track_id": 6,
+          "confidence": 0.6277674399316311,
+          "event_confidence": 0.6546318427941995,
+          "cause": null
+        }
+      ]
+    }
+  ],
+  "tracker_comparison_arm": {
+    "arm_id": "botsort_without_reid",
+    "arm_config_sha256": "556ff717fc7e03e47c5c300f11c3599de8ccbc65511dc90309e1cd923fbbbadb",
+    "tracker_config_path": "configs/trackers/phase4_botsort_no_reid_buffer60.yaml",
+    "tracker_config_sha256": "34b714eb76dc22c8ace9e8efcee37b65c2bb56e47517151be6e52c9fe7d0c5b7",
+    "tracker_backend": "botsort",
+    "with_reid": false,
+    "reid_model_path": null,
+    "reid_model_sha256": null
+  }
+}

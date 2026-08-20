@@ -1,0 +1,39 @@
+{
+  "schema_version": "phase4_tracker_arm_run_v1",
+  "comparison_config_sha256": "735c452f9cdf0a8bb677223a5535aa9e6435a019102ef99f3c41d9221f735686",
+  "selected_execution_profile_sha256": "042372cd0ed6749a69e19421a60b408eecb944bd7ecc4eee3838181d7287bf5f",
+  "evaluator_git_commit": "7a22844fd1f9aa035fdb6d0c05cd2aa82fab1066",
+  "evaluator_git_dirty": false,
+  "arm": {
+    "arm_id": "bytetrack_baseline",
+    "arm_config_sha256": "3ee08b24e3f2b622de46e594d637e6295eb9d81df13a2e677708be78a457d56e",
+    "tracker_config_path": "configs/trackers/phase4_bytetrack_buffer60.yaml",
+    "tracker_config_sha256": "1065fb3e5961e957c4f3cf232142c468386ae5a52f0a78b4aaf21ae73d224268",
+    "tracker_backend": "bytetrack",
+    "with_reid": false,
+    "reid_model_path": null,
+    "reid_model_sha256": null
+  },
+  "device": "mps",
+  "fall_model_device": "mps",
+  "artifacts": {
+    "cache_dir": "outputs/phase4_tracker_buffer60_comparison/arms/bytetrack_baseline/cache",
+    "official_eval": "outputs/phase4_tracker_buffer60_comparison/arms/bytetrack_baseline/official_eval.json",
+    "multiperson_events": "outputs/phase4_tracker_buffer60_comparison/arms/bytetrack_baseline/multiperson_events.json",
+    "cause_null_events": "outputs/phase4_tracker_buffer60_comparison/arms/bytetrack_baseline/cause_null_events.json",
+    "track_actor_segments": "outputs/phase4_tracker_buffer60_comparison/arms/bytetrack_baseline/track_actor_segments.csv",
+    "timing_report": "outputs/phase4_tracker_buffer60_comparison/arms/bytetrack_baseline/cache/timing_report.json"
+  },
+  "artifact_sha256": {
+    "official_eval": "f06c6f80ff0856a72729f9e2fab1690d56995782fc4f061f1748d3250a129cd0",
+    "multiperson_events": "203f54907be7235cd3accd18ee6f6ecfad26b2107c02aaf8d183a37cb95a83c7",
+    "cause_null_events": "cccd7fceae5572958ea070869c15d0bc0c2251e27d414c6899ae8a3b4616c543",
+    "track_actor_segments": "cfa9f5620f0445d95e8f4ff0d56fef99f1a86e3845d3c305edf2dbdcb3e96e03",
+    "timing_report": "82846b6743a27dff2e1d855d9dfe734abc75047956c65d7bd4a4c0e83b89d6c9"
+  },
+  "timing": {
+    "videos_timed": 46,
+    "skipped_count": 0,
+    "fps_avg": 6.628535291404228
+  }
+}

@@ -1,0 +1,407 @@
+{
+  "selected_execution_profile_sha256": "042372cd0ed6749a69e19421a60b408eecb944bd7ecc4eee3838181d7287bf5f",
+  "cache_manifest_sha256": "eafca4c8b12a4172577b4184998488c305f640d36cacd1200b132b0900892ff0",
+  "recordings_manifest_sha256": "acfd84cf68641bafa268e18d2e09aba7e2b1579426cf41f65b40b23e3c524e42",
+  "fall_cause_annotations_sha256": "318a16602bc194e796d5e89eb0ebf87a769eb31f8eae5c6a2d1aa9bf443d5f13",
+  "config_path": "configs/fall_detection.json",
+  "config_sha256": "50ebecd28772d9ee81a2d79afd75f3ebbb8dfe4f19a7365ed03cf1039bdef8a6",
+  "fall_model_iou_threshold": 0.3,
+  "fall_model_interval_frames": 3,
+  "fall_pose_normal_gate_enabled": true,
+  "videos": [
+    {
+      "video_id": "P4_S01_A01_fall_backward_01_cam01",
+      "frame_count": 293,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 85,
+          "timestamp": "00:00:02.836",
+          "track_id": 2,
+          "confidence": 0.900777255666667,
+          "event_confidence": 0.3987012659579,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_fall_backward_02_cam01",
+      "frame_count": 254,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 61,
+          "timestamp": "00:00:02.035",
+          "track_id": 1,
+          "confidence": 0.9031614889701207,
+          "event_confidence": 0.4935705393610495,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_fall_backward_03_cam01",
+      "frame_count": 222,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 55,
+          "timestamp": "00:00:01.835",
+          "track_id": 1,
+          "confidence": 0.912021738077913,
+          "event_confidence": 0.5567792806455886,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_fall_forward_01_cam01",
+      "frame_count": 429,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 117,
+          "timestamp": "00:00:03.904",
+          "track_id": 1,
+          "confidence": 0.9058047878742218,
+          "event_confidence": 0.335099578191979,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_fall_forward_02_cam01",
+      "frame_count": 266,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 82,
+          "timestamp": "00:00:02.736",
+          "track_id": 1,
+          "confidence": 0.9082448677374766,
+          "event_confidence": 0.3568376748876233,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_fall_forward_03_cam01",
+      "frame_count": 255,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 65,
+          "timestamp": "00:00:02.169",
+          "track_id": 1,
+          "confidence": 0.9031344809622135,
+          "event_confidence": 0.3549102822789213,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_fall_forward_knees_01_cam01",
+      "frame_count": 258,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 75,
+          "timestamp": "00:00:02.502",
+          "track_id": 1,
+          "confidence": 0.9046481814024583,
+          "event_confidence": 0.42124959711792703,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_fall_forward_knees_02_cam01",
+      "frame_count": 275,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 77,
+          "timestamp": "00:00:02.569",
+          "track_id": 2,
+          "confidence": 0.9092190380279834,
+          "event_confidence": 0.6409219038027985,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_fall_forward_knees_03_cam01",
+      "frame_count": 271,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 90,
+          "timestamp": "00:00:03.003",
+          "track_id": 1,
+          "confidence": 0.8992483062403542,
+          "event_confidence": 0.6399248306240355,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_fall_side_01_cam01",
+      "frame_count": 239,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 69,
+          "timestamp": "00:00:02.302",
+          "track_id": 1,
+          "confidence": 0.9001986148456732,
+          "event_confidence": 0.3216215875458721,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_fall_side_02_cam01",
+      "frame_count": 250,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 97,
+          "timestamp": "00:00:03.237",
+          "track_id": 2,
+          "confidence": 0.8924317790402306,
+          "event_confidence": 0.36424995179998,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A01_fall_side_03_cam01",
+      "frame_count": 245,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 73,
+          "timestamp": "00:00:02.436",
+          "track_id": 1,
+          "confidence": 0.8987269185959025,
+          "event_confidence": 0.3763371637828484,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_fall_backward_01_cam01",
+      "frame_count": 270,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 113,
+          "timestamp": "00:00:03.770",
+          "track_id": 1,
+          "confidence": 0.8933329532543818,
+          "event_confidence": 0.4868524861044905,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_fall_backward_02_cam01",
+      "frame_count": 258,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 94,
+          "timestamp": "00:00:03.136",
+          "track_id": 1,
+          "confidence": 0.8963409348538047,
+          "event_confidence": 0.44262014610464484,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_fall_backward_03_cam01",
+      "frame_count": 269,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 96,
+          "timestamp": "00:00:03.203",
+          "track_id": 1,
+          "confidence": 0.8880751655812849,
+          "event_confidence": 0.5001155349501447,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_fall_forward_01_cam01",
+      "frame_count": 238,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 72,
+          "timestamp": "00:00:02.402",
+          "track_id": 1,
+          "confidence": 0.8724845230579377,
+          "event_confidence": 0.33035523979158354,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_fall_forward_02_cam01",
+      "frame_count": 284,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 77,
+          "timestamp": "00:00:02.569",
+          "track_id": 2,
+          "confidence": 0.888801986316465,
+          "event_confidence": 0.3632718317429644,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_fall_forward_03_cam01",
+      "frame_count": 264,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 87,
+          "timestamp": "00:00:02.903",
+          "track_id": 1,
+          "confidence": 0.8914842491454267,
+          "event_confidence": 0.355276747389181,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_fall_forward_knees_01_cam01",
+      "frame_count": 241,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 89,
+          "timestamp": "00:00:02.970",
+          "track_id": 1,
+          "confidence": 0.8916286126427029,
+          "event_confidence": 0.32615310718038,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_fall_forward_knees_02_cam01",
+      "frame_count": 269,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 92,
+          "timestamp": "00:00:03.070",
+          "track_id": 1,
+          "confidence": 0.8833575310806433,
+          "event_confidence": 0.32248215557502313,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_fall_forward_knees_03_cam01",
+      "frame_count": 246,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 75,
+          "timestamp": "00:00:02.502",
+          "track_id": 1,
+          "confidence": 0.8903835973014003,
+          "event_confidence": 0.3744956603737947,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_fall_side_01_cam01",
+      "frame_count": 220,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 71,
+          "timestamp": "00:00:02.369",
+          "track_id": 1,
+          "confidence": 0.8943554698410681,
+          "event_confidence": 0.37917291099833916,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_fall_side_02_cam01",
+      "frame_count": 306,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 92,
+          "timestamp": "00:00:03.070",
+          "track_id": 1,
+          "confidence": 0.9017912593542361,
+          "event_confidence": 0.40157427213476965,
+          "cause": null
+        }
+      ]
+    },
+    {
+      "video_id": "P4_S01_A02_fall_side_03_cam01",
+      "frame_count": 245,
+      "fps": 29.97002997002997,
+      "event_count": 1,
+      "events": [
+        {
+          "frame_number": 69,
+          "timestamp": "00:00:02.302",
+          "track_id": 1,
+          "confidence": 0.8775951674110011,
+          "event_confidence": 0.2877595167411001,
+          "cause": null
+        }
+      ]
+    }
+  ],
+  "tracker_comparison_arm": {
+    "arm_id": "bytetrack_baseline",
+    "arm_config_sha256": "3ee08b24e3f2b622de46e594d637e6295eb9d81df13a2e677708be78a457d56e",
+    "tracker_config_path": "configs/trackers/phase4_bytetrack_buffer60.yaml",
+    "tracker_config_sha256": "1065fb3e5961e957c4f3cf232142c468386ae5a52f0a78b4aaf21ae73d224268",
+    "tracker_backend": "bytetrack",
+    "with_reid": false,
+    "reid_model_path": null,
+    "reid_model_sha256": null
+  }
+}
