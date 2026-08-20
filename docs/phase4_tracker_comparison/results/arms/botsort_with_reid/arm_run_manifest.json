@@ -1,0 +1,39 @@
+{
+  "schema_version": "phase4_tracker_arm_run_v1",
+  "comparison_config_sha256": "9bc51838f329989957fe25269a13173cdd01b036a8b84cd0109c147fcaf3b89e",
+  "selected_execution_profile_sha256": "042372cd0ed6749a69e19421a60b408eecb944bd7ecc4eee3838181d7287bf5f",
+  "evaluator_git_commit": "5157ed1f41452cde9298b4569c23dd5f8bc10efe",
+  "evaluator_git_dirty": false,
+  "arm": {
+    "arm_id": "botsort_with_reid",
+    "arm_config_sha256": "ebe808890020a28d6f4918133d0652ee15904bd5d055130b40a6cf4d7b7f655a",
+    "tracker_config_path": "configs/trackers/phase4_botsort_reid.yaml",
+    "tracker_config_sha256": "134bb7710c1f35d25264fafcaeee5e887f8f72fab22b767c54078c2bdb25262e",
+    "tracker_backend": "botsort",
+    "with_reid": true,
+    "reid_model_path": "outputs/phase4_tracker_comparison/models/yolo26n-cls.pt",
+    "reid_model_sha256": "0dd6f8dbc448870ac98a3cbb7156f923f7ce21fed3755d4019169ffffd279e81"
+  },
+  "device": "mps",
+  "fall_model_device": "mps",
+  "artifacts": {
+    "cache_dir": "outputs/phase4_tracker_comparison/arms/botsort_with_reid/cache",
+    "official_eval": "outputs/phase4_tracker_comparison/arms/botsort_with_reid/official_eval.json",
+    "multiperson_events": "outputs/phase4_tracker_comparison/arms/botsort_with_reid/multiperson_events.json",
+    "cause_null_events": "outputs/phase4_tracker_comparison/arms/botsort_with_reid/cause_null_events.json",
+    "track_actor_segments": "outputs/phase4_tracker_comparison/arms/botsort_with_reid/track_actor_segments.csv",
+    "timing_report": "outputs/phase4_tracker_comparison/arms/botsort_with_reid/cache/timing_report.json"
+  },
+  "artifact_sha256": {
+    "official_eval": "3ffbe9342ba643c26dc535ccf33a078bef3b85856c401faa355950095213635e",
+    "multiperson_events": "cb0cdc85f66fe42f9e2e7fbf65d634913d6eef919fe7eccfd12a88f8ea35e481",
+    "cause_null_events": "4b0b83fc7d21a15d898a7a01dc1c0d12f3e67b0adfaea86027547513b5f2d814",
+    "track_actor_segments": "cae1eb67ed3857eba8c96305248888ad49ff09d6a07c885fb51e7f6b5eee3d21",
+    "timing_report": "7a1bb9e8abc09321a5ae67ca7893609d3539ff1505c0d661fbb932d31f1613e8"
+  },
+  "timing": {
+    "videos_timed": 46,
+    "skipped_count": 0,
+    "fps_avg": 3.8871819707062922
+  }
+}
