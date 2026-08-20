@@ -27,6 +27,52 @@ def doc() -> str:
     return FREEZE_DOC.read_text(encoding="utf-8")
 
 
+# 문서 표에서 값을 직접 읽는다.
+#
+# 처음에는 상수 **이름**이 문서에 있는지만 봤다. 그러면 문서의 값을 3.0에서
+# 9.0으로 바꿔도 테스트가 통과한다. "문서와 코드 중 한쪽만 바꾸면 CI가
+# 실패한다"는 이 파일의 목적이 성립하지 않는 상태였다.
+#
+# 문서 표는 전부 `| 이름 | `값` | ...` 형태이므로 두 번째 칸을 파싱해 코드값과
+# 직접 대조한다. 이름은 상수처럼 backtick이 붙은 것도, `dwell threshold 상한`
+# 처럼 산문인 것도 있어 양쪽을 받는다.
+_DOC_ROW = r"^\|\s*`?{name}`?\s*\|\s*`([^`]+)`"
+
+
+def documented_value(doc: str, name: str) -> str:
+    """동결 문서 표에서 `name` 행의 값 칸을 읽는다.
+
+    행이 없으면 실패한다. 상수를 코드에서 지웠는데 문서에는 남아 있거나 그
+    반대인 경우를 조용히 넘기지 않기 위해서다.
+    """
+    pattern = re.compile(_DOC_ROW.format(name=re.escape(name)), re.MULTILINE)
+    matches = pattern.findall(doc)
+    if not matches:
+        raise AssertionError(f"동결 문서 표에 `{name}` 행이 없습니다")
+    if len(set(matches)) > 1:
+        raise AssertionError(f"동결 문서에 `{name}` 값이 여러 개입니다: {sorted(set(matches))}")
+    return matches[0]
+
+
+def assert_documented(doc: str, name: str, value) -> None:
+    """코드값과 문서에 적힌 값이 같은지 본다.
+
+    문서는 `25.0`처럼 문자열로 적히므로 같은 방식으로 문자열을 만들어 비교한다.
+    float은 `25.0`과 `25`를 같게 보되, 그 외에는 표기까지 정확히 맞춘다.
+    """
+    documented = documented_value(doc, name)
+    if isinstance(value, bool) or not isinstance(value, float):
+        assert str(value) == documented, (
+            f"{name}: 코드 {value!r}와 문서 {documented!r}가 다릅니다"
+        )
+        return
+    try:
+        parsed = float(documented)
+    except ValueError:
+        raise AssertionError(f"{name}: 문서 값 {documented!r}을 수로 읽을 수 없습니다")
+    assert parsed == value, f"{name}: 코드 {value!r}와 문서 {documented!r}가 다릅니다"
+
+
 def test_freeze_document_exists(doc):
     assert "동결 기준 커밋" in doc
     assert "변경 이력" in doc
@@ -49,7 +95,7 @@ def test_rtsp_constants_match_the_freeze(name, expected, doc):
     from src.input import rtsp_source
 
     assert getattr(rtsp_source, name) == expected
-    assert f"`{name}`" in doc, f"{name}이 동결 문서에 없습니다"
+    assert_documented(doc, name, expected)
 
 
 def test_rtsp_uses_tcp_transport(doc):
@@ -86,7 +132,7 @@ def test_event_debounce_constants_match_the_freeze(name, expected, doc):
     from src.events import event_manager
 
     assert getattr(event_manager, name) == expected
-    assert f"`{name}`" in doc
+    assert_documented(doc, name, expected)
 
 
 # --- Vision AI -> API 통합 계층 ---
@@ -107,7 +153,7 @@ def test_dispatch_constants_match_the_freeze(module, name, expected, doc):
     import importlib
 
     assert getattr(importlib.import_module(module), name) == expected
-    assert f"`{name}`" in doc
+    assert_documented(doc, name, expected)
 
 
 def test_failed_event_path_matches_the_freeze(doc):
@@ -116,7 +162,7 @@ def test_failed_event_path_matches_the_freeze(doc):
 
     path = async_event_dispatcher._DEFAULT_FAILED_EVENTS_PATH
     assert path == "outputs/api_failed_events.jsonl"
-    assert path in doc
+    assert_documented(doc, "_DEFAULT_FAILED_EVENTS_PATH", path)
 
 
 # --- Live Frame ---
@@ -137,12 +183,27 @@ def test_live_frame_client_constants_match_the_freeze(name, expected, doc):
     assert getattr(live_frame_client, name) == expected
 
 
+def test_live_frame_documented_values_match_the_client(doc):
+    """해상도와 품질은 상수 이름이 아니라 항목 이름으로 적혀 있다."""
+    from src.integrations import live_frame_client
+
+    assert_documented(
+        doc, "_DEFAULT_MIN_INTERVAL_SEC", live_frame_client._DEFAULT_MIN_INTERVAL_SEC
+    )
+    assert_documented(doc, "--live-frame-quality", live_frame_client._DEFAULT_QUALITY)
+
+    resolution = re.search(r"^\|\s*전송 해상도\s*\|\s*`(\d+)`\s*×\s*`(\d+)`", doc, re.MULTILINE)
+    assert resolution, "동결 문서에 전송 해상도 행이 없습니다"
+    assert int(resolution.group(1)) == live_frame_client._TARGET_WIDTH
+    assert int(resolution.group(2)) == live_frame_client._TARGET_HEIGHT
+
+
 def test_live_frame_stale_timeout_matches_the_freeze(doc):
     """stale이면 204다. 빈 이미지를 만들어 내려주지 않는다."""
     from src.api import live_frame_store
 
     assert live_frame_store.DEFAULT_STALE_AFTER_SEC == 3.0
-    assert "`DEFAULT_STALE_AFTER_SEC`" in doc
+    assert_documented(doc, "DEFAULT_STALE_AFTER_SEC", 3.0)
 
 
 def test_live_frame_is_opt_in(doc):
@@ -168,7 +229,8 @@ def test_rtsp_host_default_is_documented_as_site_specific(doc):
 
     assert rtsp_source.DEFAULT_RTSP_HOST == "192.168.0.4"
     assert rtsp_source.DEFAULT_RTSP_PORT == 554
-    assert "192.168.0.4" in doc
+    assert_documented(doc, "DEFAULT_RTSP_HOST", rtsp_source.DEFAULT_RTSP_HOST)
+    assert_documented(doc, "DEFAULT_RTSP_PORT", rtsp_source.DEFAULT_RTSP_PORT)
     assert "덮어써야" in doc
 
 
@@ -182,7 +244,7 @@ def test_zone_store_constants_match_the_freeze(doc):
     assert zone_store.MAX_DWELL_THRESHOLD_SEC == 3600
     assert zone_store.NORMALIZED_RANGE == (0.0, 1.0)
     assert zone_store.DEFAULT_RUNTIME_FILE_MODE == 0o644
-    assert "`3600`초" in doc
+    assert documented_value(doc, "dwell threshold 상한") == "3600"
     assert "`0o644`" in doc
 
 
@@ -412,3 +474,225 @@ def test_router_order_matches_the_freeze(doc):
     main_source = (ROOT / "src" / "api" / "main.py").read_text(encoding="utf-8")
     actual = re.findall(r"app\.include_router\((\w+)\.router\)", main_source)
     assert ", ".join(actual) in doc, f"실제 순서는 {actual}입니다"
+
+
+# --- 이 파일 자체가 동결을 지키는지 ---
+
+
+def test_a_changed_document_value_is_caught(doc):
+    """문서 값만 바꾸면 실패해야 한다.
+
+    처음 판에서는 상수 이름이 문서에 있는지만 봤다. 그래서 `3.0`을 `9.0`으로
+    바꾼 문서도 그대로 통과했고, "한쪽만 고치면 CI가 걸린다"는 이 파일의 전제가
+    성립하지 않았다. 그 상태로 되돌아가면 이 테스트가 먼저 걸린다.
+    """
+    from src.input import rtsp_source
+
+    tampered = doc.replace(
+        "| `_RTSP_STALE_TIMEOUT_SEC` | `3.0` |",
+        "| `_RTSP_STALE_TIMEOUT_SEC` | `9.0` |",
+    )
+    assert tampered != doc, "문서에서 대조 대상 행을 찾지 못했습니다"
+
+    with pytest.raises(AssertionError, match="다릅니다"):
+        assert_documented(
+            tampered, "_RTSP_STALE_TIMEOUT_SEC", rtsp_source._RTSP_STALE_TIMEOUT_SEC
+        )
+
+
+def test_a_missing_document_row_is_caught(doc):
+    """문서에서 행을 지워도 조용히 넘어가면 안 된다."""
+    with pytest.raises(AssertionError, match="없습니다"):
+        documented_value(doc, "_THIS_CONSTANT_DOES_NOT_EXIST")
+
+
+# --- DB schema 동결 (현수 2번) ---
+
+
+def _documented_columns(doc: str, table: str) -> list:
+    """문서의 `**\\`table\\`** ... — a, b, c` 줄에서 컬럼 이름을 뽑는다."""
+    match = re.search(
+        rf"^\*\*`{table}`\*\*[^—]*—(.+?)(?=\n\n)", doc, re.MULTILINE | re.DOTALL
+    )
+    assert match, f"동결 문서에 {table} 컬럼 목록이 없습니다"
+    return re.findall(r"`([A-Za-z_][A-Za-z0-9_]*)`", match.group(1))
+
+
+def _actual_columns(table: str) -> list:
+    """실제로 만들어지는 schema를 그대로 읽는다.
+
+    문서가 CREATE TABLE만 보고 쓰이면 migration으로 붙는 컬럼을 빠뜨린다.
+    실제로 `event_confidence`·`cause_json`이 그렇게 빠져 있었다. 그래서 임시
+    DB를 만들어 `PRAGMA table_info`로 최종 schema를 읽는다.
+    """
+    import importlib
+    import os
+    import sqlite3
+    import tempfile
+
+    from src.api import database
+
+    with tempfile.TemporaryDirectory() as directory:
+        db_path = Path(directory) / "freeze_check.db"
+        previous = os.environ.get("KIDCAFE_DB_PATH")
+        os.environ["KIDCAFE_DB_PATH"] = str(db_path)
+        try:
+            importlib.reload(database)
+            database.init_db()
+            with sqlite3.connect(db_path) as connection:
+                rows = connection.execute(f"PRAGMA table_info({table})").fetchall()
+        finally:
+            if previous is None:
+                os.environ.pop("KIDCAFE_DB_PATH", None)
+            else:
+                os.environ["KIDCAFE_DB_PATH"] = previous
+            importlib.reload(database)
+    return [row[1] for row in rows]
+
+
+@pytest.mark.parametrize("table", ["events", "current_status"])
+def test_documented_columns_match_the_real_schema(table, doc):
+    """문서의 컬럼 목록이 실제 최종 schema와 같아야 한다.
+
+    "DB 컬럼을 동결했다"고 적어두고 목록이 실제와 다르면 동결이 아니다.
+    """
+    assert _documented_columns(doc, table) == _actual_columns(table)
+
+
+def test_phase_3_columns_are_in_the_final_schema(doc):
+    """migration으로 붙는 컬럼도 동결 대상이다."""
+    from src.api import database
+
+    columns = _actual_columns("events")
+    for column in database._EVENTS_PHASE_3_COLUMNS:
+        assert column in columns, f"{column}이 실제 schema에 없습니다"
+        assert f"`{column}`" in doc, f"{column}이 동결 문서에 없습니다"
+
+
+# --- 12절 실행 명령이 실제 코드 경로와 맞는지 ---
+
+
+@pytest.fixture(scope="module")
+def run_section(doc) -> str:
+    match = re.search(r"^## 12\. 실행 명령\n(.*?)^---$", doc, re.MULTILINE | re.DOTALL)
+    assert match, "동결 문서에 12절이 없습니다"
+    return match.group(1)
+
+
+@pytest.fixture(scope="module")
+def run_commands(run_section) -> list:
+    """12절의 bash 블록만 뽑는다.
+
+    산문에서 옵션 이름을 언급하는 것과 실제 명령에 그 옵션이 있는 것은 다르다.
+    본문 전체를 문자열로 훑으면 "`--fall-detection-enabled`가 기본 비활성이라"
+    같은 설명 문장에 걸려 명령이 비어 있어도 통과한다.
+    """
+    blocks = re.findall(r"```bash\n(.*?)```", run_section, re.DOTALL)
+    assert blocks, "12절에 실행 명령 블록이 없습니다"
+    return blocks
+
+
+def vision_ai_commands(blocks: list) -> list:
+    """`python -m src.main ...` 한 덩어리씩 끊는다."""
+    commands = []
+    for block in blocks:
+        for chunk in re.split(r"\n(?=python )", block):
+            if "src.main" in chunk or "src/main.py" in chunk:
+                commands.append(chunk)
+    assert commands, "12절에 Vision AI 실행 명령이 없습니다"
+    return commands
+
+
+def test_rtsp_command_does_not_bypass_credential_assembly(run_commands):
+    """완성된 URL을 --source로 넘기면 환경변수 인증정보가 쓰이지 않는다.
+
+    `_build_source()`는 --source가 rtsp://로 시작하면 RTSPSource(url=...)를
+    직접 만들고 RTSPSource.from_env()를 타지 않는다. 그러면 바로 위에서 export한
+    KIDCAFE_RTSP_USERNAME·PASSWORD가 URL 조립에 쓰이지 않아, 문서 명령대로
+    실행해도 인증이 붙지 않는다.
+    """
+    main_source = (ROOT / "src" / "main.py").read_text(encoding="utf-8")
+    assert 'startswith("rtsp://")' in main_source, "우회 분기가 사라졌으면 이 테스트를 고친다"
+
+    for command in vision_ai_commands(run_commands):
+        if "--source-type rtsp" not in command:
+            continue
+        assert "rtsp://" not in command, f"URL을 직접 넘기는 명령이 있습니다:\n{command}"
+        assert "--rtsp-host" in command, f"--rtsp-host가 빠진 명령이 있습니다:\n{command}"
+
+
+def test_every_rtsp_command_uses_the_recommended_sub_stream(run_commands, run_section):
+    """실시간 AI 권장은 sub stream인데 CLI 기본값은 main이다.
+
+    명령이 여러 개이므로 하나만 확인하면 안 된다. RTSP 명령 전부를 본다.
+    """
+    from src.input import rtsp_source
+
+    assert rtsp_source.DEFAULT_RTSP_SUB_PATH == "/media/video2"
+    assert rtsp_source.DEFAULT_RTSP_MAIN_PATH == "/media/video1"
+
+    rtsp_commands = [
+        c for c in vision_ai_commands(run_commands) if "--source-type rtsp" in c
+    ]
+    assert rtsp_commands, "12절에 RTSP 실행 명령이 없습니다"
+    for command in rtsp_commands:
+        assert "--rtsp-stream sub" in command, f"sub stream이 빠진 명령이 있습니다:\n{command}"
+    assert "/media/video2" in run_section
+
+
+def test_run_commands_use_one_invocation_style(run_commands):
+    """제출용 기준 명령은 한쪽으로 통일한다."""
+    for command in vision_ai_commands(run_commands):
+        assert command.startswith("python -m src.main"), (
+            f"실행 방식이 통일되지 않았습니다:\n{command}"
+        )
+
+
+def test_docker_start_includes_zone_runtime_init(run_section):
+    """runtime Zone 파일은 Git에 없고 API가 자동 생성하지 않는다.
+
+    초기화를 건너뛰면 새 clone에서 GET /zones가 500을 준다.
+    """
+    assert (ROOT / "scripts" / "init_zone_runtime.py").is_file()
+
+    init_at = run_section.find("python scripts/init_zone_runtime.py")
+    compose_at = run_section.find("docker compose up --build")
+    assert init_at != -1, "12절에 Zone runtime 초기화 단계가 없습니다"
+    assert compose_at != -1
+    assert init_at < compose_at, "초기화가 docker compose 뒤에 있습니다"
+
+
+def test_zone_runtime_file_is_not_tracked_by_git():
+    """문서가 초기화 단계를 요구하는 근거다. 커밋되면 그 전제가 깨진다."""
+    import subprocess
+
+    tracked = subprocess.run(
+        ["git", "ls-files", "outputs/zones_runtime.json"],
+        cwd=ROOT, capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert tracked == "", "zones_runtime.json이 커밋되어 있습니다"
+
+
+def test_api_does_not_create_a_missing_zone_runtime_file():
+    """GET /zones는 누락된 파일을 만들어주지 않고 실패한다."""
+    import inspect
+
+    from src.api import zone_store
+
+    source = inspect.getsource(zone_store._read_runtime)
+    assert "if not path.is_file():" in source
+    assert "ZoneConfigUnavailableError" in source
+    # 자동 생성 경로(ensure_runtime_file)를 읽기 경로가 부르지 않는다.
+    assert "ensure_runtime_file" not in source
+
+
+def test_final_e2e_command_enables_fall_detection(run_commands, run_section):
+    """낙상은 기본 비활성이라 명시하지 않으면 FALL_SUSPECT를 검증하지 못한다."""
+    main_source = (ROOT / "src" / "main.py").read_text(encoding="utf-8")
+    assert "fall_detection_enabled=False" in main_source
+
+    enabled = [
+        c for c in vision_ai_commands(run_commands) if "--fall-detection-enabled" in c
+    ]
+    assert enabled, "12절 실행 명령 중 낙상을 켜는 것이 없습니다"
+    assert "최종 E2E" in run_section

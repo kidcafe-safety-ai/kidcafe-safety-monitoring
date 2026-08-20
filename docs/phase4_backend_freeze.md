@@ -72,19 +72,25 @@ http://127.0.0.1:5173
 
 테이블 두 개를 유지한다.
 
-**`events`** — `id`, `event_id`(UNIQUE), `event_type`, `track_id`, `zone_id`,
-`zone_name`, `frame_number`, `video_time_sec`, `timestamp`, `bbox_json`,
-`foot_point_json`, `confidence`, `video_source`, `created_at`
+**`events`** (16개, `PRAGMA table_info(events)` 순서) — `id`,
+`event_id`(UNIQUE), `event_type`, `track_id`, `zone_id`, `zone_name`,
+`frame_number`, `video_time_sec`, `timestamp`, `bbox_json`, `foot_point_json`,
+`confidence`, `video_source`, `created_at`, `event_confidence`, `cause_json`
 
-**`current_status`** — `source`(PK), `frame_number`, `active_track_count`,
+**`current_status`** (5개) — `source`(PK), `frame_number`, `active_track_count`,
 `zone_occupancy_json`, `updated_at`
 
 `event_id`가 UNIQUE라 같은 Event를 다시 넣으면 `409`가 나간다. 재전송이
 중복 저장으로 이어지지 않게 하는 계약이다.
 
-컬럼 추가는 `CREATE TABLE IF NOT EXISTS`가 처리하지 못하므로
-`PRAGMA table_info`로 확인한 뒤 `ALTER TABLE`로 붙인다
-(`src/api/database.py`). **동결 이후 컬럼 추가·삭제는 하지 않는다.**
+뒤의 두 컬럼 `event_confidence`(REAL)와 `cause_json`(TEXT)은 Phase 3에서
+추가됐다. `CREATE TABLE IF NOT EXISTS`는 이미 있는 테이블에 컬럼을 붙이지
+못하므로, `src/api/database.py`의 `_EVENTS_PHASE_3_COLUMNS`를 `PRAGMA
+table_info`로 확인한 뒤 없는 것만 `ALTER TABLE`로 추가한다. 그래서 새로 만든
+DB든 Phase 3 이전 DB든 최종 schema는 위 16개로 같다. 둘 다 nullable이고 기존
+행은 NULL로 남는다.
+
+**동결 이후 컬럼 추가·삭제는 하지 않는다.**
 
 `timestamp`는 영상 상대 시각이고 집계용 실제 시각은 `created_at`이다
 (ADR-005). 두 값을 섞어 쓰지 않는다.
@@ -314,20 +320,34 @@ Zone 측정에서 이 값들이 만든 확정 지연을 실측했다. ENTER는 �
 
 ## 12. 실행 명령
 
+Vision AI는 전부 `python -m src.main`으로 실행한다. `docs/rtsp_camera.md`와
+같은 형태로 맞춘 것이다. `python src/main.py`도 동작하지만 제출용 기준 명령은
+한쪽으로 통일한다.
+
+아래 명령은 **Backend·Zone·RTSP 경로를 확인하는 범위**다. 낙상까지 포함한
+A/B/C 최종 E2E 명령은 이 절 마지막에 따로 있다.
+
 ### Backend + Frontend (Docker)
 
 ```bash
-cp .env.example .env      # 최초 1회, 비밀번호는 비워둔다
+cp .env.example .env               # 최초 1회, 비밀번호는 비워둔다
+python scripts/init_zone_runtime.py   # 최초 1회, Zone runtime 파일 생성
 docker compose up --build
 ```
 
 - API: `http://localhost:8000`
 - Dashboard: `http://localhost:3000`
 
+**`init_zone_runtime.py`를 건너뛰면 안 된다.** `outputs/zones_runtime.json`은
+Git에 없고 API는 계약상 누락된 runtime 파일을 자동 생성하지 않는다(4절). 새로
+clone한 환경에서 바로 `docker compose up`을 하면 `GET /zones`가 `500`을 주고
+Vision AI의 `--zones outputs/zones_runtime.json`도 실패한다. 이미 파일이 있으면
+덮어쓰지 않으므로 다시 실행해도 안전하다.
+
 ### Vision AI — 파일 영상
 
 ```bash
-python src/main.py \
+python -m src.main \
   --source-type file \
   --source data/videos/<파일>.mp4 \
   --zones outputs/zones_runtime.json \
@@ -342,21 +362,55 @@ python src/main.py \
 export KIDCAFE_RTSP_USERNAME=<계정>
 export KIDCAFE_RTSP_PASSWORD=<비밀번호>
 
-python src/main.py \
+python -m src.main \
   --source-type rtsp \
-  --source "rtsp://<호스트>:554/<경로>" \
+  --rtsp-host <카메라 IP> \
+  --rtsp-port 554 \
+  --rtsp-stream sub \
   --rtsp-alias camera_01 \
   --zones outputs/zones_runtime.json \
   --api-url http://localhost:8000 \
   --live-frame-enabled
 ```
 
-`--source`를 주지 않으면 `--rtsp-host`·`--rtsp-port`·`--rtsp-stream`으로 URL을
-조립한다. 이때 `--rtsp-host` 기본값이 `192.168.0.4`이므로 다른 망에서는 반드시
-지정한다.
+**완성된 URL을 `--source`로 넘기지 않는다.** `--source` 값이 `rtsp://`로
+시작하면 `_build_source()`가 `RTSPSource(url=...)`를 직접 만들고
+`RTSPSource.from_env()`를 타지 않는다. 그러면 위에서 export한
+`KIDCAFE_RTSP_USERNAME`·`KIDCAFE_RTSP_PASSWORD`가 URL 조립에 쓰이지 않는다.
+URL 직접 전달은 하위 호환으로 남겨둔 경로일 뿐이고, 환경변수로 인증정보를
+넘기는 현재 권장 경로는 `--rtsp-host`·`--rtsp-port`·`--rtsp-stream` 조합이다.
+
+`--rtsp-stream sub`을 명시한다. 실시간 AI 분석은 sub stream(H.264 / 720×576 /
+15 FPS)을 쓰도록 정리돼 있는데(`docs/rtsp_camera.md`) CLI 기본값은 `main`이다.
+`sub`은 `/media/video2`, `main`은 `/media/video1`로 조립된다.
+
+`--rtsp-host`를 생략하면 기본값 `192.168.0.4`가 쓰인다. 특정 망의 사설 IP이므로
+다른 환경에서는 반드시 지정한다.
 
 연결만 먼저 확인하려면 `scripts/rtsp_camera_test.py`를 쓴다. 자세한 절차는
 `docs/rtsp_camera.md`에 있다.
+
+### 낙상 포함 최종 E2E
+
+위 명령들은 낙상을 켜지 않는다. `--fall-detection-enabled`가 기본 비활성이라
+그대로 실행하면 `FALL_SUSPECT`와 selected E1 profile 경로가 검증되지 않는다.
+A/B/C 최종 E2E는 아래로 실행한다.
+
+```bash
+python -m src.main \
+  --source-type rtsp \
+  --rtsp-host <카메라 IP> \
+  --rtsp-port 554 \
+  --rtsp-stream sub \
+  --rtsp-alias camera_01 \
+  --zones outputs/zones_runtime.json \
+  --api-url http://localhost:8000 \
+  --live-frame-enabled \
+  --fall-detection-enabled
+```
+
+`--source-type file`로 바꾸고 `--source data/videos/<파일>.mp4`를 주면 파일
+영상으로 같은 검증을 한다. 낙상 모델·profile 관련 CLI는 9절에 있다.
 
 ---
 
@@ -403,3 +457,12 @@ API 장애 시 Mock 데이터로 자동 전환하지 않는다(계획서 4절). 
 
 - 2026-08-20: 최초 동결 (`a3b693c` 기준). 같은 날 Backend 최종 회귀로
   계약 항목별 통과를 확인했다 (`docs/realtime_test.md`).
+- 2026-08-20: 리뷰 반영. 동결값을 바꾸지 않고 문서와 테스트만 고쳤다.
+  - 3절 `events` 컬럼 목록에 Phase 3 migration 컬럼 두 개를 추가했다. 실제
+    최종 schema는 16개인데 14개만 적혀 있었다.
+  - 12절 RTSP 명령을 `--rtsp-host`·`--rtsp-stream sub` 방식으로 바꿨다. 완성된
+    URL을 `--source`로 넘기면 환경변수 인증정보가 쓰이지 않는다.
+  - 12절에 Zone runtime 초기화 단계와 낙상 포함 E2E 명령을 넣고, 실행 방식을
+    `python -m src.main`으로 통일했다.
+  - 동결 테스트가 문서의 **값**을 읽어 대조하도록 고쳤다. 그전에는 상수 이름이
+    문서에 있는지만 봐서, 문서 값만 바꿔도 통과했다.

@@ -1301,9 +1301,9 @@ Phase 3 종료 전 최종 확인으로, 종료 문서 정리 직후 병합 전 �
 | RTSP 입력 | `test_input_sources.py` | 35 passed, 2 skipped |
 | Zone 판정·polygon 검증 | `test_geofencing.py` 외 2개 | 71 passed |
 | Phase 4 촬영 계약 | `test_phase4_recording_contract.py` 외 1개 | 51 passed |
-| Backend 설정 동결 | `test_phase4_backend_freeze.py` | 53 passed |
+| Backend 설정 동결 | `test_phase4_backend_freeze.py` | 66 passed |
 
-**Backend 범위 합계: 448 passed, 2 skipped.**
+**Backend 범위 합계: 461 passed, 2 skipped.**
 
 ### 실행 명령어
 
@@ -1327,7 +1327,7 @@ flake8 src tests
 |---|---|
 | `flake8 src tests` | 위반 없음 |
 | `git diff --check` | 공백 오류 없음 |
-| `pytest -q` (개발 컨테이너) | 1015 passed, 2 skipped, 25 errors |
+| `pytest -q` (개발 컨테이너) | 1028 passed, 2 skipped, 25 collection errors (torch 미설치) |
 | `pytest -q` (GitHub Actions) | **통과** |
 
 **개발 컨테이너의 25 errors는 코드 결함이 아니라 환경 제약이다.** 이 컨테이너에
@@ -1352,8 +1352,13 @@ skip 2건은 `tests/test_input_sources.py`의 테스트 영상 의존 항목이�
 - API가 죽어도 추론이 계속되고 실패 Event가 `outputs/api_failed_events.jsonl`에
   보존된다.
 - Live Frame이 stale이면 빈 이미지가 아니라 `204`를 준다.
-- 설정 동결값 53개가 코드와 일치한다. 각 값을 변조해 테스트가 실제로 실패하는
-  것도 확인했다.
+- 설정 동결값이 코드와 일치한다. **코드** 상수를 변조하면 테스트가 실패하는
+  것을 확인했다.
+- 처음에는 **문서** 값만 바꾸면 통과했다. 테스트가 상수 이름이 문서에 있는지만
+  보고 값은 읽지 않았기 때문이다(PR #62 리뷰에서 지적). 문서 표를 파싱해 값을
+  직접 대조하도록 고쳤고, 문서 값만 바꾼 경우에도 실패하는 것을 다시 확인했다.
+- 12절 실행 명령이 실제 코드 경로와 맞는지도 테스트로 고정했다. RTSP 인증정보
+  조립, sub stream, Zone runtime 초기화 순서, 낙상 opt-in 네 가지다.
 
 ### 판정
 
