@@ -231,3 +231,74 @@ for ARM in bytetrack_baseline botsort_without_reid botsort_with_reid; do
     --preflight-only
 done
 ```
+
+## 최종 결과
+
+두 비교 모두 diagnostic 46편을 동일한 E1 detector·낙상 설정으로 다시 추론하고,
+다중 인원 12편의 Track→Actor 구간과 ID switch를 사람 검수한 결과다. Cause
+top-1은 Event 검출 여부와 무관하게 Cause 후보 8편을 고정 분모로 사용한다.
+
+### `track_buffer=30`
+
+| arm | Cause top-1 | Cause-null | ID switch | victim mismatch | Recall | timely Recall |
+|---|---:|---:|---:|---:|---:|---:|
+| ByteTrack | 3/8 | 24/24 | 15 | 1 | 93.75% | 90.63% |
+| BoT-SORT, ReID OFF | 4/8 | 24/24 | 14 | 0 | 93.75% | 90.63% |
+| BoT-SORT, ReID ON | 3/8 | 24/24 | 14 | 0 | 93.75% | 90.63% |
+
+### `track_buffer=60`
+
+| arm | Cause top-1 | Cause-null | ID switch | victim mismatch | Recall | timely Recall |
+|---|---:|---:|---:|---:|---:|---:|
+| ByteTrack | 3/8 | 24/24 | 14 | 1 | 93.75% | 90.63% |
+| BoT-SORT, ReID OFF | 4/8 | 24/24 | 13 | 0 | 93.75% | 90.63% |
+| BoT-SORT, ReID ON | 3/8 | 24/24 | 13 | 0 | 93.75% | 90.63% |
+
+`track_buffer=60`은 세 arm에서 ID switch를 각각 1건 줄였지만 Cause top-1은
+개선하지 못했다. BoT-SORT ReID OFF는 victim mismatch를 1건 줄이고 Cause
+top-1이 4/8로 가장 높았으나, 사전 채택 기준 7/8에는 미달했다. ReID ON은 ReID
+OFF보다 ID switch를 더 줄이지 못했고 Cause top-1도 3/8로 낮아졌다.
+
+따라서 최종 결정은 다음과 같다.
+
+- Production association tracker는 기존 ByteTrack을 유지한다.
+- `track_buffer=60`은 후속 진단값이며 Production 기본값으로 채택하지 않는다.
+- 이번에 구현한 BoT-SORT appearance ReID 경로는 보존하되 기본 OFF로 둔다.
+- `yolo26n-cls.pt`를 사용한 이번 ReID arm은 미채택한다. 이 결과를 사람 전용
+  ReID 모델의 일반적 효용에 대한 기각으로 확대하지 않는다.
+- Phase 4에서는 OSNet 등 새 ReID encoder 통합이나 추가 tracker 튜닝을 진행하지
+  않는다.
+
+## FPS 해석
+
+파일 재생 cohort는 29.97 FPS이므로 `track_buffer=30`과 `60`은 각각 약 1초와
+2초의 lost-track 보존에 해당한다. 현재 고정한 Ultralytics 구현은 buffer를
+실제 시간으로 자동 환산하지 않고 tracker update frame 수로 직접 사용한다.
+
+`summary.json`의 FPS는 같은 장비에서 측정한 관측값으로 보존하지만, 실행 중 다른
+시스템 부하를 완전히 통제한 전용 benchmark는 아니다. 따라서 이 실험의 채택
+판정은 Cause·ID switch 기준 미달만으로도 확정되며, 절대 FPS는 보조 진단으로만
+해석한다. 향후 RTSP 입력에 buffer를 적용할 때는 카메라 nominal FPS가 아니라
+실제 tracker update FPS와 목표 보존 시간을 기준으로 별도 검증해야 한다.
+
+## 결과 artifact
+
+Git에는 원본 영상, 모델, frame cache와 실행 로그를 포함하지 않는다. 재검증에
+필요한 비식별 결과만 다음 경로에 보존한다.
+
+```text
+docs/phase4_tracker_comparison/
+├── results/           # track_buffer=30
+└── results_buffer60/  # track_buffer=60
+```
+
+각 패키지는 arm별 실행 manifest, timing report, 공식 낙상 평가, Cause Event,
+Track→Actor 검수, ID switch 검수, attribution 검수와 최종 summary를 포함한다.
+`SHA256SUMS`로 패키지 무결성을 확인할 수 있다. 저장본의 `cache_dir`만 개인 로컬
+절대 경로가 남지 않도록 프로젝트 상대 경로로 정규화했으며, 연결된 provenance
+SHA-256도 저장본 기준으로 다시 계산했다. 평가 수치와 검수 내용은 변경하지 않았다.
+
+```bash
+shasum -a 256 -c docs/phase4_tracker_comparison/results/SHA256SUMS
+shasum -a 256 -c docs/phase4_tracker_comparison/results_buffer60/SHA256SUMS
+```
