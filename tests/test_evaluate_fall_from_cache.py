@@ -121,6 +121,20 @@ def _write_cache_cli_fixture(tmp_path: Path, official: bool) -> dict:
     )
     config = tmp_path / "fall.json"
     config.write_text("{}", encoding="utf-8")
+    selected_profile = tmp_path / "selected.json"
+    selected_profile.write_text(
+        json.dumps(
+            {
+                "schema_version": "selected_v1",
+                "model": {},
+                "inference": {},
+                "recorded_dataset": {},
+                "evaluation_protocol": {},
+                "results": {},
+            }
+        ),
+        encoding="utf-8",
+    )
     videos_dir = tmp_path / "videos"
     videos_dir.mkdir()
     video_path = videos_dir / "v1.avi"
@@ -164,6 +178,7 @@ def _write_cache_cli_fixture(tmp_path: Path, official: bool) -> dict:
     return {
         "annotations": annotations,
         "config": config,
+        "selected_profile": selected_profile,
         "cache_dir": cache_dir,
         "output": tmp_path / "result.json",
     }
@@ -188,6 +203,8 @@ def _run_cache_cli(monkeypatch, paths: dict, official: bool) -> None:
             [
                 "--evaluation-protocol-version",
                 efc.evaluation_protocol.EVALUATION_PROTOCOL_VERSION,
+                "--selected-profile",
+                str(paths["selected_profile"]),
             ]
         )
     monkeypatch.setattr(sys, "argv", argv)
@@ -250,6 +267,86 @@ def test_official_cache_cli_writes_provenance_to_result_root(tmp_path, monkeypat
     assert payload["far_denominator_rule"] == (
         efc.evaluation_protocol.FAR_DENOMINATOR_RULE
     )
+    assert payload["cache_manifest_sha256"] == efc.recording_contract.sha256_file(
+        paths["cache_dir"] / "manifest.json"
+    )
+    selected_profile = json.loads(paths["selected_profile"].read_text(encoding="utf-8"))
+    assert payload["selected_execution_profile_sha256"] == (
+        efc.recording_contract.selected_execution_profile_sha256(selected_profile)
+    )
+    assert payload["cache_dataset_revision_verification"] == (
+        "exact_dataset_revision"
+    )
+
+
+def test_official_cache_accepts_history_only_when_evaluated_rows_match(monkeypatch):
+    args = SimpleNamespace(
+        recordings_manifest="current_manifest.csv",
+        annotations="current_annotations.csv",
+        selected_profile="selected.json",
+        cache_source_manifest="source_manifest.csv",
+        cache_source_annotations="source_annotations.csv",
+        cache_dir="cache",
+    )
+    manifest = {"dataset": {"annotations_sha256": "old"}}
+    validation_calls = []
+
+    def validate(manifest_arg, expected_dataset_provenance=None):
+        validation_calls.append(expected_dataset_provenance)
+        if expected_dataset_provenance is not None:
+            raise ValueError("dataset mismatch")
+
+    monkeypatch.setattr(
+        efc.evaluation_protocol, "validate_official_cache_manifest", validate
+    )
+    monkeypatch.setattr(
+        efc.recording_contract,
+        "load_recordings_manifest",
+        lambda path: [{"video_id": "v1"}],
+    )
+    monkeypatch.setattr(
+        efc.recording_contract,
+        "load_fall_cause_annotations",
+        lambda path, manifest_rows: [{"video_id": "v1"}],
+    )
+    verify = MagicMock()
+    monkeypatch.setattr(efc, "verify_cache_integrity", verify)
+
+    result = efc._validate_official_cache_dataset(
+        args=args,
+        manifest=manifest,
+        expected_dataset_provenance={"annotations_sha256": "current"},
+        evaluated_video_ids=["v1"],
+    )
+
+    assert result == "history_snapshot_matching_evaluated_rows_v1"
+    assert validation_calls == [
+        {"annotations_sha256": "current"},
+        None,
+    ]
+    verify.assert_called_once()
+
+
+def test_official_cache_rejects_mismatch_without_history_inputs(monkeypatch):
+    args = SimpleNamespace(
+        recordings_manifest="current_manifest.csv",
+        selected_profile="selected.json",
+        cache_source_manifest=None,
+        cache_source_annotations=None,
+    )
+    monkeypatch.setattr(
+        efc.evaluation_protocol,
+        "validate_official_cache_manifest",
+        MagicMock(side_effect=ValueError("dataset mismatch")),
+    )
+
+    with pytest.raises(ValueError, match="dataset mismatch"):
+        efc._validate_official_cache_dataset(
+            args=args,
+            manifest={},
+            expected_dataset_provenance={"annotations_sha256": "current"},
+            evaluated_video_ids=["v1"],
+        )
 
 
 class TestValidateCacheMetadata:

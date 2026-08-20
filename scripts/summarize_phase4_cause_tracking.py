@@ -59,13 +59,13 @@ def _ratio(numerator: int, denominator: int) -> float | None:
 def validate_replay_provenance(
     replay: Mapping,
     *,
-    selected_profile_sha256: str,
+    selected_execution_profile_sha256: str,
     manifest_sha256: str,
     annotations_sha256: str,
     config_sha256: str,
 ) -> None:
     expected = {
-        "selected_profile_sha256": selected_profile_sha256,
+        "selected_execution_profile_sha256": selected_execution_profile_sha256,
         "recordings_manifest_sha256": manifest_sha256,
         "fall_cause_annotations_sha256": annotations_sha256,
         "config_sha256": config_sha256,
@@ -123,14 +123,33 @@ def build_summary(
 
     top1_denominator = 0
     top1_correct = 0
+    top1_matched_events = 0
+    top1_missed_falls = 0
+    top1_late_falls = 0
+    top1_unmatched_events = 0
     missed_cause = 0
     wrong_cause_actor = 0
     victim_mismatch = 0
+    top1_by_actor: dict[str, dict[str, int]] = {}
     for video in multi_videos:
         video_id = video["video_id"]
         annotation = annotation_by_video[video_id]
         if annotation["cause_candidate_exists"] != "true":
             continue
+        actor_id = annotation["victim_actor_id"] or "unknown"
+        actor_stats = top1_by_actor.setdefault(
+            actor_id,
+            {
+                "correct": 0,
+                "denominator": 0,
+                "matched_event_count": 0,
+                "missed_fall": 0,
+                "late_fall": 0,
+                "unmatched_event": 0,
+            },
+        )
+        top1_denominator += 1
+        actor_stats["denominator"] += 1
         representative = _representative_frame(
             [event["frame_number"] for event in video["events"]],
             annotation,
@@ -138,16 +157,27 @@ def build_summary(
             protocol,
         )
         if representative is None:
+            if official_by_video[video_id].get("late_detection"):
+                top1_late_falls += 1
+                actor_stats["late_fall"] += 1
+            elif not video["events"]:
+                top1_missed_falls += 1
+                actor_stats["missed_fall"] += 1
+            else:
+                top1_unmatched_events += 1
+                actor_stats["unmatched_event"] += 1
             continue
         review = review_by_video_frame.get((video_id, representative))
         if review is None:
             raise ValueError(f"{video_id}@{representative}: reviewed Event 행이 없습니다.")
-        top1_denominator += 1
+        top1_matched_events += 1
+        actor_stats["matched_event_count"] += 1
         if review["victim_actor_id"] != annotation["victim_actor_id"]:
             victim_mismatch += 1
         predicted = review["predicted_cause_actor_id"]
         if predicted == annotation["cause_actor_id"]:
             top1_correct += 1
+            actor_stats["correct"] += 1
         elif not predicted:
             missed_cause += 1
         else:
@@ -191,10 +221,12 @@ def build_summary(
         comparison_reasons.append("repeated_id_switch_caused_event_errors")
     if top1_accuracy is not None and top1_accuracy < TOP1_TARGET:
         comparison_reasons.append("cause_top1_below_target")
+    comparison_required = bool(comparison_reasons)
 
     return {
         "schema_version": "phase4_cause_tracking_summary_v1",
         "evaluation_protocol_version": protocol["version"],
+        "tracker_comparison_policy_version": contract.TRACKER_COMPARISON_POLICY_VERSION,
         "scope": {
             "multiperson_videos": len(multi_video_ids),
             "cause_null_extension_videos": len(cause_null_replay["videos"]),
@@ -211,6 +243,17 @@ def build_summary(
             "meets_target": (
                 top1_accuracy >= TOP1_TARGET if top1_accuracy is not None else False
             ),
+            "matched_event_count": top1_matched_events,
+            "missed_fall": top1_missed_falls,
+            "late_fall": top1_late_falls,
+            "unmatched_event": top1_unmatched_events,
+            "by_actor": {
+                actor_id: {
+                    **stats,
+                    "accuracy": _ratio(stats["correct"], stats["denominator"]),
+                }
+                for actor_id, stats in sorted(top1_by_actor.items())
+            },
             "missed_cause": missed_cause,
             "wrong_cause_actor": wrong_cause_actor,
             "victim_mismatch_scored_independently": victim_mismatch,
@@ -234,15 +277,21 @@ def build_summary(
             ),
             "id_switch_relations": dict(sorted(relation_counts.items())),
             "caused_event_errors": caused_errors,
-            "tracker_comparison_required": bool(comparison_reasons),
+            "tracker_comparison_required": comparison_required,
             "tracker_comparison_reasons": comparison_reasons,
             "comparison_order": [
                 "bytetrack_baseline",
                 "botsort_without_reid",
                 "botsort_with_reid",
             ],
-            "reid_experiment_status": "required",
-            "reid_production_status": "pending_three_way_comparison",
+            "reid_experiment_status": (
+                "required" if comparison_required else "not_required"
+            ),
+            "reid_production_status": (
+                "pending_three_way_comparison"
+                if comparison_required
+                else "not_applicable"
+            ),
         },
     }
 
@@ -271,18 +320,29 @@ def main() -> None:
         selected_profile = json.loads(
             Path(args.selected_profile).read_text(encoding="utf-8")
         )
-        selected_sha = contract.sha256_file(args.selected_profile)
+        selected_execution_sha = contract.selected_execution_profile_sha256(
+            selected_profile
+        )
         manifest_sha = contract.sha256_file(args.manifest)
         annotations_sha = contract.sha256_file(args.annotations)
         config_sha = selected_profile["inference"]["fall_detector_config_sha256"]
         for replay in (multiperson_replay, cause_null_replay):
             validate_replay_provenance(
                 replay,
-                selected_profile_sha256=selected_sha,
+                selected_execution_profile_sha256=selected_execution_sha,
                 manifest_sha256=manifest_sha,
                 annotations_sha256=annotations_sha,
                 config_sha256=config_sha,
             )
+        contract.validate_official_eval_provenance(
+            official_eval,
+            replay=multiperson_replay,
+            selected_profile=selected_profile,
+            selected_execution_profile_sha256=selected_execution_sha,
+            recordings_manifest_sha256=manifest_sha,
+            annotations_sha256=annotations_sha,
+            config_sha256=config_sha,
+        )
         summary = build_summary(
             manifest_rows=manifest_rows,
             annotation_rows=annotation_rows,
@@ -297,11 +357,12 @@ def main() -> None:
         raise SystemExit(str(exc)) from exc
 
     summary["provenance"] = {
-        "selected_profile_sha256": selected_sha,
+        "selected_execution_profile_sha256": selected_execution_sha,
         "recordings_manifest_sha256": manifest_sha,
         "fall_cause_annotations_sha256": annotations_sha,
         "event_attribution_review_sha256": contract.sha256_file(args.event_review),
         "track_id_switches_sha256": contract.sha256_file(args.switches),
+        "official_eval_sha256": contract.sha256_file(args.official_eval),
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(

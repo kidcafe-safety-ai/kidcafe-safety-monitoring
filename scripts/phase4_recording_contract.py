@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 import math
 import os
 import re
@@ -17,8 +18,183 @@ RECORDINGS_MANIFEST_SCHEMA_VERSION = "phase4_recordings_manifest_v1"
 FALL_CAUSE_ANNOTATION_SCHEMA_VERSION = "phase4_fall_cause_v1"
 TRACK_ACTOR_REVIEW_SCHEMA_VERSION = "phase4_track_actor_review_v1"
 ZONE_INTERVALS_SCHEMA_VERSION = "phase4_zone_intervals_v1"
+TRACKER_COMPARISON_POLICY_VERSION = "phase4_tracker_comparison_policy_v1"
 SCENARIO_SEEDED_DRAFT_NOTE = "scenario-seeded draft; frame review required"
 NON_ACTOR_TRACK_NOTE = "reviewed non-actor track"
+_EXECUTION_PROFILE_KEYS = (
+    "schema_version",
+    "model",
+    "inference",
+    "recorded_dataset",
+    "evaluation_protocol",
+)
+
+
+def selected_execution_profile_sha256(selected_profile: Mapping) -> str:
+    """결과 artifact 목록을 제외한 동결 실행 profile의 canonical SHA-256."""
+    payload = {key: selected_profile[key] for key in _EXECUTION_PROFILE_KEYS}
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def validate_official_eval_provenance(
+    official_eval: Mapping,
+    *,
+    replay: Mapping,
+    selected_profile: Mapping,
+    selected_execution_profile_sha256: str,
+    recordings_manifest_sha256: str,
+    annotations_sha256: str,
+    config_sha256: str,
+) -> None:
+    """공식 평가 결과가 replay·selected profile과 같은 실행인지 검증한다.
+
+    Event attribution은 공식 평가의 ``late_detection``만 사용하므로, video_id
+    coverage만 맞는 오래된 결과가 섞이면 안 된다. 평가기의 결과 JSON에 남은
+    provenance와 selected profile의 모델·tracker·runtime 설정을 모두 대조한다.
+    """
+    inference = selected_profile["inference"]
+    protocol = selected_profile["evaluation_protocol"]
+    recorded_dataset = selected_profile["recorded_dataset"]
+    tracker_config = official_eval.get("tracker_config") or {}
+    dataset = official_eval.get("dataset") or {}
+    run_config = official_eval.get("run_config") or {}
+    errors = []
+    selected_dataset_values = {
+        "recordings_manifest_sha256": recorded_dataset[
+            "recordings_manifest_sha256"
+        ],
+        "fall_cause_annotations_sha256": recorded_dataset[
+            "fall_cause_annotations_sha256"
+        ],
+        "config_sha256": inference["fall_detector_config_sha256"],
+    }
+    current_values = {
+        "recordings_manifest_sha256": recordings_manifest_sha256,
+        "fall_cause_annotations_sha256": annotations_sha256,
+        "config_sha256": config_sha256,
+    }
+    errors.extend(
+        f"selected profile {key}: profile={selected_dataset_values[key]!r}, "
+        f"current={value!r}"
+        for key, value in current_values.items()
+        if selected_dataset_values[key] != value
+    )
+    expected = {
+        "selected_execution_profile_sha256": selected_execution_profile_sha256,
+        "cache_manifest_sha256": replay.get("cache_manifest_sha256"),
+        "recordings_manifest_sha256": recordings_manifest_sha256,
+        "fall_cause_annotations_sha256": annotations_sha256,
+        "config_sha256": config_sha256,
+        "evaluation_protocol_version": protocol["version"],
+        "model_sha256": selected_profile["model"]["sha256"],
+        "tracker": inference["tracker"],
+        "early_tolerance_sec": protocol["early_tolerance_sec"],
+        "timely_window_sec": protocol["timely_window_sec"],
+    }
+    actual = {
+        "selected_execution_profile_sha256": official_eval.get(
+            "selected_execution_profile_sha256"
+        ),
+        "cache_manifest_sha256": official_eval.get("cache_manifest_sha256"),
+        "recordings_manifest_sha256": dataset.get("recordings_manifest_sha256"),
+        "fall_cause_annotations_sha256": dataset.get("annotations_sha256"),
+        "config_sha256": official_eval.get("config_sha256"),
+        "evaluation_protocol_version": official_eval.get("evaluation_protocol_version"),
+        "model_sha256": official_eval.get("model_sha256"),
+        "tracker": official_eval.get("tracker"),
+        "early_tolerance_sec": official_eval.get("early_tolerance_sec"),
+        "timely_window_sec": official_eval.get("timely_window_sec"),
+    }
+    errors.extend(
+        [
+            f"{key}: official={actual[key]!r}, expected={value!r}"
+            for key, value in expected.items()
+            if actual[key] != value
+        ]
+    )
+    cache_revision_verification = official_eval.get(
+        "cache_dataset_revision_verification"
+    )
+    if cache_revision_verification not in {
+        "exact_dataset_revision",
+        "history_snapshot_matching_evaluated_rows_v1",
+    }:
+        errors.append(
+            "cache_dataset_revision_verification: "
+            f"official={cache_revision_verification!r}"
+        )
+    for key in ("selected_execution_profile_sha256", "cache_manifest_sha256"):
+        if not replay.get(key):
+            errors.append(f"replay에 {key}가 없습니다.")
+    replay_expected = {
+        "selected_execution_profile_sha256": selected_execution_profile_sha256,
+        "recordings_manifest_sha256": recordings_manifest_sha256,
+        "fall_cause_annotations_sha256": annotations_sha256,
+        "config_sha256": config_sha256,
+    }
+    replay_actual = {
+        "selected_execution_profile_sha256": replay.get(
+            "selected_execution_profile_sha256"
+        ),
+        "recordings_manifest_sha256": replay.get("recordings_manifest_sha256"),
+        "fall_cause_annotations_sha256": replay.get(
+            "fall_cause_annotations_sha256"
+        ),
+        "config_sha256": replay.get("config_sha256"),
+    }
+    errors.extend(
+        f"replay {key}: actual={replay_actual[key]!r}, expected={value!r}"
+        for key, value in replay_expected.items()
+        if replay_actual[key] != value
+    )
+
+    expected_tracker = {
+        "model_sha256": inference["tracker_model_sha256"],
+        "conf": inference["tracker_confidence"],
+    }
+    for key, value in expected_tracker.items():
+        if tracker_config.get(key) != value:
+            errors.append(
+                f"tracker_config.{key}: official={tracker_config.get(key)!r}, "
+                f"expected={value!r}"
+            )
+
+    expected_run_config = {
+        "config_path": inference["fall_detector_config_path"],
+        "fall_model_iou_threshold": inference["fall_model_iou_threshold"],
+        "fall_model_interval_frames": inference["fall_model_interval_frames"],
+        "fall_pose_normal_gate_enabled": inference["fall_pose_normal_gate_enabled"],
+    }
+    for key, value in expected_run_config.items():
+        if run_config.get(key) != value:
+            errors.append(
+                f"run_config.{key}: official={run_config.get(key)!r}, "
+                f"expected={value!r}"
+            )
+
+    expected_rules = {
+        "event_matching_rule": protocol["event_matching_rule"],
+        "duplicate_rule": protocol["duplicate_rule"],
+        "far_denominator_rule": protocol["far_denominator_rule"],
+    }
+    for key, value in expected_rules.items():
+        if official_eval.get(key) != value:
+            errors.append(
+                f"{key}: official={official_eval.get(key)!r}, expected={value!r}"
+            )
+
+    if errors:
+        raise ValueError(
+            "official evaluation provenance 불일치:\n  - "
+            + "\n  - ".join(errors)
+        )
+
 
 MANIFEST_FIELDS = (
     "video_id",

@@ -13,7 +13,6 @@ raw_detections만 재생한다.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from dataclasses import asdict
@@ -280,9 +279,9 @@ def main() -> None:
         with output_path.open("w", encoding="utf-8") as file:
             json.dump(
                 {
-                    "selected_profile_sha256": hashlib.sha256(
-                        Path(args.selected_profile).read_bytes()
-                    ).hexdigest(),
+                    "selected_execution_profile_sha256": (
+                        contract.selected_execution_profile_sha256(selected)
+                    ),
                     "cache_manifest_sha256": contract.sha256_file(
                         cache_dir / "manifest.json"
                     ),

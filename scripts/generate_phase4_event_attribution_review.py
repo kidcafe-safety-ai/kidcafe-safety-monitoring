@@ -38,6 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--official-eval", required=True, help="evaluate_fall_from_cache.py 출력")
     parser.add_argument("--segments", required=True)
     parser.add_argument("--switches", required=True)
+    parser.add_argument("--selected-profile", required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--force", action="store_true")
@@ -264,6 +265,22 @@ def main() -> None:
 
         replay = json.loads(Path(args.events).read_text(encoding="utf-8"))
         official = json.loads(Path(args.official_eval).read_text(encoding="utf-8"))
+        selected_profile = json.loads(
+            Path(args.selected_profile).read_text(encoding="utf-8")
+        )
+        contract.validate_official_eval_provenance(
+            official,
+            replay=replay,
+            selected_profile=selected_profile,
+            selected_execution_profile_sha256=(
+                contract.selected_execution_profile_sha256(selected_profile)
+            ),
+            recordings_manifest_sha256=contract.sha256_file(args.manifest),
+            annotations_sha256=contract.sha256_file(args.annotations),
+            config_sha256=contract.sha256_file(
+                selected_profile["inference"]["fall_detector_config_path"]
+            ),
+        )
         official_videos_by_id = {v["video_id"]: v for v in official["videos"]}
 
         missing = [
