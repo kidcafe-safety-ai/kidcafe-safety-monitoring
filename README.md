@@ -508,7 +508,7 @@ AI를 재시작해 변경 내용을 적용한다.
 | Phase 4 계약·평가 프로토콜 | Done — Contract v1·`phase4_fall_eval_v1` 동결 |
 | 낙상 오탐 개선(hard-negative 재학습, 외부·촬영 데이터) | Done — Phase 4 E1 목표 환경 채택 |
 | 경량 temporal classifier | E1과 실제 촬영 결과가 조건을 충족할 때만 검토 |
-| BoT-SORT / StrongSORT / ReID | 실제 Event 오류를 유발하는 ID switch가 반복될 때만 검토 |
+| BoT-SORT / ReID | Cause top-1 목표 미달에 따라 동일 영상 3-way 비교 예정 |
 | Homography floor-plane Zone | Phase 4 기본 비활성 PoC |
 | Zone Settings 저장·Report 실제 연동 | Phase 4 |
 
@@ -579,8 +579,12 @@ Phase 4는 계약과 평가 프로토콜을 먼저 동결한 뒤 실제 촬영 �
 |------|------|----------------|
 | 원거리·소형 객체 탐지 한계 | 경량 모델 및 촬영 환경 한계 | Phase 4: 라벨 데이터 평가 및 fine-tuning 검토 |
 | 작은 객체 bbox 깜빡임 | 작은 객체 confidence 흔들림 | Phase 3 범위에서 미착수 — Phase 4: 후처리 보강 |
-| track_id 자주 변경 | ReID 없음 | 실제 Event 오류를 유발하면 Phase 4에서 BoT-SORT부터 조건부 비교 |
-| 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | handoff로 해결되지 않는 Event 오류가 반복될 때만 ReID 후속 검토 |
+| track_id 자주 변경 | ReID 없음 | ByteTrack·BoT-SORT ReID OFF·ON 비교로 개선 여부 측정 |
+| 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | 동일 카메라 ReID 실험 도입, production 채택은 지표로 결정 |
+
+Phase 4의 ReID 비교는 짧은 detector 누락이나 가림 뒤 detection이 복구됐을 때
+기존 Track ID로 재연결하는 것이 목표다. detection이 없는 프레임에 bbox를
+생성하거나 장기·cross-camera identity를 유지하는 기능은 포함하지 않는다.
 | ENTER/EXIT 경계 흔들림 | zone 경계 foot_point 진동 | Phase 3에서 temporal hysteresis 적용 완료, 실제 카메라 재튜닝은 Phase 4 |
 | 낙상 처리량 비용 | PoseTracker와 보조 detector를 함께 실행 | Pose NORMAL gate+interval 3을 기본 적용하고 다른 장치·API E2E를 계속 검증 |
 | 카메라 구도별 성능 차이 | 구도·행동 분포 차이 | 실제 키즈카페 A03 기준 E1을 채택하고 다른 구도는 별도 검증 |

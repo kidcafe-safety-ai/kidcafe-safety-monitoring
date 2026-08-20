@@ -20,7 +20,7 @@
 
 runtime calibration config는 계약 위치인 `configs/camera_calibration/`에 있다.
 최종 촬영 manifest와 reviewed Zone ground truth는 각각
-`data/annotations/phase4/recordings_manifest.csv`,
+`data/annotations/phase4/zone_eval/recordings_manifest.csv`,
 `data/annotations/phase4/zone_intervals.csv`에 있다.
 
 ## 재현 명령

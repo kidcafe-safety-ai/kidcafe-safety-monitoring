@@ -272,6 +272,301 @@ class TestFallCauseValidation:
             )
 
 
+def _segment_row(**overrides) -> dict[str, str]:
+    row = {
+        "run_id": "run_e1_diagnostic",
+        "video_id": "P4_S01_A01_fall_backward_01_cam01",
+        "start_frame": "0",
+        "end_frame": "99",
+        "track_id": "1",
+        "actor_id": "A01",
+        "review_status": "reviewed",
+        "notes": "",
+    }
+    row.update(overrides)
+    return row
+
+
+def _switch_row(**overrides) -> dict[str, str]:
+    row = {
+        "run_id": "run_e1_diagnostic",
+        "switch_id": "switch_001",
+        "video_id": "P4_S01_A01_fall_backward_01_cam01",
+        "actor_id": "A01",
+        "from_track_id": "1",
+        "to_track_id": "2",
+        "switch_frame": "100",
+        "review_status": "reviewed",
+        "notes": "",
+    }
+    row.update(overrides)
+    return row
+
+
+class TestTrackActorSegmentValidation:
+    def test_accepts_reviewed_segment(self):
+        contract.validate_track_actor_segments([_segment_row()], [_manifest_row()])
+
+    def test_accepts_pending_segment_without_actor(self):
+        pending = _segment_row(actor_id="", review_status="pending")
+        contract.validate_track_actor_segments([pending], [_manifest_row()])
+
+    def test_rejects_reviewed_without_actor(self):
+        with pytest.raises(ValueError, match="actor_id"):
+            contract.validate_track_actor_segments(
+                [_segment_row(actor_id="")], [_manifest_row()]
+            )
+
+    def test_accepts_reviewed_non_actor_track(self):
+        row = _segment_row(
+            actor_id="",
+            notes=contract.NON_ACTOR_TRACK_NOTE,
+        )
+
+        contract.validate_track_actor_segments([row], [_manifest_row()])
+
+    def test_rejects_start_after_end(self):
+        with pytest.raises(ValueError, match="start_frame"):
+            contract.validate_track_actor_segments(
+                [_segment_row(start_frame="150", end_frame="99")], [_manifest_row()]
+            )
+
+    def test_rejects_frame_outside_video(self):
+        with pytest.raises(ValueError, match="frame 범위"):
+            contract.validate_track_actor_segments(
+                [_segment_row(end_frame="300")], [_manifest_row()]
+            )
+
+    def test_rejects_unknown_video_id(self):
+        with pytest.raises(ValueError, match="manifest에 없는 video_id"):
+            contract.validate_track_actor_segments(
+                [_segment_row(video_id="P4_S01_A99_fall_backward_01_cam01")],
+                [_manifest_row()],
+            )
+
+    def test_rejects_overlapping_segments_for_same_track(self):
+        second = _segment_row(start_frame="50", end_frame="150")
+        with pytest.raises(ValueError, match="겹칩니다"):
+            contract.validate_track_actor_segments(
+                [_segment_row(), second], [_manifest_row()]
+            )
+
+    def test_accepts_adjacent_non_overlapping_segments_for_same_track(self):
+        second = _segment_row(start_frame="100", end_frame="150")
+        contract.validate_track_actor_segments([_segment_row(), second], [_manifest_row()])
+
+    def test_accepts_different_tracks_with_overlapping_frames(self):
+        other_actor = _segment_row(track_id="2", actor_id="A02")
+        contract.validate_track_actor_segments(
+            [_segment_row(), other_actor], [_manifest_row(actor_ids="A01|A02")]
+        )
+
+    def test_rejects_actor_outside_manifest(self):
+        with pytest.raises(ValueError, match="manifest actor_ids"):
+            contract.validate_track_actor_segments(
+                [_segment_row(actor_id="A02")], [_manifest_row(actor_ids="A01")]
+            )
+
+    def test_rejects_overlapping_reviewed_segments_for_same_actor(self):
+        duplicate_track = _segment_row(track_id="2", actor_id="A01")
+        with pytest.raises(ValueError, match="actor_id=A01"):
+            contract.validate_track_actor_segments(
+                [_segment_row(), duplicate_track], [_manifest_row()]
+            )
+
+
+class TestTrackIdSwitchValidation:
+    def test_accepts_reviewed_switch(self):
+        contract.validate_track_id_switches([_switch_row()], [_manifest_row()])
+
+    def test_accepts_empty_switches(self):
+        contract.validate_track_id_switches([], [_manifest_row()])
+
+    def test_rejects_same_from_and_to_track(self):
+        with pytest.raises(ValueError, match="달라야"):
+            contract.validate_track_id_switches(
+                [_switch_row(to_track_id="1")], [_manifest_row()]
+            )
+
+    def test_rejects_switch_frame_outside_video(self):
+        with pytest.raises(ValueError, match="frame 범위"):
+            contract.validate_track_id_switches(
+                [_switch_row(switch_frame="300")], [_manifest_row()]
+            )
+
+    def test_rejects_duplicate_switch_id(self):
+        with pytest.raises(ValueError, match="중복"):
+            contract.validate_track_id_switches(
+                [_switch_row(), _switch_row(switch_frame="120")], [_manifest_row()]
+            )
+
+    def test_rejects_invalid_actor_id(self):
+        with pytest.raises(ValueError, match="actor_id"):
+            contract.validate_track_id_switches(
+                [_switch_row(actor_id="bogus")], [_manifest_row()]
+            )
+
+    def test_rejects_switch_actor_outside_manifest(self):
+        with pytest.raises(ValueError, match="manifest actor_ids"):
+            contract.validate_track_id_switches(
+                [_switch_row(actor_id="A02")], [_manifest_row(actor_ids="A01")]
+            )
+
+
+def _event_row(**overrides) -> dict[str, str]:
+    row = {
+        "run_id": "run_e1_diagnostic",
+        "video_id": "P4_S01_A01_fall_backward_01_cam01",
+        "event_frame": "131",
+        "victim_track_id": "1",
+        "victim_actor_id": "A01",
+        "predicted_cause_track_id": "2",
+        "predicted_cause_actor_id": "A02",
+        "related_switch_ids": "",
+        "id_switch_relation": "none",
+        "event_error_type": "none",
+        "review_status": "reviewed",
+        "notes": "",
+    }
+    row.update(overrides)
+    return row
+
+
+class TestEventAttributionReviewValidation:
+    def test_accepts_reviewed_event(self):
+        contract.validate_event_attribution_review(
+            [_event_row()], [_manifest_row(actor_ids="A01|A02")]
+        )
+
+    def test_accepts_empty_rows(self):
+        contract.validate_event_attribution_review([], [_manifest_row()])
+
+    def test_accepts_missed_fall_without_event_frame(self):
+        row = _event_row(
+            event_frame="",
+            victim_track_id="",
+            victim_actor_id="",
+            predicted_cause_track_id="",
+            predicted_cause_actor_id="",
+            related_switch_ids="",
+            id_switch_relation="none",
+            event_error_type="missed_fall",
+        )
+
+        contract.validate_event_attribution_review([row], [_manifest_row(actor_ids="A01|A02")])
+
+    def test_accepts_true_negative_without_event_fields(self):
+        row = _event_row(
+            event_frame="",
+            victim_track_id="",
+            victim_actor_id="",
+            predicted_cause_track_id="",
+            predicted_cause_actor_id="",
+            related_switch_ids="",
+            event_error_type="true_negative",
+        )
+
+        contract.validate_event_attribution_review(
+            [row], [_manifest_row(label="no_fall", actor_ids="A01|A02")]
+        )
+
+    def test_accepts_false_alarm_on_no_fall_video(self):
+        row = _event_row(event_error_type="false_alarm")
+
+        contract.validate_event_attribution_review(
+            [row], [_manifest_row(label="no_fall", actor_ids="A01|A02")]
+        )
+
+    @pytest.mark.parametrize("error_type", ["true_negative", "false_alarm"])
+    def test_rejects_no_fall_outcome_on_fall_video(self, error_type):
+        row = _event_row(event_error_type=error_type)
+        if error_type == "true_negative":
+            row.update(
+                event_frame="",
+                victim_track_id="",
+                victim_actor_id="",
+                predicted_cause_track_id="",
+                predicted_cause_actor_id="",
+            )
+
+        with pytest.raises(ValueError, match="no_fall 영상에만"):
+            contract.validate_event_attribution_review(
+                [row], [_manifest_row(label="fall", actor_ids="A01|A02")]
+            )
+
+    def test_rejects_true_negative_with_event_fields(self):
+        row = _event_row(event_error_type="true_negative")
+
+        with pytest.raises(ValueError, match="필드는 비워야"):
+            contract.validate_event_attribution_review(
+                [row], [_manifest_row(label="no_fall", actor_ids="A01|A02")]
+            )
+
+    def test_rejects_missed_fall_on_no_fall_video(self):
+        row = _event_row(
+            event_frame="",
+            victim_track_id="",
+            victim_actor_id="",
+            predicted_cause_track_id="",
+            predicted_cause_actor_id="",
+            event_error_type="missed_fall",
+        )
+
+        with pytest.raises(ValueError, match="fall 영상에만"):
+            contract.validate_event_attribution_review(
+                [row], [_manifest_row(label="no_fall", actor_ids="A01|A02")]
+            )
+
+    def test_rejects_unknown_video_id(self):
+        with pytest.raises(ValueError, match="manifest에 없는 video_id"):
+            contract.validate_event_attribution_review(
+                [_event_row(video_id="P4_S01_A99_fall_backward_01_cam01")],
+                [_manifest_row(actor_ids="A01|A02")],
+            )
+
+    def test_rejects_event_frame_outside_video(self):
+        with pytest.raises(ValueError, match="frame 범위"):
+            contract.validate_event_attribution_review(
+                [_event_row(event_frame="300")], [_manifest_row(actor_ids="A01|A02")]
+            )
+
+    def test_rejects_actor_outside_manifest(self):
+        with pytest.raises(ValueError, match="manifest actor_ids"):
+            contract.validate_event_attribution_review(
+                [_event_row(predicted_cause_actor_id="A02")], [_manifest_row(actor_ids="A01")]
+            )
+
+    def test_rejects_invalid_id_switch_relation(self):
+        with pytest.raises(ValueError, match="id_switch_relation"):
+            contract.validate_event_attribution_review(
+                [_event_row(id_switch_relation="bogus")], [_manifest_row(actor_ids="A01|A02")]
+            )
+
+    def test_rejects_invalid_event_error_type(self):
+        with pytest.raises(ValueError, match="event_error_type"):
+            contract.validate_event_attribution_review(
+                [_event_row(event_error_type="bogus")], [_manifest_row(actor_ids="A01|A02")]
+            )
+
+    def test_rejects_non_missed_fall_error_type_without_event_frame(self):
+        row = _event_row(event_frame="", event_error_type="false_attribution")
+        with pytest.raises(ValueError, match="event_frame"):
+            contract.validate_event_attribution_review(
+                [row], [_manifest_row(actor_ids="A01|A02")]
+            )
+
+    def test_rejects_reviewed_without_classification(self):
+        row = _event_row(event_error_type="", id_switch_relation="")
+        with pytest.raises(ValueError, match="event_error_type"):
+            contract.validate_event_attribution_review(
+                [row], [_manifest_row(actor_ids="A01|A02")]
+            )
+
+    def test_accepts_pending_without_classification(self):
+        row = _event_row(event_error_type="", id_switch_relation="", review_status="pending")
+        contract.validate_event_attribution_review([row], [_manifest_row(actor_ids="A01|A02")])
+
+
 def _zone_interval_row(**overrides) -> dict[str, str]:
     row = {
         "video_id": "P4_S01_A01_fall_backward_01_cam01",
@@ -343,7 +638,9 @@ class TestZoneIntervalValidation:
             )
 
     def test_rejects_duplicate_interval_key(self):
-        second = _zone_interval_row(enter_frame="160", exit_frame="200", dwell_start_frame="")
+        second = _zone_interval_row(
+            enter_frame="160", exit_frame="200", dwell_start_frame=""
+        )
         with pytest.raises(ValueError, match="중복"):
             contract.validate_zone_intervals(
                 [_zone_interval_row(), second], [_manifest_row()]
@@ -388,7 +685,10 @@ class TestZoneIntervalValidation:
 
     def test_second_interval_reuses_index_one_for_different_zone(self):
         other_zone = _zone_interval_row(
-            zone_id="danger_door", enter_frame="200", exit_frame="250", dwell_start_frame=""
+            zone_id="danger_door",
+            enter_frame="200",
+            exit_frame="250",
+            dwell_start_frame="",
         )
 
         contract.validate_zone_intervals(

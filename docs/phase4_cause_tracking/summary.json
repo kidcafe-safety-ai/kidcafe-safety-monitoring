@@ -1,0 +1,89 @@
+{
+  "schema_version": "phase4_cause_tracking_summary_v1",
+  "evaluation_protocol_version": "phase4_fall_eval_v1",
+  "tracker_comparison_policy_version": "phase4_tracker_comparison_policy_v1",
+  "scope": {
+    "multiperson_videos": 12,
+    "cause_null_extension_videos": 24,
+    "event_review_rows": 12,
+    "reviewed_event_rows": 12
+  },
+  "cause_top1": {
+    "correct": 3,
+    "denominator": 8,
+    "accuracy": 0.375,
+    "target": 0.8,
+    "meets_target": false,
+    "matched_event_count": 5,
+    "missed_fall": 2,
+    "late_fall": 1,
+    "unmatched_event": 0,
+    "by_actor": {
+      "A01": {
+        "correct": 3,
+        "denominator": 4,
+        "matched_event_count": 4,
+        "missed_fall": 0,
+        "late_fall": 0,
+        "unmatched_event": 0,
+        "accuracy": 0.75
+      },
+      "A02": {
+        "correct": 0,
+        "denominator": 4,
+        "matched_event_count": 1,
+        "missed_fall": 2,
+        "late_fall": 1,
+        "unmatched_event": 0,
+        "accuracy": 0.0
+      }
+    },
+    "missed_cause": 1,
+    "wrong_cause_actor": 1,
+    "victim_mismatch_scored_independently": 1
+  },
+  "cause_null_specificity": {
+    "correct": 24,
+    "denominator": 24,
+    "specificity": 1.0,
+    "target": 0.9,
+    "meets_target": true,
+    "false_attribution": 0
+  },
+  "event_outcomes": {
+    "false_alarm": 1,
+    "late_fall": 1,
+    "missed_cause": 1,
+    "missed_fall": 2,
+    "none": 3,
+    "true_negative": 3,
+    "victim_mismatch": 1
+  },
+  "tracking": {
+    "reviewed_id_switches": 15,
+    "id_switch_relations": {
+      "associated": 1,
+      "none": 11
+    },
+    "caused_event_errors": 0,
+    "tracker_comparison_required": true,
+    "tracker_comparison_reasons": [
+      "cause_top1_below_target"
+    ],
+    "comparison_order": [
+      "bytetrack_baseline",
+      "botsort_without_reid",
+      "botsort_with_reid"
+    ],
+    "reid_experiment_status": "required",
+    "reid_production_status": "pending_three_way_comparison"
+  },
+  "provenance": {
+    "selected_execution_profile_sha256": "042372cd0ed6749a69e19421a60b408eecb944bd7ecc4eee3838181d7287bf5f",
+    "recordings_manifest_sha256": "acfd84cf68641bafa268e18d2e09aba7e2b1579426cf41f65b40b23e3c524e42",
+    "fall_cause_annotations_sha256": "318a16602bc194e796d5e89eb0ebf87a769eb31f8eae5c6a2d1aa9bf443d5f13",
+    "event_attribution_review_sha256": "a4a7f158ddf629e8ec603ab2968dffb0f394f6e15489171ad5b85dd413b25719",
+    "track_id_switches_sha256": "a97ae41b18b19a6db8573688082968ed4121392e3fbc4cbd0e368e21b88819e1",
+    "official_eval_sha256": "b27c8b8e26d54b801fd0666055c32ff5baaff1bc1add098617cb2648946d7995"
+  }
+}
