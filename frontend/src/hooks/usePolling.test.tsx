@@ -1,18 +1,20 @@
 import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PollingCallback } from "./usePolling";
+import type { PollingCallback, PollingOptions } from "./usePolling";
 import { usePolling } from "./usePolling";
 
 function PollingHarness({
   callback,
   enabled = true,
   intervalMs = 1000,
+  options,
 }: {
   callback: PollingCallback;
   enabled?: boolean;
   intervalMs?: number;
+  options?: PollingOptions;
 }) {
-  usePolling(callback, intervalMs, enabled);
+  usePolling(callback, intervalMs, enabled, options);
   return null;
 }
 
@@ -85,6 +87,41 @@ describe("usePolling", () => {
     expect(callback).toHaveBeenCalledTimes(2);
   });
 
+  it("aborts a never-settling request and schedules the next poll", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    let firstSignal: AbortSignal | null = null;
+    const callback = vi.fn<PollingCallback>((context) => {
+      if (callback.mock.calls.length === 1) {
+        firstSignal = context.signal;
+      }
+
+      return new Promise<void>(() => {});
+    });
+
+    render(
+      <PollingHarness
+        callback={callback}
+        intervalMs={100}
+        options={{ requestTimeoutMs: 50 }}
+      />,
+    );
+
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(firstSignal?.aborted).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+
+    expect(firstSignal?.aborted).toBe(true);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    expect(callback).toHaveBeenCalledTimes(2);
+  });
+
   it("continues polling after a callback error", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const callback = vi
@@ -107,6 +144,38 @@ describe("usePolling", () => {
       "Polling callback failed",
       expect.any(Error),
     );
+  });
+
+  it("throttles repeated polling failure logs", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const callback = vi
+      .fn()
+      .mockRejectedValue(new Error("temporary failure"));
+
+    render(
+      <PollingHarness
+        callback={callback}
+        intervalMs={100}
+        options={{ errorLogCooldownMs: 1000 }}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(callback.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(consoleError).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
+
+    expect(consoleError).toHaveBeenCalledTimes(2);
   });
 
   it("aborts the active poll and stops timers on unmount", () => {
