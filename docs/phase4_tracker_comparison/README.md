@@ -208,3 +208,26 @@ python scripts/summarize_phase4_tracker_comparison.py \
 하나라도 미달하면 해당 후보는 채택하지 않는다. 여러 후보가 모두 통과하면 Cause
 정답 수, victim mismatch, ID switch, FPS 순으로 비교하며 동률이면 ReID가 없는
 단순한 arm을 우선한다.
+
+## `track_buffer=60` 후속 진단
+
+최초 3-way 비교의 `track_buffer=30`은 Ultralytics 기본값을 고정한 값이다. 실제
+영상에서 30 frame을 넘는 검출 공백이 확인되어, 기존 결과를 보존한 채
+`configs/phase4_tracker_buffer60_comparison.json`으로 동일 세 arm을 다시 비교한다.
+
+- 변경 변수: `track_buffer` 30 -> 60
+- 고정 변수: detector, E1 model, threshold, 평가 cohort, ReID model과 나머지
+  tracker 설정
+- 출력 경로: `outputs/phase4_tracker_buffer60_comparison`
+- 해석 범위: buffer 증가 효과와 현재 `yolo26n-cls.pt` 기반 ReID 효과를 분리해
+  진단하며, 사람 전용 ReID 모델의 일반적 효용을 기각하지 않는다.
+
+```bash
+for ARM in bytetrack_baseline botsort_without_reid botsort_with_reid; do
+  python scripts/run_phase4_tracker_arm.py \
+    --comparison-config configs/phase4_tracker_buffer60_comparison.json \
+    --output-root outputs/phase4_tracker_buffer60_comparison \
+    --arm-id "$ARM" \
+    --preflight-only
+done
+```

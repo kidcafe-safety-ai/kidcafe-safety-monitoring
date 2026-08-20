@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
@@ -15,6 +16,9 @@ import phase4_tracker_comparison_contract as contract  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "configs/phase4_tracker_comparison.json"
+BUFFER60_CONFIG_PATH = (
+    REPO_ROOT / "configs/phase4_tracker_buffer60_comparison.json"
+)
 
 
 def test_repository_comparison_contract_and_cohort_are_valid():
@@ -32,6 +36,24 @@ def test_repository_comparison_contract_and_cohort_are_valid():
 def test_repository_arm_order_is_frozen():
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     assert tuple(arm["arm_id"] for arm in config["arms"]) == contract.ARM_IDS
+
+
+@pytest.mark.parametrize(
+    ("config_path", "expected_buffer"),
+    (
+        (CONFIG_PATH, 30),
+        (BUFFER60_CONFIG_PATH, 60),
+    ),
+)
+def test_repository_tracker_buffer_variants_are_frozen(
+    config_path, expected_buffer
+):
+    config = contract.load_config(config_path, repo_root=REPO_ROOT)
+
+    for arm in config["arms"]:
+        tracker_path = REPO_ROOT / arm["tracker_config_path"]
+        tracker_config = yaml.safe_load(tracker_path.read_text(encoding="utf-8"))
+        assert tracker_config["track_buffer"] == expected_buffer
 
 
 def test_reid_arm_rejects_auto_model(tmp_path):
