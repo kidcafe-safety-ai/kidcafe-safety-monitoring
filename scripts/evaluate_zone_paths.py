@@ -180,6 +180,21 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def sha256_text(path: Path) -> str:
+    """줄바꿈을 LF로 맞춘 뒤 해시한다.
+
+    동결값과 **대조**하는 텍스트 파일에만 쓴다. Windows는 `core.autocrlf`로
+    작업 트리의 LF를 CRLF로 바꿔 두므로, 원시 바이트를 해시하면 같은 파일이
+    OS마다 다른 값이 된다. 실제로 Windows에서 calibration JSON이 동결값과
+    다르다고 거부됐고, 원인은 내용이 아니라 줄바꿈이었다.
+
+    JSON·CSV에서 CRLF와 LF는 같은 내용이므로 정규화해도 놓치는 변조가 없다.
+    내용이 한 글자라도 바뀌면 값은 그대로 달라진다.
+    """
+    raw = Path(path).read_bytes()
+    return hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest()
+
+
 def check_positive_seconds(name: str, value: float) -> None:
     """시간 옵션이 실수로 음수·NaN이 되면 판정이 조용히 뒤집힌다."""
     if not math.isfinite(value) or value <= 0:
@@ -721,9 +736,9 @@ def verify_input_checksums(
     """
     actual = {
         "calibration_version": entry["calibration_version"],
-        "calibration_sha256": sha256_file(entry["calibration"]),
-        "image_zone_sha256": sha256_file(entry["image_zone"]),
-        "floor_zone_sha256": sha256_file(entry["floor_zone"]),
+        "calibration_sha256": sha256_text(entry["calibration"]),
+        "image_zone_sha256": sha256_text(entry["image_zone"]),
+        "floor_zone_sha256": sha256_text(entry["floor_zone"]),
     }
     if record is None:
         if official:

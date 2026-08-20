@@ -282,9 +282,9 @@ def workspace(tmp_path):
         "data/annotations/phase4/zone_eval/input_checksums.csv",
         list(ezp.INPUT_CHECKSUM_FIELDS),
         [[VIDEO_ID, "test-v1",
-          ezp.sha256_file(tmp_path / "configs/camera_calibration/cam01.json"),
-          ezp.sha256_file(tmp_path / "data/zones/image_cam01.json"),
-          ezp.sha256_file(tmp_path / "data/zones/floor_cam01.json")]],
+          ezp.sha256_text(tmp_path / "configs/camera_calibration/cam01.json"),
+          ezp.sha256_text(tmp_path / "data/zones/image_cam01.json"),
+          ezp.sha256_text(tmp_path / "data/zones/floor_cam01.json")]],
     )
 
     # 밖(100) -> 안(500) -> 밖(900). 두 경로 모두 정답과 일치해야 한다.
@@ -327,9 +327,9 @@ def refresh_checksums(workspace):
     """
     root = workspace["root"]
     rows = list(csv.reader(open(workspace["checksums"], encoding="utf-8")))
-    rows[1][2] = ezp.sha256_file(root / "configs/camera_calibration/cam01.json")
-    rows[1][3] = ezp.sha256_file(root / "data/zones/image_cam01.json")
-    rows[1][4] = ezp.sha256_file(root / "data/zones/floor_cam01.json")
+    rows[1][2] = ezp.sha256_text(root / "configs/camera_calibration/cam01.json")
+    rows[1][3] = ezp.sha256_text(root / "data/zones/image_cam01.json")
+    rows[1][4] = ezp.sha256_text(root / "data/zones/floor_cam01.json")
     with open(workspace["checksums"], "w", encoding="utf-8", newline="") as file:
         csv.writer(file, lineterminator="\n").writerows(rows)
 
@@ -952,13 +952,13 @@ def test_result_records_the_input_revisions(workspace):
     revisions = run(workspace)["per_video"][0]["input_revisions"]
     assert revisions["verified"] is True
     assert revisions["calibration_version"] == "test-v1"
-    assert revisions["calibration_sha256"] == ezp.sha256_file(
+    assert revisions["calibration_sha256"] == ezp.sha256_text(
         workspace["root"] / "configs/camera_calibration/cam01.json"
     )
-    assert revisions["image_zone_sha256"] == ezp.sha256_file(
+    assert revisions["image_zone_sha256"] == ezp.sha256_text(
         workspace["root"] / "data/zones/image_cam01.json"
     )
-    assert revisions["floor_zone_sha256"] == ezp.sha256_file(
+    assert revisions["floor_zone_sha256"] == ezp.sha256_text(
         workspace["root"] / "data/zones/floor_cam01.json"
     )
 
@@ -1038,3 +1038,50 @@ def test_result_carries_the_actor_linkage(workspace):
     assert identity["expected_actor"] == "A01"
     assert identity["actor_ids"] == ["A01"]
     assert identity["primary_actor_id"] == "A01"
+
+
+def test_frozen_hash_ignores_windows_line_endings(tmp_path):
+    """같은 파일이 OS마다 다른 값이 되면 안 된다.
+
+    Windows는 core.autocrlf로 작업 트리의 LF를 CRLF로 바꿔 둔다. 원시 바이트를
+    해시했더니 실제로 Windows에서 calibration JSON이 동결값과 다르다고 거부됐고,
+    원인은 내용이 아니라 줄바꿈이었다.
+    """
+    lf = tmp_path / "lf.json"
+    crlf = tmp_path / "crlf.json"
+    lf.write_bytes(b'{\n  "a": 1\n}\n')
+    crlf.write_bytes(b'{\r\n  "a": 1\r\n}\r\n')
+    assert ezp.sha256_text(lf) == ezp.sha256_text(crlf)
+    assert ezp.sha256_file(lf) != ezp.sha256_file(crlf)
+
+
+def test_frozen_hash_still_catches_a_content_change(tmp_path):
+    """줄바꿈만 무시한다. 내용이 바뀌면 그대로 달라져야 한다."""
+    original = tmp_path / "a.json"
+    edited = tmp_path / "b.json"
+    original.write_bytes(b'{\n  "a": 1\n}\n')
+    edited.write_bytes(b'{\r\n  "a": 2\r\n}\r\n')
+    assert ezp.sha256_text(original) != ezp.sha256_text(edited)
+
+
+def test_crlf_zone_file_passes_the_frozen_comparison(workspace):
+    """Windows 체크아웃을 흉내내 실제 평가 경로까지 확인한다.
+
+    fixture는 JSON을 한 줄로 쓰므로 그대로 두면 바꿀 줄바꿈이 없어 아무것도
+    확인하지 못한다. 실제 저장소 파일처럼 여러 줄로 다시 쓴 뒤 CRLF로 바꾼다.
+    """
+    names = ("configs/camera_calibration/cam01.json",
+             "data/zones/image_cam01.json", "data/zones/floor_cam01.json")
+    for name in names:
+        path = workspace["root"] / name
+        text = json.dumps(json.loads(path.read_text(encoding="utf-8")), indent=2)
+        path.write_bytes((text + "\n").encode("utf-8"))
+    refresh_checksums(workspace)  # LF 상태를 동결값으로 잡는다
+
+    for name in names:
+        path = workspace["root"] / name
+        raw = path.read_bytes()
+        assert b"\n" in raw, f"{name}에 줄바꿈이 없어 이 테스트는 아무것도 확인하지 못한다"
+        path.write_bytes(raw.replace(b"\n", b"\r\n"))
+
+    assert run(workspace)["is_official"] is True
