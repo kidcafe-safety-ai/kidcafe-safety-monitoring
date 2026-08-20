@@ -17,6 +17,7 @@ from typing import Mapping, Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import phase4_recording_contract as contract  # noqa: E402
+import phase4_tracker_comparison_contract as comparison_contract  # noqa: E402
 
 
 TOP1_TARGET = 0.80
@@ -33,6 +34,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--event-review", required=True)
     parser.add_argument("--switches", required=True)
     parser.add_argument("--selected-profile", required=True)
+    parser.add_argument("--tracker-comparison-config", default=None)
+    parser.add_argument(
+        "--tracker-arm-id", choices=comparison_contract.ARM_IDS, default=None
+    )
     parser.add_argument("--output", required=True)
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
@@ -302,6 +307,10 @@ def main() -> None:
     if output.exists() and not args.force:
         raise SystemExit(f"이미 존재합니다: {output} (--force로 덮어쓰기)")
     try:
+        if bool(args.tracker_comparison_config) != bool(args.tracker_arm_id):
+            raise ValueError(
+                "--tracker-comparison-config와 --tracker-arm-id는 함께 지정해야 합니다."
+            )
         manifest_rows = contract.load_recordings_manifest(args.manifest)
         annotation_rows = contract.load_fall_cause_annotations(
             args.annotations, manifest_rows, require_reviewed=True
@@ -343,6 +352,29 @@ def main() -> None:
             annotations_sha256=annotations_sha,
             config_sha256=config_sha,
         )
+        comparison_arm = None
+        if args.tracker_comparison_config:
+            comparison = comparison_contract.load_config(
+                args.tracker_comparison_config,
+                require_model_artifacts=False,
+            )
+            comparison_contract.validate_cohort(
+                comparison, manifest_rows, annotation_rows
+            )
+            comparison_arm = comparison_contract.arm_by_id(
+                comparison, args.tracker_arm_id
+            )
+            expected_arm = comparison_contract.arm_provenance(comparison_arm)
+            for name, replay in (
+                ("multiperson", multiperson_replay),
+                ("cause-null", cause_null_replay),
+            ):
+                if replay.get("tracker_comparison_arm") != expected_arm:
+                    raise ValueError(f"{name} replay의 tracker arm provenance가 다릅니다.")
+            comparison_contract.validate_cache_arm(
+                {"tracker": official_eval.get("tracker_config") or {}},
+                comparison_arm,
+            )
         summary = build_summary(
             manifest_rows=manifest_rows,
             annotation_rows=annotation_rows,
@@ -364,6 +396,10 @@ def main() -> None:
         "track_id_switches_sha256": contract.sha256_file(args.switches),
         "official_eval_sha256": contract.sha256_file(args.official_eval),
     }
+    if comparison_arm is not None:
+        summary["tracker_comparison_arm"] = comparison_contract.arm_provenance(
+            comparison_arm
+        )
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
