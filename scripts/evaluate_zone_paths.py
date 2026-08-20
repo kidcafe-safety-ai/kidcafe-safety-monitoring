@@ -803,14 +803,22 @@ def evaluate(args: argparse.Namespace) -> dict:
     if unknown:
         raise ZoneEvalError(f"input checksum에 manifest에 없는 video_id가 있습니다: {unknown}")
 
+    # 커밋된 입력은 줄바꿈을 맞춰 해시한다. 원시 바이트로 적으면 Windows에서
+    # 실행한 결과의 지문이 CRLF 기준이 되어, 저장소의 파일을 받아 대조해도
+    # 값이 맞지 않는다. 감사하라고 남기는 값이므로 어느 OS에서 실행하든 같은
+    # 값이 나와야 한다. 캐시는 커밋되지 않고 이 스크립트가 LF로 쓰므로 그대로
+    # 스트리밍해 해시한다.
     artifacts = {
         "cache": sha256_file(cache_path),
-        "manifest": sha256_file(manifest_path),
-        "intervals": sha256_file(intervals_path),
-        "review_plan": sha256_file(plan_path),
-        "track_identity": sha256_file(identity_path),
-        "input_checksums": sha256_file(checksum_path),
+        "manifest": sha256_text(manifest_path),
+        "intervals": sha256_text(intervals_path),
+        "review_plan": sha256_text(plan_path),
+        "track_identity": sha256_text(identity_path),
+        "input_checksums": sha256_text(checksum_path),
     }
+    # 캐시가 적어둔 manifest 지문은 `cache_zone_foot_points.py`가 원시 바이트로
+    # 계산한 값이다. 둘 다 같은 기계에서 만들어지므로 원시 바이트끼리 비교한다.
+    manifest_raw_digest = sha256_file(manifest_path)
     cached_manifest_digest = cache.get("manifest_sha256")
     # 공식 실행에서는 필수다. 없으면 비교를 건너뛰게 되므로 캐시에서 이 필드만
     # 지우면 manifest 대조를 통째로 우회할 수 있다.
@@ -818,10 +826,10 @@ def evaluate(args: argparse.Namespace) -> dict:
         raise ZoneEvalError(
             "공식 캐시에 manifest_sha256이 없습니다. 캐시를 다시 만드세요."
         )
-    if cached_manifest_digest and cached_manifest_digest != artifacts["manifest"]:
+    if cached_manifest_digest and cached_manifest_digest != manifest_raw_digest:
         raise ZoneEvalError(
             "캐시를 만들 때 쓴 manifest와 지금 manifest가 다릅니다: "
-            f"{cached_manifest_digest} != {artifacts['manifest']}"
+            f"{cached_manifest_digest} != {manifest_raw_digest}"
         )
 
     per_video: List[dict] = []

@@ -1085,3 +1085,37 @@ def test_crlf_zone_file_passes_the_frozen_comparison(workspace):
         path.write_bytes(raw.replace(b"\n", b"\r\n"))
 
     assert run(workspace)["is_official"] is True
+
+
+def test_recorded_digests_match_the_committed_files(workspace):
+    """결과의 지문은 저장소 파일을 받아 그대로 대조할 수 있어야 한다.
+
+    원시 바이트로 적으면 Windows에서 실행한 결과가 CRLF 기준 값이 되어,
+    다른 사람이 커밋된 파일을 해시해도 맞지 않는다. 감사하라고 남기는 값이
+    실행한 기계에서만 유효해지는 셈이라 정규화해 적는다.
+    """
+    digests = run(workspace)["input_artifacts_sha256"]
+    for key, path in (
+        ("manifest", workspace["manifest"]), ("intervals", workspace["intervals"]),
+        ("review_plan", workspace["plan"]), ("track_identity", workspace["identity"]),
+        ("input_checksums", workspace["checksums"]),
+    ):
+        assert digests[key] == ezp.sha256_text(path), key
+
+
+def test_recorded_digests_survive_a_windows_checkout(workspace):
+    """CRLF로 받은 저장소에서 실행해도 같은 지문이 나와야 한다."""
+    baseline = run(workspace)["input_artifacts_sha256"]
+    for key in ("manifest", "intervals", "plan", "identity", "checksums"):
+        path = workspace[key]
+        raw = path.read_bytes()
+        assert b"\n" in raw, f"{key}에 줄바꿈이 없어 이 테스트는 아무것도 확인하지 못한다"
+        path.write_bytes(raw.replace(b"\n", b"\r\n"))
+
+    payload = json.loads(workspace["cache"].read_text(encoding="utf-8"))
+    payload["manifest_sha256"] = ezp.sha256_file(workspace["manifest"])
+    workspace["cache"].write_text(json.dumps(payload), encoding="utf-8")
+
+    after = run(workspace)["input_artifacts_sha256"]
+    for key in ("manifest", "intervals", "review_plan", "track_identity", "input_checksums"):
+        assert after[key] == baseline[key], key
