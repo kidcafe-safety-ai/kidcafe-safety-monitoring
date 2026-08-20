@@ -104,7 +104,7 @@
   "split": "diagnostic",
   "run_config": {
     "source": "cache",
-    "cache_dir": "/Users/jongmin/Desktop/kidcafe-safety-monitoring/outputs/phase4_tracker_comparison/arms/botsort_with_reid/cache",
+    "cache_dir": "outputs/phase4_tracker_comparison/arms/botsort_with_reid/cache",
     "config_path": "configs/fall_detection.json",
     "annotations_path": "data/annotations/phase4/fall_cause_annotations.csv",
     "recordings_manifest_path": "data/annotations/phase4/recordings_manifest.csv",

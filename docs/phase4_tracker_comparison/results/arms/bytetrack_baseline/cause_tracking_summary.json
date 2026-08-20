@@ -84,7 +84,7 @@
     "fall_cause_annotations_sha256": "318a16602bc194e796d5e89eb0ebf87a769eb31f8eae5c6a2d1aa9bf443d5f13",
     "event_attribution_review_sha256": "62c897de0046457f76cf1e51a2db73ad6f4c680a10fc237788ecf128a24869a6",
     "track_id_switches_sha256": "5989883541274f6aa2757c8cfcdc8a6b7079af573fccb98b9ee8d0756bd1f5fd",
-    "official_eval_sha256": "644a2a150ac22f61f6f0895001beb1a39e00621ecc0e071967e909ef28749f46"
+    "official_eval_sha256": "39f895bfad72b597f1b4afd7717f523f5697804981c8669c327069d57adf821d"
   },
   "tracker_comparison_arm": {
     "arm_id": "bytetrack_baseline",

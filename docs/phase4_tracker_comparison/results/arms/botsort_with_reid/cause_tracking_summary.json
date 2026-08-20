@@ -83,7 +83,7 @@
     "fall_cause_annotations_sha256": "318a16602bc194e796d5e89eb0ebf87a769eb31f8eae5c6a2d1aa9bf443d5f13",
     "event_attribution_review_sha256": "2acd93c6440d40171a12f0f996cb11bb7db13080366bee1e89a2110cd78651e1",
     "track_id_switches_sha256": "b80723d3144a5611648350c057f7bdb577f857f4a2e43db6360ea00d6fdfa72d",
-    "official_eval_sha256": "3ffbe9342ba643c26dc535ccf33a078bef3b85856c401faa355950095213635e"
+    "official_eval_sha256": "42515374e7c39fd2c5c21e01c0fcd57582a55ff96f5d257053a4bbd3aaeef07b"
   },
   "tracker_comparison_arm": {
     "arm_id": "botsort_with_reid",
