@@ -149,6 +149,60 @@ def test_include_reviewed_reopens_completed_segment(tmp_path):
     assert session.current["review_status"] == "reviewed"
 
 
+def test_select_review_video_ids_continues_with_pending_videos(tmp_path):
+    second_video = "P4_S01_A01_contact_fall_02_cam01"
+    third_video = "P4_S01_A01_contact_fall_03_cam01"
+    manifest_rows = [
+        _manifest_row(),
+        _manifest_row(
+            video_id=second_video,
+            video_path=f"data/{second_video}.mp4",
+            checksum_sha256="b" * 64,
+        ),
+        _manifest_row(
+            video_id=third_video,
+            video_path=f"data/{third_video}.mp4",
+            checksum_sha256="c" * 64,
+        ),
+    ]
+    segment_rows = [
+        _segment_row(actor_id="A01", review_status="reviewed"),
+        _segment_row(
+            video_id=second_video,
+            actor_id="A01",
+            review_status="reviewed",
+        ),
+        _segment_row(video_id=third_video),
+    ]
+    manifest_path, segments_path, _ = _write_inputs(
+        tmp_path,
+        manifest_rows=manifest_rows,
+        segment_rows=segment_rows,
+    )
+
+    selected = review_segments.select_review_video_ids(
+        manifest_path,
+        segments_path,
+        _manifest_row()["video_id"],
+        continue_after=True,
+    )
+
+    assert selected == [_manifest_row()["video_id"], third_video]
+
+
+def test_select_review_video_ids_without_continue_returns_start(tmp_path):
+    manifest_path, segments_path, _ = _write_inputs(tmp_path)
+
+    selected = review_segments.select_review_video_ids(
+        manifest_path,
+        segments_path,
+        _manifest_row()["video_id"],
+        continue_after=False,
+    )
+
+    assert selected == [_manifest_row()["video_id"]]
+
+
 def test_assign_and_clear_actor(tmp_path):
     session = _session(tmp_path)
 

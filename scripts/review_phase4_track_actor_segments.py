@@ -1,8 +1,9 @@
 """Phase 4 다중 인원 영상에서 Track segment를 A01/A02에 매핑한다.
 
-한 번의 실행은 영상 하나만 다룬다. `--cache-dir`의 캐시된 bbox·Track만 읽어
-프레임에 겹쳐 그린다 — YOLO·Pose를 다시 돌리지 않는다. 현재 검수 중인
-segment의 track_id는 빨간색, 나머지 track은 회색으로 그린다.
+기본적으로 한 번의 실행은 영상 하나만 다룬다. `--continue-after`를 지정하면
+선택한 영상부터 이후 미검수 영상까지 순서대로 연다. `--cache-dir`의 캐시된
+bbox·Track만 읽어 프레임에 겹쳐 그리며 YOLO·Pose를 다시 돌리지 않는다.
+현재 검수 중인 segment의 track_id는 빨간색, 나머지 track은 회색으로 그린다.
 
 ID switch는 이 도구에서 직접 표시하지 않는다. 같은 actor에게 배정된 두
 segment의 track_id가 다르면 switch가 일어난 것이므로,
@@ -64,7 +65,38 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="이미 reviewed인 segment도 다시 연다",
     )
+    parser.add_argument(
+        "--continue-after",
+        action="store_true",
+        help="지정한 video_id 이후의 미검수 영상도 순서대로 연다",
+    )
     return parser.parse_args()
+
+
+def select_review_video_ids(
+    manifest_path: Path,
+    segments_path: Path,
+    start_video_id: str,
+    *,
+    continue_after: bool,
+) -> list[str]:
+    manifest_rows = contract.load_recordings_manifest(manifest_path)
+    segment_rows = contract.load_track_actor_segments(segments_path, manifest_rows)
+    ordered_video_ids = list(dict.fromkeys(row["video_id"] for row in segment_rows))
+    if start_video_id not in ordered_video_ids:
+        raise ValueError(f"segment에 없는 video_id입니다: {start_video_id}")
+    if not continue_after:
+        return [start_video_id]
+
+    start_index = ordered_video_ids.index(start_video_id)
+    selected = [start_video_id]
+    for video_id in ordered_video_ids[start_index + 1:]:
+        if any(
+            row["video_id"] == video_id and row["review_status"] != "reviewed"
+            for row in segment_rows
+        ):
+            selected.append(video_id)
+    return selected
 
 
 class ReviewSession:
@@ -409,7 +441,8 @@ def run_interactive(session: ReviewSession) -> None:  # pragma: no cover
                         frame_number = session.default_start_frame()
                         playing = False
                     else:
-                        print("현재 영상의 마지막 segment입니다.")
+                        print("현재 영상의 모든 segment 검수가 완료됐습니다.")
+                        break
                 except ValueError as exc:
                     print(f"승인 실패: {exc}")
             elif lowered == ord("u"):
@@ -437,15 +470,25 @@ def run_interactive(session: ReviewSession) -> None:  # pragma: no cover
 def main() -> None:
     args = parse_args()
     try:
-        session = ReviewSession(
-            manifest_path=Path(args.manifest),
-            segments_path=Path(args.segments),
-            cache_dir=Path(args.cache_dir),
-            repo_root=Path(args.repo_root),
-            video_id=args.video_id,
-            include_reviewed=args.include_reviewed,
+        manifest_path = Path(args.manifest)
+        segments_path = Path(args.segments)
+        video_ids = select_review_video_ids(
+            manifest_path,
+            segments_path,
+            args.video_id,
+            continue_after=args.continue_after,
         )
-        run_interactive(session)
+        for index, video_id in enumerate(video_ids):
+            print(f"검수 영상 {index + 1}/{len(video_ids)}: {video_id}")
+            session = ReviewSession(
+                manifest_path=manifest_path,
+                segments_path=segments_path,
+                cache_dir=Path(args.cache_dir),
+                repo_root=Path(args.repo_root),
+                video_id=video_id,
+                include_reviewed=args.include_reviewed and index == 0,
+            )
+            run_interactive(session)
     except (OSError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
 
