@@ -18,7 +18,14 @@ import fall_signal_cache as cache  # noqa: E402
 
 
 class _DummyTracker:
-    def __init__(self, model_path=None, conf=None, fps=None, device=None):
+    def __init__(
+        self,
+        model_path=None,
+        conf=None,
+        tracker_config=None,
+        fps=None,
+        device=None,
+    ):
         self._device = "mps" if device == "auto" else device
 
 
@@ -366,3 +373,63 @@ class TestManifestWrittenOnlyAfterFullSuccess:
         # (같은 옛 설정으로 --force 없이 재시도해도) 이 상태를 조용히
         # 신뢰하면 안 된다.
         assert cache.read_manifest(cache_dir) is None
+
+
+class TestTrackerConfigMetadata:
+    def _args(self, tracker_config, config_sha=None, reid_sha=None):
+        return type(
+            "Args",
+            (),
+            {
+                "tracker_config": str(tracker_config),
+                "tracker_config_sha256": config_sha,
+                "reid_model_sha256": reid_sha,
+            },
+        )()
+
+    def test_records_explicit_botsort_without_reid(self, tmp_path):
+        config = tmp_path / "botsort.yaml"
+        config.write_text(
+            "tracker_type: botsort\nwith_reid: false\nmodel: auto\n",
+            encoding="utf-8",
+        )
+        config_sha = cache.sha256_file(config)
+
+        metadata = cfs._tracker_config_metadata(
+            self._args(config, config_sha=config_sha)
+        )
+
+        assert metadata["tracker_backend"] == "botsort"
+        assert metadata["with_reid"] is False
+        assert metadata["tracker_config_sha256"] == config_sha
+        assert metadata["reid_model_sha256"] is None
+
+    def test_reid_auto_is_rejected_before_tracker_initialization(self, tmp_path):
+        config = tmp_path / "botsort.yaml"
+        config.write_text(
+            "tracker_type: botsort\nwith_reid: true\nmodel: auto\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="auto/URL"):
+            cfs._tracker_config_metadata(
+                self._args(config, config_sha=cache.sha256_file(config))
+            )
+
+    def test_reid_model_sha_mismatch_is_rejected(self, tmp_path):
+        model = tmp_path / "reid.pt"
+        model.write_bytes(b"model")
+        config = tmp_path / "botsort.yaml"
+        config.write_text(
+            f"tracker_type: botsort\nwith_reid: true\nmodel: {model}\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="ReID 모델 SHA-256 불일치"):
+            cfs._tracker_config_metadata(
+                self._args(
+                    config,
+                    config_sha=cache.sha256_file(config),
+                    reid_sha="0" * 64,
+                )
+            )
