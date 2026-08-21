@@ -27,7 +27,7 @@ debounce·hysteresis 설정도 같으므로 Event 차이 역시 좌표 경로에
 
     python scripts/evaluate_zone_paths.py \\
         --cache outputs/phase4_zone_eval/foot_points.json \\
-        --manifest data/annotations/phase4/recordings_manifest.csv \\
+        --manifest data/annotations/phase4/zone_eval/recordings_manifest.csv \\
         --intervals data/annotations/phase4/zone_intervals.csv \\
         --review-plan data/annotations/phase4/zone_eval/recording_review_plan.csv \\
         --output outputs/phase4_zone_eval/zone_path_comparison.json

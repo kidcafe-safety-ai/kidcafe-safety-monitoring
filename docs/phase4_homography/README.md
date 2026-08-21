@@ -20,9 +20,15 @@
 | `_checksums.md` | 위 파일과 calibration config의 SHA-256 |
 
 runtime calibration config는 계약 위치인 `configs/camera_calibration/`에 있다.
-최종 촬영 manifest와 reviewed Zone ground truth는 각각
+Zone 평가용 촬영 manifest와 reviewed Zone ground truth는 각각
 `data/annotations/phase4/zone_eval/recordings_manifest.csv`,
 `data/annotations/phase4/zone_intervals.csv`에 있다.
+
+**manifest는 역할별로 나뉘어 있다.** `zone_eval/recordings_manifest.csv`가 Zone
+평가용 12개, `data/annotations/phase4/recordings_manifest.csv`가 낙상·Cause
+평가용이다. Zone 경로 비교에는 앞의 것을 쓴다. 두 파일은 같은 스키마를 쓰므로
+경로를 잘못 줘도 형식 오류가 나지 않는다. 대신 캐시에 적힌 `manifest_sha256`이
+지금 manifest와 달라 평가가 멈춘다. 그래도 애초에 경로를 맞추는 편이 낫다.
 
 Zone 경로 비교(`zone_path_comparison.json`)가 공식 실행에서 대조하는 동결 입력은
 `data/annotations/phase4/zone_eval/`에 있다. `track_identity.csv`는 다중 인원
@@ -66,13 +72,13 @@ python scripts/benchmark_homography_cost.py \
 
 # 채택 기준 2~5번 — 원본 영상이 있어야 한다(zone_eval_handover.md의 경로 생성 절차)
 python scripts/cache_zone_foot_points.py \
-  --manifest data/annotations/phase4/recordings_manifest.csv \
+  --manifest data/annotations/phase4/zone_eval/recordings_manifest.csv \
   --repo-root . \
   --output outputs/phase4_zone_eval/foot_points.json
 
 python scripts/evaluate_zone_paths.py \
   --cache outputs/phase4_zone_eval/foot_points.json \
-  --manifest data/annotations/phase4/recordings_manifest.csv \
+  --manifest data/annotations/phase4/zone_eval/recordings_manifest.csv \
   --intervals data/annotations/phase4/zone_intervals.csv \
   --review-plan data/annotations/phase4/zone_eval/recording_review_plan.csv \
   --output docs/phase4_homography/zone_path_comparison.json

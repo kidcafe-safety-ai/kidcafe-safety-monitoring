@@ -12,7 +12,7 @@
 
     python scripts/verify_track_identity.py \\
         --cache outputs/phase4_zone_eval/foot_points.json \\
-        --manifest data/annotations/phase4/recordings_manifest.csv \\
+        --manifest data/annotations/phase4/zone_eval/recordings_manifest.csv \\
         --repo-root . \\
         --video-id P4_S01_A01_zone_enter_exit_06_cam01 \\
         --frames 250,350,450 \\

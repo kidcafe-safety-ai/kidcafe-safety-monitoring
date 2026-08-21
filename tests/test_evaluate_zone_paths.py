@@ -1119,3 +1119,35 @@ def test_recorded_digests_survive_a_windows_checkout(workspace):
     after = run(workspace)["input_artifacts_sha256"]
     for key in ("manifest", "intervals", "review_plan", "track_identity", "input_checksums"):
         assert after[key] == baseline[key], key
+
+
+# --- manifest 경로 분리 (종민 재검수 후속) ---
+
+
+def test_documented_commands_use_the_zone_eval_manifest():
+    """Zone 평가 manifest와 낙상·Cause manifest가 분리돼 있다.
+
+    두 파일은 스키마가 같아서 경로를 잘못 줘도 형식 오류가 나지 않는다. 실행
+    예시가 낡은 경로를 가리키면 그대로 따라 한 사람이 다른 영상 집합으로
+    돌리게 된다. 캐시의 manifest 지문 대조에서 멈추긴 하지만, 예시부터 맞는
+    경로를 가리켜야 한다.
+    """
+    phase4 = ROOT / "data" / "annotations" / "phase4"
+    zone_manifest = phase4 / "zone_eval" / "recordings_manifest.csv"
+    fall_manifest = phase4 / "recordings_manifest.csv"
+    assert zone_manifest.is_file(), "Zone 평가용 manifest가 없습니다"
+    assert fall_manifest.is_file(), "낙상·Cause manifest가 없습니다"
+    assert zone_manifest.read_bytes() != fall_manifest.read_bytes(), (
+        "두 manifest가 같다면 이 테스트의 전제를 다시 확인한다"
+    )
+
+    stale = "--manifest data/annotations/phase4/recordings_manifest.csv"
+    for name in (
+        "scripts/evaluate_zone_paths.py",
+        "scripts/cache_zone_foot_points.py",
+        "scripts/verify_track_identity.py",
+        "docs/phase4_homography/README.md",
+    ):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert stale not in text, f"{name}이 낡은 manifest 경로를 가리킵니다"
+        assert "zone_eval/recordings_manifest.csv" in text, f"{name}에 Zone manifest 경로가 없습니다"

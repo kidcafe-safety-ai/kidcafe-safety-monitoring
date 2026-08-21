@@ -14,7 +14,7 @@
 사용 예:
 
     python scripts/cache_zone_foot_points.py \\
-        --manifest data/annotations/phase4/recordings_manifest.csv \\
+        --manifest data/annotations/phase4/zone_eval/recordings_manifest.csv \\
         --repo-root . \\
         --output outputs/phase4_zone_eval/foot_points.json
 """
