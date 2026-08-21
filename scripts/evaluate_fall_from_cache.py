@@ -37,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import fall_signal_cache as cache  # noqa: E402
 import phase4_recording_contract as recording_contract  # noqa: E402
 from scripts import fall_evaluation_protocol as evaluation_protocol  # noqa: E402
+from generate_phase4_track_actor_segments import verify_cache_integrity  # noqa: E402
 from evaluate_fall import (  # noqa: E402
     _AnnotationRow,
     _VideoResult,
@@ -208,6 +209,18 @@ def parse_args() -> argparse.Namespace:
         "--fall-pose-normal-gate-enabled",
         action="store_true",
         help="안정적인 직립 Pose에서는 보조 모델 detection을 사용하지 않는다.",
+    )
+    parser.add_argument(
+        "--selected-profile",
+        help="공식 결과에 기록하고 cache·dataset revision을 검증할 selected profile",
+    )
+    parser.add_argument(
+        "--cache-source-manifest",
+        help="cache 생성 당시 recordings manifest (현재 revision과 다를 때만 사용)",
+    )
+    parser.add_argument(
+        "--cache-source-annotations",
+        help="cache 생성 당시 annotations (현재 revision과 다를 때만 사용)",
     )
     parser.add_argument("--output", default="outputs/fall_eval/from_cache_summary.json")
     parser.add_argument("--include-unreviewed", action="store_true")
@@ -397,7 +410,10 @@ def _evaluate_row_from_cache(
 
 
 def _build_cache_protocol_metadata(
-    args, annotation_schema_version: str, manifest: dict
+    args,
+    annotation_schema_version: str,
+    manifest: dict,
+    dataset_provenance: dict | None = None,
 ) -> dict:
     tracker_meta = manifest["tracker"]
     auxiliary_meta = manifest["auxiliary_model"]
@@ -412,12 +428,65 @@ def _build_cache_protocol_metadata(
             "auxiliary_model": auxiliary_meta["resolved_device"],
             "evaluation": "cache_replay",
         },
-        dataset_provenance=manifest.get("dataset"),
+        dataset_provenance=dataset_provenance or manifest.get("dataset"),
     )
+
+
+def _validate_official_cache_dataset(
+    *,
+    args,
+    manifest: dict,
+    expected_dataset_provenance: dict | None,
+    evaluated_video_ids: list[str],
+) -> str:
+    """현재 dataset 또는 검증된 이전 revision의 cache만 허용한다."""
+    try:
+        evaluation_protocol.validate_official_cache_manifest(
+            manifest,
+            expected_dataset_provenance=expected_dataset_provenance,
+        )
+        return "exact_dataset_revision"
+    except ValueError:
+        if not (
+            args.recordings_manifest
+            and args.selected_profile
+            and args.cache_source_manifest
+            and args.cache_source_annotations
+        ):
+            raise
+
+    current_manifest_rows = recording_contract.load_recordings_manifest(
+        args.recordings_manifest
+    )
+    current_annotation_rows = recording_contract.load_fall_cause_annotations(
+        args.annotations, current_manifest_rows
+    )
+    verify_cache_integrity(
+        cache_dir=Path(args.cache_dir),
+        manifest_path=Path(args.recordings_manifest),
+        annotations_path=Path(args.annotations),
+        selected_profile_path=Path(args.selected_profile),
+        manifest_by_video={row["video_id"]: row for row in current_manifest_rows},
+        annotation_by_video={row["video_id"]: row for row in current_annotation_rows},
+        video_ids=evaluated_video_ids,
+        cache_source_manifest_path=Path(args.cache_source_manifest),
+        cache_source_annotations_path=Path(args.cache_source_annotations),
+    )
+    evaluation_protocol.validate_official_cache_manifest(manifest)
+    return "history_snapshot_matching_evaluated_rows_v1"
 
 
 def main() -> None:
     args = parse_args()
+    selected_execution_profile_sha = None
+    if args.selected_profile:
+        selected_profile_path = Path(args.selected_profile)
+        if not selected_profile_path.is_file():
+            raise SystemExit(f"selected profile이 없습니다: {selected_profile_path}")
+        selected_profile = json.loads(selected_profile_path.read_text(encoding="utf-8"))
+        selected_execution_profile_sha = (
+            recording_contract.selected_execution_profile_sha256(selected_profile)
+        )
 
     if args.timely_window_sec <= 0:
         raise SystemExit(f"--timely-window-sec는 0보다 커야 합니다: {args.timely_window_sec}")
@@ -477,9 +546,10 @@ def main() -> None:
             "만든 캐시 디렉터리인지 확인하세요(holdout 가드를 다시 적용하려면 "
             "manifest의 split/videos_dir이 필요합니다)."
         )
+    expected_dataset_provenance = None
+    cache_dataset_revision_verification = None
     if annotation_schema_version is not None:
         try:
-            expected_dataset_provenance = None
             if args.recordings_manifest:
                 expected_dataset_provenance = (
                     evaluation_protocol.build_dataset_provenance(
@@ -490,9 +560,11 @@ def main() -> None:
                         video_count=len(rows),
                     )
                 )
-            evaluation_protocol.validate_official_cache_manifest(
-                manifest,
+            cache_dataset_revision_verification = _validate_official_cache_dataset(
+                args=args,
+                manifest=manifest,
                 expected_dataset_provenance=expected_dataset_provenance,
+                evaluated_video_ids=[row.video_id for row in rows],
             )
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
@@ -510,7 +582,10 @@ def main() -> None:
     if annotation_schema_version is not None:
         try:
             protocol_metadata = _build_cache_protocol_metadata(
-                args, annotation_schema_version, manifest
+                args,
+                annotation_schema_version,
+                manifest,
+                dataset_provenance=expected_dataset_provenance,
             )
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
@@ -555,6 +630,17 @@ def main() -> None:
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
     summary.update(protocol_metadata)
+    summary["cache_manifest_sha256"] = recording_contract.sha256_file(
+        cache_dir / "manifest.json"
+    )
+    if cache_dataset_revision_verification:
+        summary["cache_dataset_revision_verification"] = (
+            cache_dataset_revision_verification
+        )
+    if selected_execution_profile_sha:
+        summary["selected_execution_profile_sha256"] = (
+            selected_execution_profile_sha
+        )
     summary["split"] = args.split or cache_dir.name
     summary["run_config"] = {
         "source": "cache",

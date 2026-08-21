@@ -793,6 +793,10 @@ event_attribution_review.csv
 run_id,video_id,start_frame,end_frame,track_id,actor_id,review_status,notes
 ```
 
+- 배경 인원·오검출 등 실제 actor가 아닌 Track은 `actor_id`를 비우고 `notes`에
+  `reviewed non-actor track`을 남겨 명시적으로 판정한다. `review_status=reviewed`
+  행은 `actor_id` 또는 이 non-actor 표기 중 하나가 반드시 있어야 한다.
+
 `track_id_switches.csv`:
 
 ```text
@@ -814,8 +818,13 @@ id_switch_relation,event_error_type,review_status,notes
 - `none`: Event 오류가 없거나 ID switch와 관련이 없음
 - `associated`: 관련 구간에 ID switch와 Event 오류가 모두 있지만 인과 미확정
 - `caused`: alias 연결 재생 또는 state diagnostic으로 Event 오류가 해소됨
-- `event_error_type`: `none | missed_fall | late_fall | duplicate_fall |
-  victim_mismatch | missed_cause | false_attribution`
+- `event_error_type`: `none | true_negative | false_alarm | missed_fall |
+  late_fall | duplicate_fall | victim_mismatch | missed_cause |
+  false_attribution`
+- no-fall 영상에 Event가 없으면 영상 coverage를 보존하는 `true_negative` 행을
+  만들고 Event·Track·Cause 필드를 비운다.
+- no-fall 영상에 Event가 있으면 `false_alarm`으로 기록한다. 이 행은 Cause
+  지표 분모가 아니라 FAR와 Event 오류 집계에 사용한다.
 - missed fall처럼 Event가 없으면 Event·Track·Cause 필드를 비워둘 수 있다.
 
 ### Homography 평가
