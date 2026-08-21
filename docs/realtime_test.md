@@ -1300,10 +1300,16 @@ Phase 3 종료 전 최종 확인으로, 종료 문서 정리 직후 병합 전 �
 | Live Frame `200`·`204`·stale | `test_live_frame_api.py` 외 2개 | 33 passed |
 | RTSP 입력 | `test_input_sources.py` | 35 passed, 2 skipped |
 | Zone 판정·polygon 검증 | `test_geofencing.py` 외 2개 | 71 passed |
-| Phase 4 촬영 계약 | `test_phase4_recording_contract.py` 외 1개 | 51 passed |
+| Phase 4 촬영 계약 | `test_phase4_recording_contract.py` 외 1개 | 93 passed |
 | Backend 설정 동결 | `test_phase4_backend_freeze.py` | 66 passed |
 
-**Backend 범위 합계: 461 passed, 2 skipped.**
+**Backend 범위 합계: 503 passed, 2 skipped.**
+
+촬영 계약 항목은 8월 20일 기록 시점에 51건이었다. 이후 `main`이 manifest를
+역할별로 나누면서 `test_phase4_recording_contract.py`에 검증이 추가돼 93건이
+됐다. 최신 `main`을 병합한 뒤 다시 돌린 값이다. 동결 대상(`src/api`, `src/input`,
+`src/events`, `src/integrations`, `src/main.py`, `requirements.txt`,
+`docker-compose.yml`)은 그 사이 변경이 없어 동결값 자체는 그대로다.
 
 ### 실행 명령어
 
@@ -1327,13 +1333,14 @@ flake8 src tests
 |---|---|
 | `flake8 src tests` | 위반 없음 |
 | `git diff --check` | 공백 오류 없음 |
-| `pytest -q` (개발 컨테이너) | 1028 passed, 2 skipped, 25 collection errors (torch 미설치) |
+| `pytest -q` (개발 컨테이너) | 1140 passed, 2 skipped, 26 collection errors (torch 25 / ultralytics 1) |
 | `pytest -q` (GitHub Actions) | **통과** |
 
-**개발 컨테이너의 25 errors는 코드 결함이 아니라 환경 제약이다.** 이 컨테이너에
-torch가 없어 25개 모듈이 수집 단계에서 걸린다. CI는 `requirements.txt`를 설치해
-torch를 포함한 전체 `pytest -q`를 돌리고 통과한다(PR #62의 `Backend lint and
-tests`). 따라서 아래 세 모듈은 **CI 결과로 확인**한다.
+**개발 컨테이너의 26 errors는 코드 결함이 아니라 환경 제약이다.** 이 컨테이너에
+torch가 없어 25개 모듈이, ultralytics가 없어 1개 모듈이 수집 단계에서 걸린다.
+CI는 `requirements.txt`를 설치해 두 패키지를 포함한 전체 `pytest -q`를 돌리고
+통과한다(PR #62의 `Backend lint and tests`). 따라서 아래 세 모듈은 **CI 결과로
+확인**한다.
 
 - `test_main_rtsp_source.py` — RTSP source-time 계약 (계획서 19절 요구)
 - `test_main_dispatcher_integration.py`
