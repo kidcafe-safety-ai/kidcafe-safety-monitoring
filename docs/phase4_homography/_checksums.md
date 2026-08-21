@@ -74,3 +74,4 @@
 | `holdout_loo-all.json` | `6de012732d58c41ba271e26c263e86f0c3fc0fcc3923a324712b66312927068b` |
 | `holdout_loo-quad.json` | `be08104052be2a8186ebad02129d86f6e231fff87b94b4fca631bf21a70d1288` |
 | `zone_intervals_draft.csv` | `ca1d17f9c1280662f2e4ab60e142c408a8fc9e0c0bb1579993294e1dfb343552` |
+| `zone_path_comparison.json` | `7eb73bf4aeb6a71e24c88d8fbe627ee80e7b93eb67372c118239afa2f4394770` |
