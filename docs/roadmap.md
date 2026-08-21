@@ -504,8 +504,9 @@ Phase 3 Open·계약 문서 PR
 
 경량 temporal classifier는 E1 이후에도 같은 오탐이 실제 촬영에서 재현될 때만
 검토한다. BoT-SORT는 ID switch가 실제 missed·duplicate·cause 오류를 반복해서
-유발할 때만 비교하며, StrongSORT·ReID는 그 이후 후속 범위다. Cross-camera
-ReID와 YOLO 모델 비교는 Phase 4 필수 범위가 아니다.
+유발하거나 Cause top-1이 목표에 미달할 때 동일 영상에서 비교한다. ByteTrack,
+appearance ReID를 끈 BoT-SORT, ReID를 켠 BoT-SORT를 함께 평가해 ReID 효과를
+분리한다. Cross-camera ReID와 YOLO 모델 비교는 Phase 4 필수 범위가 아니다.
 
 ### 일정 기준
 
@@ -610,10 +611,19 @@ RTSP / IP 카메라 연결은 네트워크, 코덱, 지연시간, 끊김 문제�
 
 ### Tracker / ReID 범위 조절
 
-ByteTrack과 기존 handoff를 기본으로 유지한다. 실제 촬영에서 ID switch가 Event
-오류를 유발한 경우에만 BoT-SORT를 비교한다. StrongSORT·ReID는 BoT-SORT
-이후에도 오류가 남을 때 후속 검토하며, cross-camera ReID는 Phase 4 범위에서
-제외한다.
+ByteTrack과 기존 handoff를 비교 기준선으로 유지한다. 실제 촬영에서 ID switch가
+Event 오류를 반복 유발하거나 Cause top-1이 목표에 미달하면 BoT-SORT를
+비교한다. 동일 영상에서 ReID OFF·ON을 모두 평가해 appearance ReID의 효과를
+분리하며, cross-camera ReID는 Phase 4 범위에서 제외한다.
+
+이 조건은 공식 `phase4_fall_eval_v1` 점수 산출 규칙의 변경이 아니라 후속
+Tracker 진단 트리거다. 트리거 정책은 `phase4_tracker_comparison_policy_v1`로
+별도 버전 관리한다.
+
+Phase 4 ReID의 목적은 detector bbox가 잠깐 끊기거나 사람끼리 가린 뒤 다시
+검출됐을 때 기존 Track ID로 재연결해 victim·Cause attribution과 낙상 candidate
+state의 연속성을 높이는 것이다. detection이 없는 프레임의 bbox 보간, 장기
+퇴장 후 영구 ID 유지, 카메라 간 동일인 식별은 별도 문제로 구분한다.
 
 ### 시연 안정성 우선
 

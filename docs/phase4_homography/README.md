@@ -21,7 +21,7 @@
 
 runtime calibration config는 계약 위치인 `configs/camera_calibration/`에 있다.
 최종 촬영 manifest와 reviewed Zone ground truth는 각각
-`data/annotations/phase4/recordings_manifest.csv`,
+`data/annotations/phase4/zone_eval/recordings_manifest.csv`,
 `data/annotations/phase4/zone_intervals.csv`에 있다.
 
 Zone 경로 비교(`zone_path_comparison.json`)가 공식 실행에서 대조하는 동결 입력은

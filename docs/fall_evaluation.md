@@ -851,6 +851,8 @@ far_denominator_rule=processed_no_fall_frames_over_fps_v1
 
 - Cause는 raw Track ID가 아닌 reviewed actor mapping으로 채점한다.
 - reviewed ground truth에 매칭된 대표 Event만 Cause 지표 분모에 포함한다.
+- victim actor와 Cause actor는 독립적으로 채점한다. 대표 Event의 victim이
+  틀렸더라도 Cause 예측이 있으면 Cause top-1 분모에서 제외하지 않는다.
 - 후보 없음의 `cause=null`, 후보 있음의 actor top-1을 각각 측정한다.
 - 분모가 0인 지표는 `null/not_evaluable`이며 목표 통과로 해석하지 않는다.
 - ID switch 자체가 아니라 missed·late·duplicate·victim·cause 오류를 실제로
@@ -861,7 +863,22 @@ far_denominator_rule=processed_no_fall_frames_over_fps_v1
 - alias 연결 재생 또는 state diagnostic으로 오류가 해소되는 경우에만
   `caused`로 기록한다.
 - Event 오류가 없으면 같은 영상에 ID switch가 있어도 `none`으로 기록한다.
-- Tracker 비교는 `caused` 오류가 반복 재현될 때만 진행한다.
+- Tracker 비교는 `caused` 오류가 반복 재현되거나 Cause top-1이 목표에
+  미달할 때 진행한다. 동일 영상에서 ByteTrack, appearance ReID를 끈
+  BoT-SORT, ReID를 켠 BoT-SORT를 함께 비교해 tracker 변경 효과와 ReID
+  효과를 분리한다.
+- 위 조건은 공식 낙상 점수의 계산·매칭·분모를 변경하지 않는 후속 진단
+  의사결정이다. 공식 점수는 계속 `phase4_fall_eval_v1`로 산출하고, Tracker
+  비교 트리거는 별도 `phase4_tracker_comparison_policy_v1`로 기록한다.
+- ReID의 목표는 짧은 detector 누락이나 사람 간 가림 뒤 detection이 다시
+  나타났을 때 외형 특징으로 기존 actor의 Track ID에 재연결하는 것이다.
+  detection이 없는 프레임에 bbox를 생성하거나 사람을 계속 관측하는 기능으로
+  해석하지 않는다.
+- 같은 ID 재연결로 victim·Cause actor 단절, 중복 Event, 낙상 candidate state
+  초기화를 줄이는지 측정한다. 장기 퇴장 후 재입장과 cross-camera identity는
+  이번 비교 범위에서 제외한다.
+- no-fall 영상의 `true_negative`·`false_alarm` 행은 영상 coverage와 FAR를 위한
+  기록이며 Cause 지표 분모에는 포함하지 않는다.
 
 ```text
 cause_null_specificity =
@@ -870,7 +887,11 @@ cause_null_specificity =
 
 cause_top1_accuracy =
   correct_top1_count
-  / reviewed matched Event 중 cause_candidate_exists=true인 건수
+  / 고정된 Cause 후보 영상 중 cause_candidate_exists=true인 전체 건수
+
+timely 대표 Event가 없는 후보 영상은 top-1 정답으로 세지 않으며, `missed_fall`·
+`late_fall`을 별도 집계해 분모에 포함한다. Tracker arm 간 비교에서는 같은
+영상 집합과 같은 분모를 유지한다.
 
 false_attribution_rate =
   false_attribution_count
@@ -1315,6 +1336,11 @@ Development 중복 Event 0건과 S7-8 FAR 1.75/min 이하 조건은 통과하지
 ### 14.13 A03 목표 환경 최종 평가
 
 라벨 정정 후 A03 actor-disjoint test 18개를 `phase4_fall_eval_v1`로 평가했다.
+정정 대상은 `P4_S01_A03_kneel_01_cam01`이며, 통제된 전방 무릎 낙상 재연으로
+확인되어 `P4_S01_A03_fall_forward_knees_04_cam01`로 재분류했다. 원본 영상의
+바이트와 SHA-256은 동일하고 계약 파일명·scenario·label·낙상 frame annotation만
+갱신했다. 정정 전 manifest와 annotation은
+`data/annotations/phase4/history/a03_pre_label_correction/`에 보존한다.
 
 | 지표 | 결과 |
 | --- | ---: |

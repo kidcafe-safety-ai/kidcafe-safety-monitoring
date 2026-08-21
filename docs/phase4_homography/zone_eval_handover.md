@@ -77,7 +77,7 @@ truth를 확정했다. 원본과 calibration 대응은 `verify_clip_match.py`로
 
 최종 artifact:
 
-- `data/annotations/phase4/recordings_manifest.csv`
+- `data/annotations/phase4/zone_eval/recordings_manifest.csv`
 - `data/annotations/phase4/zone_intervals.csv`
 - `data/annotations/phase4/zone_eval/recording_review_plan.csv`
 
@@ -158,7 +158,7 @@ ln -s ../IMG_7388.MOV data/videos/phase4_zone/contracts/P4_S01_A02_zone_enter_ex
 
 ```bash
 python scripts/validate_phase4_zone_intervals.py \
-  --manifest data/annotations/phase4/recordings_manifest.csv \
+  --manifest data/annotations/phase4/zone_eval/recordings_manifest.csv \
   --intervals data/annotations/phase4/zone_intervals.csv \
   --repo-root . --verify-files --verify-checksums --require-reviewed
 ```
