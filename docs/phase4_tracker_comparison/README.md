@@ -282,6 +282,12 @@ OFF보다 ID switch를 더 줄이지 못했고 Cause top-1도 3/8로 낮아졌�
 해석한다. 향후 RTSP 입력에 buffer를 적용할 때는 카메라 nominal FPS가 아니라
 실제 tracker update FPS와 목표 보존 시간을 기준으로 별도 검증해야 한다.
 
+현재 timing 경로는 영상 decode·tracker·auxiliary model의 cold-start 포함 처리량을
+측정하며 selected E1의 interval 3·Pose NORMAL gate 실행 cadence를 재현하지 않는다.
+따라서 `fps_within_limit`은 `diagnostic_checks`에만 기록하고 최종 `passed` gate에는
+포함하지 않는다. Production FPS를 채택 조건으로 다시 사용하려면 selected E1
+`FallPipeline` 경로에서 세 arm을 같은 조건으로 별도 benchmark해야 한다.
+
 ## 결과 artifact
 
 Git에는 원본 영상, 모델, frame cache와 실행 로그를 포함하지 않는다. 재검증에
@@ -298,6 +304,10 @@ Track→Actor 검수, ID switch 검수, attribution 검수와 최종 summary를 
 `SHA256SUMS`로 패키지 무결성을 확인할 수 있다. 저장본의 `cache_dir`만 개인 로컬
 절대 경로가 남지 않도록 프로젝트 상대 경로로 정규화했으며, 연결된 provenance
 SHA-256도 저장본 기준으로 다시 계산했다. 평가 수치와 검수 내용은 변경하지 않았다.
+공식 평가·다중 인원 Event·Cause-null Event·timing report는 run manifest의
+SHA-256과 다시 대조하고, 실행한 Ultralytics 버전도 동결값 `8.4.56`과 일치해야
+summary를 생성할 수 있다. Track→Actor CSV는 사람 검수로 변경되는 artifact라
+최초 실행 hash의 immutable 검증 대상에서는 제외한다.
 
 ```bash
 shasum -a 256 -c docs/phase4_tracker_comparison/results/SHA256SUMS

@@ -4,6 +4,7 @@
   "selected_execution_profile_sha256": "042372cd0ed6749a69e19421a60b408eecb944bd7ecc4eee3838181d7287bf5f",
   "evaluator_git_commit": "7a22844fd1f9aa035fdb6d0c05cd2aa82fab1066",
   "evaluator_git_dirty": false,
+  "ultralytics_version": "8.4.56",
   "arm": {
     "arm_id": "bytetrack_baseline",
     "arm_config_sha256": "3ee08b24e3f2b622de46e594d637e6295eb9d81df13a2e677708be78a457d56e",
@@ -25,7 +26,7 @@
     "timing_report": "outputs/phase4_tracker_buffer60_comparison/arms/bytetrack_baseline/cache/timing_report.json"
   },
   "artifact_sha256": {
-    "official_eval": "f06c6f80ff0856a72729f9e2fab1690d56995782fc4f061f1748d3250a129cd0",
+    "official_eval": "57462529fc0106fb9623538783233df17d7d62779ee7ea443e726300f3090f32",
     "multiperson_events": "203f54907be7235cd3accd18ee6f6ecfad26b2107c02aaf8d183a37cb95a83c7",
     "cause_null_events": "cccd7fceae5572958ea070869c15d0bc0c2251e27d414c6899ae8a3b4616c543",
     "track_actor_segments": "cfa9f5620f0445d95e8f4ff0d56fef99f1a86e3845d3c305edf2dbdcb3e96e03",

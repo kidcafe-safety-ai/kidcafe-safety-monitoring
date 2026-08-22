@@ -4,6 +4,7 @@
   "selected_execution_profile_sha256": "042372cd0ed6749a69e19421a60b408eecb944bd7ecc4eee3838181d7287bf5f",
   "evaluator_git_commit": "7a22844fd1f9aa035fdb6d0c05cd2aa82fab1066",
   "evaluator_git_dirty": false,
+  "ultralytics_version": "8.4.56",
   "arm": {
     "arm_id": "botsort_with_reid",
     "arm_config_sha256": "88e47b1eb67d1b1363ea59ccf6356076401b3b5628ac34c41b11c476fe63516f",
@@ -25,7 +26,7 @@
     "timing_report": "outputs/phase4_tracker_buffer60_comparison/arms/botsort_with_reid/cache/timing_report.json"
   },
   "artifact_sha256": {
-    "official_eval": "c7990467d7f7286a28581e458398a63b62f870f6a6bbca036e8068da5cc3f5c2",
+    "official_eval": "25d637c3e061eb1012fe3e3db9ca3ed701b36451d780e776685b29135b8e07fa",
     "multiperson_events": "3e63c65f96b3f1bf860c6af177eac9a14584a98f6c3d01cdf5d8d0e40bf5d044",
     "cause_null_events": "b514c7300521dd7efcbedb82e12e4a1551eb15eb41e1d3a02c9914359c98548d",
     "track_actor_segments": "4721a4c16f124e942394e0ebe460dd9117c9888cf34b31dedf485168ee853600",
