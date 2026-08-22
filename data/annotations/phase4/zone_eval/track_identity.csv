@@ -1,0 +1,2 @@
+video_id,ground_truth_actor,track_id,verification_method,reviewer_id,verified_at,notes
+P4_S01_A01_zone_enter_exit_06_cam01,A01,2,bbox_overlay_visual,202178038,2026-08-18,scripts/verify_track_identity.py frames=210|300|400|500|560; T2=파란 상의 A01 / T3=회색 상의 A02

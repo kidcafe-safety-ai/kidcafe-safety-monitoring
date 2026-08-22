@@ -1266,3 +1266,114 @@ Phase 3 종료 전 최종 확인으로, 종료 문서 정리 직후 병합 전 �
 - 낙상 오탐(FAR) 개선, 실제 접촉 원인 정확도, Subject 9-10 holdout,
   외부 데이터 재학습은 이번 게이트에 포함하지 않고 Phase 4로 이관한다
 - 위 결과를 근거로 Phase 3 종료 조건을 충족한 것으로 판정한다
+
+---
+
+## 2026-08-20 — Phase 4 B Backend·DB·RTSP 최종 회귀
+
+계획서 16절 8월 19~20일 B 항목이다. 8월 20일 기능 개발 종료 전에 Backend
+계약이 실제로 지켜지는지 확인하고, 설정 동결(`docs/phase4_backend_freeze.md`)의
+근거를 남긴다.
+
+### 테스트 정보
+
+| 항목 | 값 |
+|---|---|
+| 기준 커밋 | `a3b693c` (main, PR #49 머지 시점) |
+| 실행 브랜치 | `docs/phase4-backend-freeze` (`src/` 변경 없음, main과 동일) |
+| 범위 | Zone API, SQLite, Event 저장·전송, Live Frame, RTSP 입력, Zone 판정, 촬영 계약, 설정 동결 |
+| 제외 | 낙상 모델·임계값(A), Frontend(C), Homography 채택 판정(미채택 확정) |
+
+### 계약 항목별 결과
+
+계획서 10절 B 체크리스트와 19절 품질 게이트를 항목별로 실행했다.
+
+| 계약 항목 | 테스트 | 결과 |
+|---|---|---|
+| Zone `GET`·`PUT`, 409·422·500, 원자적 저장·파일 권한 | `test_zones_api.py` | 69 passed |
+| `GET /events` 기간 필터 | `test_events_period_filter.py` | 25 passed |
+| SQLite 동시 쓰기 | `test_sqlite_concurrency.py` | 1 passed |
+| DB 마이그레이션·`cause_json` round-trip | `test_database_migration.py` | 6 passed |
+| Event 저장·writer | `test_event_writer.py`, `test_events.py` | 26 passed |
+| API 기본·CORS·오류 응답 | `test_api_basic.py`, `test_api_stability.py` | 41 passed |
+| API 장애·queue·failed Event | `test_async_event_dispatcher.py`, `test_event_api_client.py` | 37 passed |
+| Live Frame `200`·`204`·stale | `test_live_frame_api.py` 외 2개 | 33 passed |
+| RTSP 입력 | `test_input_sources.py` | 35 passed, 2 skipped |
+| Zone 판정·polygon 검증 | `test_geofencing.py` 외 2개 | 71 passed |
+| Phase 4 촬영 계약 | `test_phase4_recording_contract.py` 외 1개 | 93 passed |
+| Backend 설정 동결 | `test_phase4_backend_freeze.py` | 66 passed |
+
+**Backend 범위 합계: 503 passed, 2 skipped.**
+
+촬영 계약 항목은 8월 20일 기록 시점에 51건이었다. 이후 `main`이 manifest를
+역할별로 나누면서 `test_phase4_recording_contract.py`에 검증이 추가돼 93건이
+됐다. 최신 `main`을 병합한 뒤 다시 돌린 값이다. 동결 대상(`src/api`, `src/input`,
+`src/events`, `src/integrations`, `src/main.py`, `requirements.txt`,
+`docker-compose.yml`)은 그 사이 변경이 없어 동결값 자체는 그대로다.
+
+### 실행 명령어
+
+```bash
+python -m pytest -q \
+  tests/test_zones_api.py tests/test_events_period_filter.py tests/test_events.py \
+  tests/test_event_writer.py tests/test_database_migration.py tests/test_sqlite_concurrency.py \
+  tests/test_api_basic.py tests/test_api_stability.py \
+  tests/test_async_event_dispatcher.py tests/test_event_api_client.py \
+  tests/test_live_frame_api.py tests/test_live_frame_client.py tests/test_live_frame_dispatcher.py \
+  tests/test_input_sources.py tests/test_geofencing.py tests/test_polygon_rules.py \
+  tests/test_floor_zone.py tests/test_phase4_recording_contract.py \
+  tests/test_phase4_contract_fixtures.py tests/test_phase4_backend_freeze.py
+
+flake8 src tests
+```
+
+### 전체 회귀
+
+| 항목 | 결과 |
+|---|---|
+| `flake8 src tests` | 위반 없음 |
+| `git diff --check` | 공백 오류 없음 |
+| `pytest -q` (개발 컨테이너) | 1140 passed, 2 skipped, 26 collection errors (torch 25 / ultralytics 1) |
+| `pytest -q` (GitHub Actions) | **통과** |
+
+**개발 컨테이너의 26 errors는 코드 결함이 아니라 환경 제약이다.** 이 컨테이너에
+torch가 없어 25개 모듈이, ultralytics가 없어 1개 모듈이 수집 단계에서 걸린다.
+CI는 `requirements.txt`를 설치해 두 패키지를 포함한 전체 `pytest -q`를 돌리고
+통과한다(PR #62의 `Backend lint and tests`). 따라서 아래 세 모듈은 **CI 결과로
+확인**한다.
+
+- `test_main_rtsp_source.py` — RTSP source-time 계약 (계획서 19절 요구)
+- `test_main_dispatcher_integration.py`
+- `test_main_metrics.py`
+
+skip 2건은 `tests/test_input_sources.py`의 테스트 영상 의존 항목이다. 촬영
+원본을 Git에 넣지 않으므로 이 환경에서는 건너뛴다.
+
+### 확인한 것
+
+- Zone 저장 경로가 임시 파일 → `fsync` → `chmod` → `os.replace` 순서를
+  유지하고, 권한을 기존 파일에서 승계한다. `mkstemp()`의 `0600`이 그대로
+  남으면 Docker Backend가 쓴 파일을 host Vision AI가 읽지 못한다.
+- `GET /zones` 실패가 빈 배열이 아니라 `500`으로 나간다. 정상 빈 Zone과 장애를
+  구분한다.
+- API가 죽어도 추론이 계속되고 실패 Event가 `outputs/api_failed_events.jsonl`에
+  보존된다.
+- Live Frame이 stale이면 빈 이미지가 아니라 `204`를 준다.
+- 설정 동결값이 코드와 일치한다. **코드** 상수를 변조하면 테스트가 실패하는
+  것을 확인했다.
+- 처음에는 **문서** 값만 바꾸면 통과했다. 테스트가 상수 이름이 문서에 있는지만
+  보고 값은 읽지 않았기 때문이다(PR #62 리뷰에서 지적). 문서 표를 파싱해 값을
+  직접 대조하도록 고쳤고, 문서 값만 바꾼 경우에도 실패하는 것을 다시 확인했다.
+- 12절 실행 명령이 실제 코드 경로와 맞는지도 테스트로 고정했다. RTSP 인증정보
+  조립, sub stream, Zone runtime 초기화 순서, 낙상 opt-in 네 가지다.
+
+### 판정
+
+**Backend·DB·RTSP 범위는 8월 20일 기능 개발 종료 조건을 충족한다.**
+
+남은 항목은 이 회귀의 범위가 아니다.
+
+- **실제 IP 카메라 30분 이상 장시간 실행** — 카메라 실물이 필요해 별도 진행.
+  Phase 4 기록이 아직 없다. RTSP는 자동 재연결이 없으므로(동결 문서 7절)
+  중간에 끊기면 수동 재실행해야 한다는 점을 감안해 계획한다.
+- **A/C와 실제 촬영 영상 E2E** — 공동 작업.

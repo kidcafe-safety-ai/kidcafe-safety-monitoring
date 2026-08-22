@@ -1,0 +1,1229 @@
+{
+  "criteria": {
+    "2_zone_accuracy_improved": {
+      "accuracy_gain_percentage_point": 0.0,
+      "homography_accuracy": 0.916955,
+      "image_accuracy": 0.916955,
+      "passes": false
+    },
+    "3_zone_error_reduction": {
+      "accuracy_gain_percentage_point": 0.0,
+      "homography_wrong_frames": 552,
+      "image_wrong_frames": 552,
+      "passes": false,
+      "reduction_ratio": 0.0
+    },
+    "4_event_error_reduction": {
+      "homography_event_errors": 0,
+      "image_event_errors": 0,
+      "passes": null,
+      "reduction_ratio": null
+    },
+    "5_fast_flips_not_increased": {
+      "homography_fast_flips": 0,
+      "image_fast_flips": 0,
+      "passes": true
+    }
+  },
+  "input_artifacts_sha256": {
+    "cache": "1d11d291711dac8f8da9e82286a517e8dfc06a4084e2ac7afb4e896f9d709cea",
+    "input_checksums": "7054f9ab84014458fb6732f73bde66fd57f34d5cb2b387f20097990d9cf74697",
+    "intervals": "4839e94df3c3ed52b57264be18e8576dc9307b8efe240b76da13a1f8da54d3f7",
+    "manifest": "aacdea29fd5d344e766ac3331fa950d6d7a9953d03678ba26bdc08fe70315bd5",
+    "review_plan": "c4044ca16ff5c35461a03924e25ff2a8c86f6750ba591cadeea07353cdd48aae",
+    "track_identity": "6651877f97182e5e908cd1b3b8b26bc4ad81bca32d42d6e2a67a49beaf39ca80"
+  },
+  "is_official": true,
+  "per_video": [
+    {
+      "calibration_version": "2026-08-07-clip01",
+      "ground_truth": {
+        "enter_frame": 126,
+        "exit_frame": 372
+      },
+      "homography": {
+        "event_list": [
+          {
+            "frame": 164,
+            "type": "ENTER"
+          },
+          {
+            "frame": 370,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.634,
+            "exit": -0.0334
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.861333,
+          "correct": 323,
+          "false_inside": 0,
+          "false_outside": 52,
+          "frames_scored": 375,
+          "wrong": 52
+        }
+      },
+      "image": {
+        "event_list": [
+          {
+            "frame": 164,
+            "type": "ENTER"
+          },
+          {
+            "frame": 370,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.634,
+            "exit": -0.0334
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.861333,
+          "correct": 323,
+          "false_inside": 0,
+          "false_outside": 52,
+          "frames_scored": 375,
+          "wrong": 52
+        }
+      },
+      "input_revisions": {
+        "calibration_sha256": "0b3856b56844be00ab63b7e64f8740605a1aabb38197946b96f86a8340c7c132",
+        "calibration_version": "2026-08-07-clip01",
+        "floor_zone_sha256": "016741bfc25cd0a08c8d60cbdd6459aa96b36126e438a47846e711790897c538",
+        "image_zone_sha256": "57e071d0f301483d035a5c54bfd8b3911e36d541c4d44f3a3e137d2599d59a09",
+        "verified": true
+      },
+      "original_filename": "IMG_7326.MOV",
+      "track": {
+        "ambiguous": false,
+        "candidate_tracks": 1,
+        "frames_in_gt_interval": 240,
+        "frames_total": 375,
+        "runner_up_score": 0,
+        "selection": "longest",
+        "track_id": 1
+      },
+      "track_identity": null,
+      "video_id": "P4_S01_A01_zone_enter_exit_01_cam01",
+      "video_sha256": "d40ae36ec3f8fd1aee3edaae052678935f253b7481fd8a66344a2a25dcdd1086",
+      "zone_id": "play_floor"
+    },
+    {
+      "calibration_version": "2026-08-07-img7328",
+      "ground_truth": {
+        "enter_frame": 110,
+        "exit_frame": 402
+      },
+      "homography": {
+        "event_list": [
+          {
+            "frame": 149,
+            "type": "ENTER"
+          },
+          {
+            "frame": 403,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.6506,
+            "exit": 0.0167
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.868421,
+          "correct": 330,
+          "false_inside": 0,
+          "false_outside": 50,
+          "frames_scored": 380,
+          "wrong": 50
+        }
+      },
+      "image": {
+        "event_list": [
+          {
+            "frame": 149,
+            "type": "ENTER"
+          },
+          {
+            "frame": 403,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.6506,
+            "exit": 0.0167
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.868421,
+          "correct": 330,
+          "false_inside": 0,
+          "false_outside": 50,
+          "frames_scored": 380,
+          "wrong": 50
+        }
+      },
+      "input_revisions": {
+        "calibration_sha256": "598fbe8dea159812791aea9738de7f416deed53b574663498ee4277119ace0da",
+        "calibration_version": "2026-08-07-img7328",
+        "floor_zone_sha256": "ba39f0158fb4fd4caea4685350fa502c3f7ef0720b7697b879cc5380cd64540e",
+        "image_zone_sha256": "c0fd2d1274ad7b6b5426c5d02c77f1508b9153d283193894d9bd2e84a28a15d1",
+        "verified": true
+      },
+      "original_filename": "IMG_7328.MOV",
+      "track": {
+        "ambiguous": false,
+        "candidate_tracks": 1,
+        "frames_in_gt_interval": 274,
+        "frames_total": 380,
+        "runner_up_score": 0,
+        "selection": "longest",
+        "track_id": 2
+      },
+      "track_identity": null,
+      "video_id": "P4_S01_A01_zone_enter_exit_02_cam01",
+      "video_sha256": "9ef5b70d88b4b98b32c4a7d950eb96ccf912ae979151acfca0cd7d63c51bbf14",
+      "zone_id": "play_floor"
+    },
+    {
+      "calibration_version": "2026-08-07-img7327",
+      "ground_truth": {
+        "enter_frame": 125,
+        "exit_frame": 415
+      },
+      "homography": {
+        "event_list": [
+          {
+            "frame": 163,
+            "type": "ENTER"
+          },
+          {
+            "frame": 435,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.634,
+            "exit": 0.3337
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.92891,
+          "correct": 392,
+          "false_inside": 0,
+          "false_outside": 30,
+          "frames_scored": 422,
+          "wrong": 30
+        }
+      },
+      "image": {
+        "event_list": [
+          {
+            "frame": 163,
+            "type": "ENTER"
+          },
+          {
+            "frame": 435,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.634,
+            "exit": 0.3337
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.92891,
+          "correct": 392,
+          "false_inside": 0,
+          "false_outside": 30,
+          "frames_scored": 422,
+          "wrong": 30
+        }
+      },
+      "input_revisions": {
+        "calibration_sha256": "b0d895a65e4f7df81648fd38e8df08c31a8c5ea6df600f3f61bcedf72b993717",
+        "calibration_version": "2026-08-07-img7327",
+        "floor_zone_sha256": "dd8e3947e3a2231eccc8254378f244c1621401f92bd6220537ea9c076b3ac60c",
+        "image_zone_sha256": "b6f9c22fadf4edda7f362e28c039e0c0a0c7bc71586b3dffea36904269a3b69e",
+        "verified": true
+      },
+      "original_filename": "IMG_7327.MOV",
+      "track": {
+        "ambiguous": false,
+        "candidate_tracks": 3,
+        "frames_in_gt_interval": 286,
+        "frames_total": 422,
+        "runner_up_score": 2,
+        "selection": "longest",
+        "track_id": 1
+      },
+      "track_identity": null,
+      "video_id": "P4_S01_A02_zone_enter_exit_01_cam01",
+      "video_sha256": "b2e2d17f48adc97a7055631b3f02e5269f1dfca57b37a0800db3f5b16e4d7680",
+      "zone_id": "play_floor"
+    },
+    {
+      "calibration_version": "2026-08-07-img7329",
+      "ground_truth": {
+        "enter_frame": 133,
+        "exit_frame": 444
+      },
+      "homography": {
+        "event_list": [
+          {
+            "frame": 172,
+            "type": "ENTER"
+          },
+          {
+            "frame": 452,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.6506,
+            "exit": 0.1335
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.902715,
+          "correct": 399,
+          "false_inside": 0,
+          "false_outside": 43,
+          "frames_scored": 442,
+          "wrong": 43
+        }
+      },
+      "image": {
+        "event_list": [
+          {
+            "frame": 172,
+            "type": "ENTER"
+          },
+          {
+            "frame": 452,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.6506,
+            "exit": 0.1335
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.902715,
+          "correct": 399,
+          "false_inside": 0,
+          "false_outside": 43,
+          "frames_scored": 442,
+          "wrong": 43
+        }
+      },
+      "input_revisions": {
+        "calibration_sha256": "7bcaca0364f1359120d7c676b7ca1067373edefc9b854bfb1fed28f0f84a05ba",
+        "calibration_version": "2026-08-07-img7329",
+        "floor_zone_sha256": "f1e8d5562c0717098cdbc1e63c0f9ffa3be07741e53e3be1f3109f0bf509b006",
+        "image_zone_sha256": "1c4e2b95be6971570e48c9a4430339a116ac83d9e1285090477415fbd82a15fe",
+        "verified": true
+      },
+      "original_filename": "IMG_7329.MOV",
+      "track": {
+        "ambiguous": false,
+        "candidate_tracks": 2,
+        "frames_in_gt_interval": 307,
+        "frames_total": 442,
+        "runner_up_score": 1,
+        "selection": "longest",
+        "track_id": 1
+      },
+      "track_identity": null,
+      "video_id": "P4_S01_A02_zone_enter_exit_02_cam01",
+      "video_sha256": "63b511f579532c2b02d7129162e6a58d07c8b8b8232fdf5ddc76e0c6c393eb59",
+      "zone_id": "play_floor"
+    },
+    {
+      "calibration_version": "2026-08-07-img7332",
+      "ground_truth": {
+        "enter_frame": 127,
+        "exit_frame": 707
+      },
+      "homography": {
+        "event_list": [
+          {
+            "frame": 166,
+            "type": "ENTER"
+          },
+          {
+            "frame": 466,
+            "type": "DWELL"
+          },
+          {
+            "frame": 711,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.6506,
+            "exit": 0.0667
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.933989,
+          "correct": 665,
+          "false_inside": 0,
+          "false_outside": 47,
+          "frames_scored": 712,
+          "wrong": 47
+        }
+      },
+      "image": {
+        "event_list": [
+          {
+            "frame": 166,
+            "type": "ENTER"
+          },
+          {
+            "frame": 466,
+            "type": "DWELL"
+          },
+          {
+            "frame": 711,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.6506,
+            "exit": 0.0667
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.933989,
+          "correct": 665,
+          "false_inside": 0,
+          "false_outside": 47,
+          "frames_scored": 712,
+          "wrong": 47
+        }
+      },
+      "input_revisions": {
+        "calibration_sha256": "d0212e402e6296394189a99de95d23b52c99ad7f77657c8bdba407b20eafaf5b",
+        "calibration_version": "2026-08-07-img7332",
+        "floor_zone_sha256": "463078bff76d3ee1867204b1127874220ab8134b02b02bc66e82b6f77dc7baf6",
+        "image_zone_sha256": "72a6886b65b00ec72da19699b1e267f3603a7c2c5bc88ab797400560ba88a3e3",
+        "verified": true
+      },
+      "original_filename": "IMG_7332.MOV",
+      "track": {
+        "ambiguous": false,
+        "candidate_tracks": 1,
+        "frames_in_gt_interval": 561,
+        "frames_total": 712,
+        "runner_up_score": 0,
+        "selection": "longest",
+        "track_id": 2
+      },
+      "track_identity": null,
+      "video_id": "P4_S01_A01_zone_enter_exit_03_cam01",
+      "video_sha256": "0c02cf2b581f22a980ed64720d996de5677e8fcd105799628bf0e174de1282da",
+      "zone_id": "play_floor"
+    },
+    {
+      "calibration_version": "2026-08-07-img7334",
+      "ground_truth": {
+        "enter_frame": 111,
+        "exit_frame": 580
+      },
+      "homography": {
+        "event_list": [
+          {
+            "frame": 149,
+            "type": "ENTER"
+          },
+          {
+            "frame": 449,
+            "type": "DWELL"
+          },
+          {
+            "frame": 588,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.634,
+            "exit": 0.1335
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.929054,
+          "correct": 550,
+          "false_inside": 0,
+          "false_outside": 42,
+          "frames_scored": 592,
+          "wrong": 42
+        }
+      },
+      "image": {
+        "event_list": [
+          {
+            "frame": 149,
+            "type": "ENTER"
+          },
+          {
+            "frame": 449,
+            "type": "DWELL"
+          },
+          {
+            "frame": 588,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.634,
+            "exit": 0.1335
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.929054,
+          "correct": 550,
+          "false_inside": 0,
+          "false_outside": 42,
+          "frames_scored": 592,
+          "wrong": 42
+        }
+      },
+      "input_revisions": {
+        "calibration_sha256": "6e4d93c2f4c2e82751f45b8a12e7aa0a93a76ade20c1121cd3c261c95939eb95",
+        "calibration_version": "2026-08-07-img7334",
+        "floor_zone_sha256": "d6179904b7de56c6266df6f5f66859a96f53926f04a2c98b754c1b6bd594f2da",
+        "image_zone_sha256": "a22de4fed4e3bd1d4c323d658e29989ff846d19da9422de743d815bf596d8b26",
+        "verified": true
+      },
+      "original_filename": "IMG_7334.MOV",
+      "track": {
+        "ambiguous": false,
+        "candidate_tracks": 2,
+        "frames_in_gt_interval": 447,
+        "frames_total": 592,
+        "runner_up_score": 2,
+        "selection": "longest",
+        "track_id": 1
+      },
+      "track_identity": null,
+      "video_id": "P4_S01_A01_zone_enter_exit_04_cam01",
+      "video_sha256": "ff5b115838e52649263ae3637b14e926ebe54d41ea8692fef797f34ec10b8567",
+      "zone_id": "play_floor"
+    },
+    {
+      "calibration_version": "2026-08-07-img7387",
+      "ground_truth": {
+        "enter_frame": 160,
+        "exit_frame": 724
+      },
+      "homography": {
+        "event_list": [
+          {
+            "frame": 201,
+            "type": "ENTER"
+          },
+          {
+            "frame": 501,
+            "type": "DWELL"
+          },
+          {
+            "frame": 737,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.684,
+            "exit": 0.2169
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.928673,
+          "correct": 651,
+          "false_inside": 0,
+          "false_outside": 50,
+          "frames_scored": 701,
+          "wrong": 50
+        }
+      },
+      "image": {
+        "event_list": [
+          {
+            "frame": 201,
+            "type": "ENTER"
+          },
+          {
+            "frame": 501,
+            "type": "DWELL"
+          },
+          {
+            "frame": 737,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.684,
+            "exit": 0.2169
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.928673,
+          "correct": 651,
+          "false_inside": 0,
+          "false_outside": 50,
+          "frames_scored": 701,
+          "wrong": 50
+        }
+      },
+      "input_revisions": {
+        "calibration_sha256": "10dd972c226b5f0b3abdad8ce4fb8dcbe8414d19bdbd22bbae6e11250e7186aa",
+        "calibration_version": "2026-08-07-img7387",
+        "floor_zone_sha256": "e856bb13e05f5a9855926f8fae3a574f8f39c43be2a7adece7e7d9f8b2075b05",
+        "image_zone_sha256": "209a3a0aedd9c0cfde50c27510d25178c116edf23851dd4603a156db336b1fe4",
+        "verified": true
+      },
+      "original_filename": "IMG_7387.MOV",
+      "track": {
+        "ambiguous": false,
+        "candidate_tracks": 1,
+        "frames_in_gt_interval": 555,
+        "frames_total": 701,
+        "runner_up_score": 0,
+        "selection": "longest",
+        "track_id": 1
+      },
+      "track_identity": null,
+      "video_id": "P4_S01_A01_zone_enter_exit_05_cam01",
+      "video_sha256": "4556f3c3a50e33403d24ce62fb06f083df7ff74338ae71090247eaae37878dab",
+      "zone_id": "play_floor"
+    },
+    {
+      "calibration_version": "2026-08-07-img7385",
+      "ground_truth": {
+        "enter_frame": 197,
+        "exit_frame": 565
+      },
+      "homography": {
+        "event_list": [
+          {
+            "frame": 234,
+            "type": "ENTER"
+          },
+          {
+            "frame": 534,
+            "type": "DWELL"
+          },
+          {
+            "frame": 569,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.6173,
+            "exit": 0.0667
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.908163,
+          "correct": 445,
+          "false_inside": 0,
+          "false_outside": 45,
+          "frames_scored": 490,
+          "wrong": 45
+        }
+      },
+      "image": {
+        "event_list": [
+          {
+            "frame": 234,
+            "type": "ENTER"
+          },
+          {
+            "frame": 534,
+            "type": "DWELL"
+          },
+          {
+            "frame": 569,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.6173,
+            "exit": 0.0667
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.908163,
+          "correct": 445,
+          "false_inside": 0,
+          "false_outside": 45,
+          "frames_scored": 490,
+          "wrong": 45
+        }
+      },
+      "input_revisions": {
+        "calibration_sha256": "1aa91043421d4343b309b5813288ce82b998ebbdd30db9a447ba8b2eee2631e3",
+        "calibration_version": "2026-08-07-img7385",
+        "floor_zone_sha256": "9610794fb0896b771bdb6e4866413843086153a72ee1ef2140b0945b18ecac1d",
+        "image_zone_sha256": "8b409910317c4fdfb202f2e887e9427a8adcbb6f27d9026f22a61decaaac1cb3",
+        "verified": true
+      },
+      "original_filename": "IMG_7385.MOV",
+      "track": {
+        "ambiguous": true,
+        "candidate_tracks": 2,
+        "frames_in_gt_interval": 354,
+        "frames_total": 490,
+        "runner_up_score": 424,
+        "selection": "longest",
+        "track_id": 2
+      },
+      "track_identity": {
+        "actor_ids": [
+          "A01",
+          "A02"
+        ],
+        "expected_actor": "A01",
+        "ground_truth_actor": "A01",
+        "matches_verified_track": true,
+        "notes": "scripts/verify_track_identity.py frames=210|300|400|500|560; T2=파란 상의 A01 / T3=회색 상의 A02",
+        "primary_actor_id": "A01",
+        "reviewer_id": "202178038",
+        "selected_track_id": 2,
+        "track_id": 2,
+        "verification_method": "bbox_overlay_visual",
+        "verified_at": "2026-08-18"
+      },
+      "video_id": "P4_S01_A01_zone_enter_exit_06_cam01",
+      "video_sha256": "527d8beacec6bee5d0f9a9f6c97b46505d6e6cb3982feec4232c6283147894c0",
+      "zone_id": "play_floor"
+    },
+    {
+      "calibration_version": "2026-08-07-img7330",
+      "ground_truth": {
+        "enter_frame": 86,
+        "exit_frame": 372
+      },
+      "homography": {
+        "event_list": [
+          {
+            "frame": 116,
+            "type": "ENTER"
+          },
+          {
+            "frame": 385,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.5005,
+            "exit": 0.2169
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.900726,
+          "correct": 372,
+          "false_inside": 0,
+          "false_outside": 41,
+          "frames_scored": 413,
+          "wrong": 41
+        }
+      },
+      "image": {
+        "event_list": [
+          {
+            "frame": 116,
+            "type": "ENTER"
+          },
+          {
+            "frame": 385,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.5005,
+            "exit": 0.2169
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.900726,
+          "correct": 372,
+          "false_inside": 0,
+          "false_outside": 41,
+          "frames_scored": 413,
+          "wrong": 41
+        }
+      },
+      "input_revisions": {
+        "calibration_sha256": "c4347c533b24f620a77f3397850e090716cb4bb90b0cf7aaf77f64787205068c",
+        "calibration_version": "2026-08-07-img7330",
+        "floor_zone_sha256": "4ea7f94917d5ff01d23cc5173c5465971afa05a704c938000b2a19f6c299bc36",
+        "image_zone_sha256": "7149e22e80f3d5fa95e52c2bdf1bd954ad6bd79d491782fa5986fdb1c758c709",
+        "verified": true
+      },
+      "original_filename": "IMG_7330.MOV",
+      "track": {
+        "ambiguous": false,
+        "candidate_tracks": 2,
+        "frames_in_gt_interval": 275,
+        "frames_total": 413,
+        "runner_up_score": 1,
+        "selection": "longest",
+        "track_id": 1
+      },
+      "track_identity": null,
+      "video_id": "P4_S01_A02_zone_enter_exit_03_cam01",
+      "video_sha256": "f2f7119ba046dca88e5aed232f19b06500d4a6e39799d2ac342bab3715ea6c32",
+      "zone_id": "play_floor"
+    },
+    {
+      "calibration_version": "2026-08-07-img7331",
+      "ground_truth": {
+        "enter_frame": 114,
+        "exit_frame": 798
+      },
+      "homography": {
+        "event_list": [
+          {
+            "frame": 154,
+            "type": "ENTER"
+          },
+          {
+            "frame": 454,
+            "type": "DWELL"
+          },
+          {
+            "frame": 817,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.6673,
+            "exit": 0.317
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.958904,
+          "correct": 770,
+          "false_inside": 0,
+          "false_outside": 33,
+          "frames_scored": 803,
+          "wrong": 33
+        }
+      },
+      "image": {
+        "event_list": [
+          {
+            "frame": 154,
+            "type": "ENTER"
+          },
+          {
+            "frame": 454,
+            "type": "DWELL"
+          },
+          {
+            "frame": 817,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.6673,
+            "exit": 0.317
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.958904,
+          "correct": 770,
+          "false_inside": 0,
+          "false_outside": 33,
+          "frames_scored": 803,
+          "wrong": 33
+        }
+      },
+      "input_revisions": {
+        "calibration_sha256": "f29d7fcd0cf6cc168775ab72c1f4cbf007c7568820c4486359f31f4585e63acb",
+        "calibration_version": "2026-08-07-img7331",
+        "floor_zone_sha256": "cbe00d3930cc33b748efcda4948357b5f4fb597b4f1c2ec17861ba85c5b479d1",
+        "image_zone_sha256": "b39f6c7beefa907fd24d108b33a2bb721186652a20637978e3f1e7f43a5f7952",
+        "verified": true
+      },
+      "original_filename": "IMG_7331.MOV",
+      "track": {
+        "ambiguous": false,
+        "candidate_tracks": 2,
+        "frames_in_gt_interval": 660,
+        "frames_total": 803,
+        "runner_up_score": 1,
+        "selection": "longest",
+        "track_id": 1
+      },
+      "track_identity": null,
+      "video_id": "P4_S01_A02_zone_enter_exit_04_cam01",
+      "video_sha256": "1c4e2948e1f009a0294b83290e2f347125400287897450cbf542a787f62a529e",
+      "zone_id": "play_floor"
+    },
+    {
+      "calibration_version": "2026-08-07-img7333",
+      "ground_truth": {
+        "enter_frame": 133,
+        "exit_frame": 721
+      },
+      "homography": {
+        "event_list": [
+          {
+            "frame": 176,
+            "type": "ENTER"
+          },
+          {
+            "frame": 476,
+            "type": "DWELL"
+          },
+          {
+            "frame": 718,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.7174,
+            "exit": -0.05
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.92,
+          "correct": 667,
+          "false_inside": 0,
+          "false_outside": 58,
+          "frames_scored": 725,
+          "wrong": 58
+        }
+      },
+      "image": {
+        "event_list": [
+          {
+            "frame": 176,
+            "type": "ENTER"
+          },
+          {
+            "frame": 476,
+            "type": "DWELL"
+          },
+          {
+            "frame": 718,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.7174,
+            "exit": -0.05
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.92,
+          "correct": 667,
+          "false_inside": 0,
+          "false_outside": 58,
+          "frames_scored": 725,
+          "wrong": 58
+        }
+      },
+      "input_revisions": {
+        "calibration_sha256": "bed4025bf5577c9ba4371cbd69cb644b7ab558d100e8e54520ed54b4a08e5b61",
+        "calibration_version": "2026-08-07-img7333",
+        "floor_zone_sha256": "5de32a67e4d4d632bcb012fd93ef1a6cc28ee25f09f114bc889b1ad232278b9b",
+        "image_zone_sha256": "dae62691bc4805098324060b66fe380c666c2c4c43e689be3d8db9ad596c864c",
+        "verified": true
+      },
+      "original_filename": "IMG_7333.MOV",
+      "track": {
+        "ambiguous": false,
+        "candidate_tracks": 1,
+        "frames_in_gt_interval": 579,
+        "frames_total": 725,
+        "runner_up_score": 0,
+        "selection": "longest",
+        "track_id": 1
+      },
+      "track_identity": null,
+      "video_id": "P4_S01_A02_zone_enter_exit_05_cam01",
+      "video_sha256": "4bd17c8ad7706902ed8cf631a3485f5007bb07297c03c1bae23ff2648fc3a90c",
+      "zone_id": "play_floor"
+    },
+    {
+      "calibration_version": "2026-08-07-img7388",
+      "ground_truth": {
+        "enter_frame": 141,
+        "exit_frame": 536
+      },
+      "homography": {
+        "event_list": [
+          {
+            "frame": 196,
+            "type": "ENTER"
+          },
+          {
+            "frame": 496,
+            "type": "DWELL"
+          },
+          {
+            "frame": 526,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.9176,
+            "exit": -0.1668
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.896959,
+          "correct": 531,
+          "false_inside": 0,
+          "false_outside": 61,
+          "frames_scored": 592,
+          "wrong": 61
+        }
+      },
+      "image": {
+        "event_list": [
+          {
+            "frame": 196,
+            "type": "ENTER"
+          },
+          {
+            "frame": 496,
+            "type": "DWELL"
+          },
+          {
+            "frame": 526,
+            "type": "EXIT"
+          }
+        ],
+        "events": {
+          "duplicate": 0,
+          "false": 0,
+          "missed": 0,
+          "onset_error_sec": {
+            "enter": 0.9176,
+            "exit": -0.1668
+          },
+          "total_errors": 0
+        },
+        "fast_flips": 0,
+        "frames": {
+          "accuracy": 0.896959,
+          "correct": 531,
+          "false_inside": 0,
+          "false_outside": 61,
+          "frames_scored": 592,
+          "wrong": 61
+        }
+      },
+      "input_revisions": {
+        "calibration_sha256": "f8432e323c4038320077fa71cc1660312f055457dfdd780c5a40369562bc47c5",
+        "calibration_version": "2026-08-07-img7388",
+        "floor_zone_sha256": "ade5d73148b847353cf73af9bcc420b239972cbb8c46fa662c016666684a1d36",
+        "image_zone_sha256": "53dc361c9f848ad96365be18c2316b702f221b88647d7f757c77db41488bd7f6",
+        "verified": true
+      },
+      "original_filename": "IMG_7388.MOV",
+      "track": {
+        "ambiguous": false,
+        "candidate_tracks": 2,
+        "frames_in_gt_interval": 384,
+        "frames_total": 592,
+        "runner_up_score": 1,
+        "selection": "longest",
+        "track_id": 1
+      },
+      "track_identity": null,
+      "video_id": "P4_S01_A02_zone_enter_exit_06_cam01",
+      "video_sha256": "307aa34c7069480abf5140e61c153cc8cfc8fb4e365be98e9038e71614088790",
+      "zone_id": "play_floor"
+    }
+  ],
+  "sample": {
+    "boundary_events": 24,
+    "intervals": 12,
+    "note": "표본이 작다. 계획서 15절에 따라 비율과 함께 원시 건수를 기록한다. 경계 24건에서는 오류 1건이 4.17%p로 움직인다.",
+    "videos": 12
+  },
+  "schema_version": "phase4_zone_path_comparison_v1",
+  "settings": {
+    "event_scope": "영상 전체 frame을 순회하며 runtime과 같이 flush_stale_tracks를 부른다. frame 정확도는 선택한 Track이 있는 frame만 채점한다.",
+    "event_tolerance_sec": 1.0,
+    "flip_definition": "진입 계열(ENTER·ENTER_RESTRICTED)과 EXIT 사이의 전환만 센다",
+    "flip_window_sec": 1.0,
+    "official_event_tolerance_sec": 1.0,
+    "official_flip_window_sec": 1.0,
+    "track_selection": "longest"
+  },
+  "totals": {
+    "homography": {
+      "accuracy": 0.916955,
+      "correct": 6095,
+      "event_errors": 0,
+      "flips": 0,
+      "frames": 6647,
+      "wrong": 552
+    },
+    "image": {
+      "accuracy": 0.916955,
+      "correct": 6095,
+      "event_errors": 0,
+      "flips": 0,
+      "frames": 6647,
+      "wrong": 552
+    }
+  },
+  "tracker": {
+    "confidence": 0.5,
+    "model": "yolo26n.pt",
+    "model_sha256": "9b09cc8bf347f0fc8a5f7657480587f25db09b34bf33b0652110fb03a8ad4fef"
+  }
+}
