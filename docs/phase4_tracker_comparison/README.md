@@ -263,7 +263,8 @@ OFF보다 ID switch를 더 줄이지 못했고 Cause top-1도 3/8로 낮아졌�
 
 - Production association tracker는 기존 ByteTrack을 유지한다.
 - `track_buffer=60`은 후속 진단값이며 Production 기본값으로 채택하지 않는다.
-- 이번에 구현한 BoT-SORT appearance ReID 경로는 보존하되 기본 OFF로 둔다.
+- BoT-SORT appearance ReID 경로는 평가 도구에만 구현했으며 Production
+  파이프라인에는 통합하지 않는다.
 - `yolo26n-cls.pt`를 사용한 이번 ReID arm은 미채택한다. 이 결과를 사람 전용
   ReID 모델의 일반적 효용에 대한 기각으로 확대하지 않는다.
 - Phase 4에서는 OSNet 등 새 ReID encoder 통합이나 추가 tracker 튜닝을 진행하지
