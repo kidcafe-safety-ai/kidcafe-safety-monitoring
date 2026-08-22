@@ -155,6 +155,9 @@ def validate_config(
         errors.append(
             f"policy_version={config.get('policy_version')!r}, expected={POLICY_VERSION!r}"
         )
+    ultralytics_version = config.get("ultralytics_version")
+    if not isinstance(ultralytics_version, str) or not ultralytics_version.strip():
+        errors.append("ultralytics_version은 비어 있지 않은 문자열이어야 합니다.")
 
     arms = config.get("arms")
     if not isinstance(arms, list):
@@ -237,6 +240,15 @@ def validate_config(
         errors.append("Cause top-1 고정 분모가 dataset cohort와 다릅니다.")
     if errors:
         raise ValueError("Tracker 비교 계약 검증 실패:\n  - " + "\n  - ".join(errors))
+
+
+def validate_ultralytics_version(config: Mapping, actual_version: str) -> None:
+    expected_version = config.get("ultralytics_version")
+    if actual_version != expected_version:
+        raise ValueError(
+            "Ultralytics 버전 불일치: "
+            f"actual={actual_version!r}, expected={expected_version!r}"
+        )
 
 
 def _validate_fixed_inference(config: Mapping, selected: Mapping) -> list[str]:

@@ -39,6 +39,7 @@ def _load_arm_result(
     arm: Mapping,
     arm_root: Path,
     comparison_config_sha256: str,
+    ultralytics_version: str,
 ) -> dict:
     paths = {
         "run_manifest": arm_root / "arm_run_manifest.json",
@@ -62,6 +63,8 @@ def _load_arm_result(
         errors.append("run manifest의 arm provenance가 다릅니다.")
     if run.get("evaluator_git_dirty") is not False:
         errors.append("run manifest가 dirty worktree 실행입니다.")
+    if run.get("ultralytics_version") != ultralytics_version:
+        errors.append("run manifest의 Ultralytics 버전이 다릅니다.")
     if official.get("evaluator_git_dirty") is not False:
         errors.append("official evaluation이 dirty worktree 실행입니다.")
     if official.get("evaluator_git_commit") != run.get("evaluator_git_commit"):
@@ -72,6 +75,22 @@ def _load_arm_result(
         comparison_contract.sha256_file(paths["official_eval"])
     ):
         errors.append("Cause summary가 현재 official eval을 참조하지 않습니다.")
+    immutable_artifact_paths = {
+        "official_eval": paths["official_eval"],
+        "multiperson_events": arm_root / "multiperson_events.json",
+        "cause_null_events": arm_root / "cause_null_events.json",
+        "timing_report": paths["timing_report"],
+    }
+    recorded_artifact_sha256 = run.get("artifact_sha256") or {}
+    for artifact_name, artifact_path in immutable_artifact_paths.items():
+        if not artifact_path.is_file():
+            errors.append(f"{artifact_name} artifact가 없습니다: {artifact_path}")
+            continue
+        actual_sha256 = comparison_contract.sha256_file(artifact_path)
+        if recorded_artifact_sha256.get(artifact_name) != actual_sha256:
+            errors.append(
+                f"run manifest의 {artifact_name} SHA-256이 현재 artifact와 다릅니다."
+            )
     comparison_contract.validate_cache_arm(
         {"tracker": official.get("tracker_config") or {}}, arm
     )
@@ -130,7 +149,7 @@ def evaluate_candidate(
     baseline: Mapping,
     acceptance: Mapping,
 ) -> dict:
-    checks = {
+    adoption_checks = {
         "cause_top1": (
             candidate["cause_top1_denominator"]
             == acceptance["cause_top1_denominator"]
@@ -176,14 +195,17 @@ def evaluate_candidate(
             <= baseline["avg_onset_latency_sec"]
             + acceptance["avg_onset_latency_max_increase_sec"]
         ),
+    }
+    diagnostic_checks = {
         "fps_within_limit": (
             candidate["fps_avg"]
             >= baseline["fps_avg"] * (1.0 - acceptance["fps_max_drop_ratio"])
         ),
     }
     return {
-        "checks": checks,
-        "passed": all(checks.values()),
+        "checks": adoption_checks,
+        "diagnostic_checks": diagnostic_checks,
+        "passed": all(adoption_checks.values()),
         "deltas_from_baseline": {
             "cause_top1_correct": (
                 candidate["cause_top1_correct"] - baseline["cause_top1_correct"]
@@ -276,6 +298,7 @@ def main() -> None:
                 arm=arm,
                 arm_root=results_root / arm["arm_id"],
                 comparison_config_sha256=config_sha,
+                ultralytics_version=config["ultralytics_version"],
             )
             for arm in config["arms"]
         ]

@@ -69,6 +69,14 @@ def git_state(repo_root: Path) -> tuple[str, bool]:
     return commit, bool(status.strip())
 
 
+def installed_ultralytics_version() -> str:
+    try:
+        import ultralytics
+    except ImportError as exc:
+        raise ValueError("Ultralytics를 import할 수 없습니다.") from exc
+    return str(ultralytics.__version__)
+
+
 def build_commands(
     *,
     config: dict,
@@ -248,6 +256,10 @@ def main() -> None:
             repo_root / config["dataset"]["annotations_path"], manifest_rows
         )
         comparison_contract.validate_cohort(config, manifest_rows, annotation_rows)
+        actual_ultralytics_version = installed_ultralytics_version()
+        comparison_contract.validate_ultralytics_version(
+            config, actual_ultralytics_version
+        )
         arm = dict(comparison_contract.arm_by_id(config, args.arm_id))
     except (OSError, ValueError, KeyError) as exc:
         raise SystemExit(str(exc)) from exc
@@ -296,6 +308,7 @@ def main() -> None:
         ],
         "evaluator_git_commit": evaluator_git_commit,
         "evaluator_git_dirty": evaluator_git_dirty,
+        "ultralytics_version": actual_ultralytics_version,
         "arm": comparison_contract.arm_provenance(arm),
         "device": args.device,
         "fall_model_device": args.fall_model_device,

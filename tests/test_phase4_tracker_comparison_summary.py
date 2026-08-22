@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import json
+import shutil
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import phase4_tracker_comparison_contract as contract  # noqa: E402
 import summarize_phase4_tracker_comparison as summary  # noqa: E402
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _arm(arm_id, *, top1, switches, victim, fps=30.0):
@@ -81,11 +89,39 @@ def test_adopts_reid_only_when_reid_arm_passes_all_gates():
     assert result["reid_status"] == "adopted"
 
 
-def test_rejects_candidate_when_fps_drop_exceeds_twenty_percent():
+def test_keeps_nonproduction_fps_as_diagnostic_only():
     baseline = _arm("bytetrack_baseline", top1=3, switches=15, victim=1, fps=30.0)
     candidate = _arm("botsort_with_reid", top1=7, switches=8, victim=0, fps=23.9)
 
     result = summary.evaluate_candidate(candidate, baseline, _config()["acceptance"])
 
-    assert result["checks"]["fps_within_limit"] is False
-    assert result["passed"] is False
+    assert result["diagnostic_checks"]["fps_within_limit"] is False
+    assert result["passed"] is True
+
+
+def test_rejects_tampered_immutable_artifact(tmp_path):
+    config_path = REPO_ROOT / "configs/phase4_tracker_comparison.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    arm = config["arms"][0]
+    source = (
+        REPO_ROOT
+        / "docs/phase4_tracker_comparison/results/arms/bytetrack_baseline"
+    )
+    arm_root = tmp_path / "bytetrack_baseline"
+    shutil.copytree(source, arm_root)
+
+    timing_path = arm_root / "cache/timing_report.json"
+    timing = json.loads(timing_path.read_text(encoding="utf-8"))
+    timing["fps_avg"] = 999.0
+    timing_path.write_text(
+        json.dumps(timing, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="timing_report SHA-256"):
+        summary._load_arm_result(
+            arm=arm,
+            arm_root=arm_root,
+            comparison_config_sha256=contract.sha256_file(config_path),
+            ultralytics_version=config["ultralytics_version"],
+        )

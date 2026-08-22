@@ -106,3 +106,10 @@ def test_fixed_inference_rejects_selected_profile_drift():
     errors = contract._validate_fixed_inference(config, selected)
 
     assert any("fall_model_interval_frames" in error for error in errors)
+
+
+def test_rejects_wrong_ultralytics_version():
+    config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+
+    with pytest.raises(ValueError, match="Ultralytics 버전 불일치"):
+        contract.validate_ultralytics_version(config, "0.0.0")

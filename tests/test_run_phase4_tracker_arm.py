@@ -86,3 +86,9 @@ def test_arm_pipeline_keeps_same_cache_for_eval_and_both_replays(tmp_path):
     expected = str(artifacts["cache_dir"])
     for command in commands[:4]:
         assert command[command.index("--cache-dir") + 1] == expected
+
+
+def test_installed_ultralytics_version_matches_frozen_config():
+    config = _config()
+
+    assert runner.installed_ultralytics_version() == config["ultralytics_version"]
