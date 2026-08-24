@@ -1,7 +1,7 @@
 # Confidence Threshold 정성 튜닝 기록
 
 > **작성일**: 2026-05-17
-> **작성자**: 정종민( A Vision AI Backend)
+> **작성자**: 정종민 (A / Vision AI Backend)
 > **관련 문서**: [`README.md`](../README.md), [`interfaces.md`](interfaces.md), [`tracking_analysis.md`](tracking_analysis.md), [`decisions.md`](decisions.md)
 
 ---

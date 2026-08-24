@@ -416,13 +416,13 @@ React:        VITE_API_MODE=api VITE_API_BASE_URL=http://localhost:8000 npm run 
   "active_track_count": 2,
   "zone_occupancy": [
     {
-      "zone_id": "codex_high_zone",
+      "zone_id": "phase2_high_zone",
       "zone_name": "E2E High Zone",
       "current_count": 2,
       "risk_level": "HIGH"
     },
     {
-      "zone_id": "codex_normal_zone",
+      "zone_id": "phase2_normal_zone",
       "zone_name": "E2E Normal Zone",
       "current_count": 0,
       "risk_level": "NORMAL"
@@ -435,16 +435,16 @@ React:        VITE_API_MODE=api VITE_API_BASE_URL=http://localhost:8000 npm run 
 
 ```json
 {
-  "event_id": "codex_e2e_20260624204159",
+  "event_id": "phase2_e2e_20260624204159",
   "timestamp": "00:01:23.456",
   "event_type": "DWELL",
   "track_id": 9001,
-  "zone_id": "codex_high_zone",
+  "zone_id": "phase2_high_zone",
   "zone_name": "E2E 테스트 위험구역",
   "bbox": [10, 20, 110, 220],
   "foot_point": [60, 220],
   "frame_number": 2401,
-  "video_source": "codex_e2e",
+  "video_source": "phase2_e2e",
   "confidence": 0.99
 }
 ```
@@ -461,7 +461,7 @@ GET /events/recent?limit=5
 - data: 1건
 - event_type: DWELL
 - track_id: 9001
-- zone_id: codex_high_zone
+- zone_id: phase2_high_zone
 
 GET /events
 - total: 1
@@ -483,10 +483,10 @@ Monitoring 화면:
 오늘 발생 이벤트 수: 1
 위험구역 체류 인원: 2
 최근 이벤트 수: 1
-최근 이벤트: 1건 / DWELL / Track 9001 / codex_high_zone
+최근 이벤트: 1건 / DWELL / Track 9001 / phase2_high_zone
 위험구역 상태: 2개 구역
-- E2E High Zone / codex_high_zone / 2 / HIGH
-- E2E Normal Zone / codex_normal_zone / 0 / NORMAL
+- E2E High Zone / phase2_high_zone / 2 / HIGH
+- E2E Normal Zone / phase2_normal_zone / 0 / NORMAL
 ```
 
 이벤트 기록 / 통계 화면:
@@ -499,7 +499,7 @@ Monitoring 화면:
 
 이벤트 테이블
 - 1건
-- 00:01:23.456 / DWELL / 9001 / codex_high_zone / 2401 / codex_e2e
+- 00:01:23.456 / DWELL / 9001 / phase2_high_zone / 2401 / phase2_e2e
 ```
 
 ### Network polling 확인
@@ -550,7 +550,9 @@ GET /events: 이벤트 기록 / 통계 화면 진입 시 호출
 
 ### 이슈
 
-- 테스트로 주입한 `codex_e2e_20260624204159` 이벤트와 `unknown` current status는 SQLite에 남아 있다. 필요하면 별도 cleanup 또는 테스트 DB 분리 방식을 검토한다.
+- 통합 시험용 Event와 CurrentStatus는 로컬 테스트 SQLite에 주입해 저장 지속성을
+  확인했다. 해당 DB는 Git·제출 artifact에 포함하지 않으며 반복 시험은 별도 DB를
+  사용한다.
 - 이벤트 기록 / 통계 화면이 반드시 `/summary` 기반이어야 한다면, 현재 `/events` 기반 차트/테이블 구조는 후속 논의가 필요하다.
 
 ---
@@ -1371,9 +1373,67 @@ skip 2건은 `tests/test_input_sources.py`의 테스트 영상 의존 항목이�
 
 **Backend·DB·RTSP 범위는 8월 20일 기능 개발 종료 조건을 충족한다.**
 
-남은 항목은 이 회귀의 범위가 아니다.
+아래 항목은 8월 20일 B 단독 회귀의 범위에 포함하지 않았다.
 
-- **실제 IP 카메라 30분 이상 장시간 실행** — 카메라 실물이 필요해 별도 진행.
-  Phase 4 기록이 아직 없다. RTSP는 자동 재연결이 없으므로(동결 문서 7절)
-  중간에 끊기면 수동 재실행해야 한다는 점을 감안해 계획한다.
-- **A/C와 실제 촬영 영상 E2E** — 공동 작업.
+- **실제 IP 카메라 30분 이상 장시간 실행** — 운영 전 별도
+  게이트로 유지한다. RTSP는 자동 재연결을 현재 계약에 포함하지
+  않으므로(동결 문서 7절) 스트림 종료 시 수동 재실행한다.
+- **A/C와 실제 촬영 영상 E2E** — 8월 24일 Phase 4 종료 게이트에서
+  완료했다.
+
+---
+
+## 2026-08-24 — Phase 4 종료 게이트
+
+Phase 4 역할별 PR을 모두 `main`에 병합한 뒤 기능 추가를 중단하고, 동일 기준선에서
+Python·Frontend·Docker 구성과 Git 추적 파일을 최종 검증했다.
+
+### 기준선과 환경
+
+| 항목 | 값 |
+|---|---|
+| 기준 커밋 | `264ed7c8` |
+| 종료 검증 브랜치 | `docs/close-phase-4` |
+| Python | 3.10.20 |
+| OpenCV | 4.8.1 |
+| PyTorch | 2.5.1 |
+| Ultralytics | 8.4.56 |
+| Node.js / npm | 26.0.0 / 11.12.1 |
+
+### 종료 게이트 결과
+
+| 검증 | 결과 |
+|---|---|
+| `python -m pytest -q` | **1788 passed, 3 skipped** |
+| `flake8 src tests` | 통과 |
+| `npm ci` | 통과 |
+| `npm run test -- --run` | **48 passed** |
+| `npm run build` | 통과 |
+| `docker compose config --quiet` | 통과 |
+| `git diff --check` | 통과 |
+| Git 추적 artifact 점검 | `outputs/.gitkeep`, `data/videos/.gitkeep`만 추적 |
+
+Python skip 3건은 로컬 테스트 영상·선택 artifact 의존 항목이다. 원본 촬영 영상,
+학습 모델, cache와 실환경 `.env`는 Git에 포함하지 않는다. `.env.example` 두 개만
+실행 변수 안내용으로 추적한다.
+
+### Phase 4 동결 결론
+
+- 실제 키즈카페 목표 카메라용 E1 낙상 profile을 opt-in으로 채택했다.
+- A03 actor-disjoint에서 Recall·timely Recall 93.3%, FAR 0.0/min을 기록했다.
+- Cause top-1은 3/8로 목표에 미달했고 `cause=null` specificity는 24/24였다.
+- Tracker 비교 결과 production은 ByteTrack을 유지하고 BoT-SORT·ReID는 미채택했다.
+- Homography PoC는 미채택하고 기존 image polygon 경로를 유지했다.
+- Backend·DB·RTSP 설정과 Zone·Report·Frontend API 경로를 동결했다.
+
+### 종료 판정과 운영 범위
+
+**Phase 4 기능 개발과 역할별 통합은 종료 조건을 충족한다.**
+
+실제 IP 카메라의 30분 이상 정상 행동 검증과 RTSP 자동 재연결은 완료하지 않았다.
+따라서 낙상 감지는 기본 비활성·명시적 opt-in을 유지하고, 현재 시스템을 인증된
+운영 서비스나 장시간 무중단 배포로 표현하지 않는다.
+
+2026년 9월 8일 1차 평가 전까지 신규 학습·Tracker·API·UI 기능과 임계값 튜닝을
+시작하지 않는다. 허용 범위는 회귀·시연을 막는 결함 수정, 실행 문서 정정,
+개인정보·민감정보 제거, 보고서·제작설계서·시연 영상 제작이다.

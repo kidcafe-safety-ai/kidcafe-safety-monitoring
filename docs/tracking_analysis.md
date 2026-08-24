@@ -1,7 +1,9 @@
 # Track ID 안정성 분석 (MVP 1단계)
 
 > **작성일**: 2026-05-17
-> **작성자**: 정종민( A Vision AI Backend)
+> **작성자**: 정종민 (A / Vision AI Backend)
+> **상태**: MVP 1단계의 역사적 기준선. Phase 4 최종 결정은 ADR-025와
+> [`phase4_tracker_comparison/README.md`](phase4_tracker_comparison/README.md)를 따른다.
 > **관련 문서**: [`README.md`](../README.md), [`interfaces.md`](interfaces.md), [`decisions.md`](decisions.md)
 
 ---
@@ -105,7 +107,7 @@ Frame 98   ENTER | track_id=2
 
 ---
 
-## 6. Phase 2 개선 방향
+## 6. Phase 2 개선 방향 (당시 계획)
 
 MVP 이후 고도화 단계에서는 다음 개선이 필요하다.
 
@@ -166,10 +168,16 @@ YOLO26n 1차 후보 검증
 
 본 문서의 한계 분석과 개선 방향은 한이음 수행계획서의 다음 기술과 연계된다.
 
-| 수행계획서 명시 기술 | 현재 MVP 단계 | Phase 2 적용 |
+| 수행계획서 명시 기술 | MVP 단계 | 당시 Phase 2 후보 |
 |---------------------|--------------|-------------|
 | YOLOv10/11 기반 객체 탐지 | YOLOv8n (MVP 경량 모델로 검증) | YOLO26n 1차 후보 검증 후 필요 시 YOLOv8s/m 또는 YOLOv10/11 비교 |
 | ByteTrack/StrongSORT 다중 추적 | ByteTrack 단독 | StrongSORT 또는 ReID 결합 |
-| OSNet 기반 경량 ReID | 미적용 | 도입 예정 |
-| Cross-Camera ReID | 미적용 | 다중 카메라 환경에서 도입 |
+| OSNet 기반 경량 ReID | 미적용 | 도입 후보 |
+| Cross-Camera ReID | 미적용 | 다중 카메라 확장 후보 |
 | 룰 기반 이벤트 판단 로직 | ENTER/DWELL/EXIT 기본 구현 | debounce, hysteresis 등 정교화 |
+
+### Phase 4 Outcome
+
+실제 촬영 데이터로 ByteTrack, BoT-SORT ReID OFF·ON과 `track_buffer=30/60`을
+비교했지만 Cause top-1 채택 기준을 충족한 후보가 없었다. Production은
+ByteTrack을 유지하고, OSNet·Cross-Camera ReID는 Phase 4에 도입하지 않았다.

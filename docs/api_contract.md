@@ -2,14 +2,15 @@
 
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
-> **최종 수정**: 2026-07-29 (Phase 4 Contract v1 반영)
-> **상태**: Phase 3 API 구현 완료 / Phase 4 기간 조회·Zone 저장 계약 동결,
-> 실제 구현은 역할별 후속 PR
+> **최종 수정**: 2026-08-24 (Phase 4 구현·동결 결과 반영)
+> **상태**: Phase 4 기간 조회·Zone 저장·Frontend 연동 구현 완료,
+> Backend·DB·RTSP 설정 동결
 > **관련 문서**: [`interfaces.md`](interfaces.md),
 > [`fall_evaluation.md`](fall_evaluation.md), [`decisions.md`](decisions.md),
 > [`roadmap.md`](roadmap.md)
 
-이 문서는 Phase 1.5-2.5의 구현된 API, Phase 3 Live Frame API·Event/Zone 공용 계약, 그리고 Phase 3의 확정된 후속 계약(안전 감지 로직 등)을 구분해 정리한다.
+이 문서는 Phase 1.5-2.5의 기본 API, Phase 3 Live Frame·Event/Zone 공용 계약과
+Phase 4 기간 조회·Zone 저장 구현 및 동결 결과를 구분해 정리한다.
 
 ---
 
@@ -480,14 +481,14 @@ Vision AI 파이프라인이 현재 프레임 기준 감지 상태를 저장/갱
 
 ---
 
-## GET /zones (Phase 3 현재 구현)
+## GET /zones (Phase 3 역사적 기준선)
 
 `data/zones/sample.json`을 읽어 반환한다. 파일이 없거나 형식이 맞지 않으면 빈 리스트를 반환할 수 있다.
 API 응답에서는 `zone_name`을 보장한다.
 전환기 호환성을 위해 기존 `name` 필드는 제거하지 않는다.
 
-이 동작은 Phase 3 기준선이다. Phase 4 후속 구현에서는 아래
-`GET /zones Phase 4 계약`의 version envelope와 오류 정책으로 전환한다.
+이 동작은 Phase 3 기준선이며 현재 경로가 아니다. Phase 4에서 아래
+`GET /zones Phase 4 계약`의 version envelope와 오류 정책으로 전환했다.
 
 ### Response
 
@@ -585,7 +586,7 @@ C 역할은 WebSocket 대신 polling으로 실시간성을 확보한다.
 | `GET /summary` | 10초 |
 | `GET /events` | 페이지 진입 또는 필터 변경 시 |
 
-WebSocket은 Phase 2.5와 Phase 3에서도 제외하며 Phase 4 이후 검토한다.
+Phase 4에서도 REST polling을 유지하고 WebSocket은 미채택했다.
 
 ---
 
@@ -807,7 +808,7 @@ Phase 3 신규 EventType의 Summary 집계 기준:
 
 ## GET /zones Phase 4 계약
 
-> 상태: 계약 동결, 실제 구현은 B 후속 PR
+> 상태: Phase 4 구현·회귀 검증 완료
 
 Phase 4에서는 기존 list-only `data`를 version이 포함된 설정 envelope로
 변경한다.
@@ -860,7 +861,7 @@ Phase 4에서는 기존 list-only `data`를 version이 포함된 설정 envelope
 
 ## PUT /zones Phase 4 저장 계약
 
-> 상태: 계약 동결, 실제 구현은 B 후속 PR
+> 상태: Phase 4 구현·회귀 검증 완료
 
 ```json
 {
@@ -927,5 +928,5 @@ Phase 4에서는 기존 list-only `data`를 version이 포함된 설정 envelope
 - `target`: `Track #N` 형식
 - `title`·`message`·`severity`: `event_type` 기반 Frontend 매핑
 - 처리 상태: Phase 3에서 `미확인` 고정
-- `확인중`·`처리완료`·조치 메모 저장: Phase 4 후속 범위
+- `확인중`·`처리완료`·조치 메모 저장: Phase 4 이후 후속 범위
 - 실제 이벤트와 Mock 처리 상태 혼용 금지

@@ -55,14 +55,14 @@ class TrackingResult:
 | DWELL | 체류 | zone에 `dwell_threshold_sec` 이상 머무름 (zone당 1회) |
 | EXIT | 이탈 | 사람이 zone에서 나감 |
 
-**Phase 3 신규 (공간 안전정책 및 FALL_SUSPECT opt-in PoC 구현 완료)**
+**Phase 3-4 확장 (공간 안전정책·FALL_SUSPECT·cause)**
 
 `src/common/types.py`의 `EventType`/`VALID_EVENT_TYPES`와 `EventManager`의
 `ENTER_RESTRICTED`, `DANGER_ZONE_DWELL` 발생 로직을 반영했다. `FALL_SUSPECT`는
-`--fall-detection-enabled`에서만 동작하는 bbox·pose·보조 detector 기반 PoC다.
-오탐 운영 목표가 미달해 기본값은 비활성화다. `cause` 외부 접촉 원인
-후보 추정도 구현했다 — 근거가 충분하면 `NEARBY_TRACK`을, 부족하면
-여전히 `null`을 기록한다(정량 정확도 미검증 PoC, 아래 상태 흐름 절 참고).
+`--fall-detection-enabled`에서만 동작하는 bbox·pose·보조 detector 기반
+selected profile이다. `cause` 외부 접촉 원인 후보 추정도 구현했다.
+근거가 충분하면 `NEARBY_TRACK`을, 부족하면 `null`을 기록한다.
+Phase 4 정량 평가 후 cause attribution은 진단 범위로 분리했다.
 
 | 타입 | 의미 | 발생 조건 |
 |------|------|---------|
@@ -73,7 +73,7 @@ class TrackingResult:
 - 동일 상태 변화에서 일반·안전 이벤트 중복 생성 금지
 - `restricted`·`danger` 구역 이탈은 기존 `EXIT` 사용
 - 구역 밖 낙상: `zone_id="__global__"`
-- 독립 `COLLISION_SUSPECT`는 Phase 4 이후 재검토
+- 독립 `COLLISION_SUSPECT`는 현재 Event 계약에 포함하지 않음
 
 ### 이벤트 발생 기준
 
@@ -328,7 +328,7 @@ GET /events          # 이벤트 목록 (필터/페이지 진입 시)
 - Event → `POST /events` 전송
 - Current Status → `PUT /status/current` 전송
 - React polling 기반 실시간 갱신
-- WebSocket은 Phase 4 이후 검토
+- Phase 4 실시간 갱신 계약은 REST polling으로 동결
 
 ---
 
@@ -429,7 +429,8 @@ MonitoringPage의 KPI와 목록은 다음 기준으로 매핑한다.
 | `GET /summary` | 10초 |
 | `GET /events` | 페이지 진입 또는 필터 변경 시 |
 
-WebSocket은 Phase 2.5와 Phase 3에서도 제외하며 Phase 4 이후 검토한다.
+Phase 4에서 REST polling의 중복·stale·timeout 처리를 보강하고 현재 계약으로
+동결했다.
 
 ---
 
@@ -509,7 +510,8 @@ RTSPSource
 ### 주의사항
 
 - Phase 2에서 FileVideoSource / WebcamSource / RTSPSource 구현을 완료했다.
-- reconnect 고도화와 장시간 안정화는 Phase 2.5에서 검증한다.
+- Phase 4에서 RTSP 최신 프레임 입력을 검증했다. 자동 재연결은 현재
+  실행 계약에 포함하지 않으며 스트림 종료 시 수동 재실행한다.
 - 기존 파일 영상 MVP 파이프라인은 깨지지 않아야 한다.
 - `Event.video_source`는 파일 경로 또는 camera_id로 사용한다.
 
@@ -517,7 +519,7 @@ RTSPSource
 
 ## 9. Phase 3 공용 계약
 
-> 상태: EventType·ZoneType·EventCause·DB migration·Frontend 타입·공간 안전정책 반영 완료 / FALL_SUSPECT opt-in PoC 및 `cause` 외부 접촉 원인 후보 추정 구현 완료(정량 정확도 미검증)
+> 상태: EventType·ZoneType·EventCause·DB migration·Frontend 타입·공간 안전정책 반영 완료 / Phase 4 실제 촬영 `cause` 정량 평가 완료
 > 기준선: v0.3.0-safety
 
 ### ZoneType 계약

@@ -344,7 +344,7 @@ Ultralytics 공식 COCO benchmark에서 YOLO26n은 YOLOv8n 대비 높은 mAP와 
 - `unique IDs`는 정식 IDF1/MOTA/ID switch가 아니라 ID fragmentation proxy다.
 - 최종 논문에서 정식 성능 지표가 필요하면 라벨링된 데이터셋으로 detection mAP와 tracking IDF1/MOTA를 별도 측정해야 한다.
 
-추후 최종 성능 평가 계획:
+Phase 1.5 당시 후속 평가 계획:
 
 ```text
 1. 팀원 재현 촬영 또는 실제/유사 키즈카페 영상 확보
@@ -354,7 +354,7 @@ Ultralytics 공식 COCO benchmark에서 YOLO26n은 YOLOv8n 대비 높은 mAP와 
    - ENTER
    - DWELL
    - EXIT
-   - FALL_SUSPECT (Phase 3 opt-in PoC 구현 완료, 외부 평가·최적화 후속) / COLLISION_SUSPECT (Phase 4 이후 재검토)
+   - FALL_SUSPECT (당시 Phase 3 opt-in PoC) / COLLISION_SUSPECT (당시 후속 후보)
 5. 필요 시 track_id 연속성 수동 기준 작성
 6. 최종 보고서/논문용 정식 지표 산출
 ```
@@ -368,7 +368,10 @@ Ultralytics 공식 COCO benchmark에서 YOLO26n은 YOLOv8n 대비 높은 mAP와 
 | Event | event precision, event recall, false alert count, missed event count |
 | Real-time | FPS, latency, frame drop, reconnect time |
 
-따라서 현재 문서의 결과는 Phase 2 기준 모델 후보 선정 근거로 사용하고, 최종 논문/보고서의 정확도 평가는 별도 라벨링 데이터셋으로 보강한다.
+이 계획에 따라 Phase 4에서 실제 촬영 actor-disjoint 낙상 평가와 다중 인원
+Track·Cause 평가를 수행했다. 이 문서의 수치는 Phase 2 기준 모델 선정 근거로만
+사용하고, 목표 환경 성능은 `docs/fall_evaluation.md`와 Phase 4 평가 artifact를
+사용한다.
 
 ---
 
