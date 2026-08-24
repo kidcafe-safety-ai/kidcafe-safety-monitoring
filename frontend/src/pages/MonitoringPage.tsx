@@ -1,5 +1,5 @@
 import { AlertTriangle, Clock3, ShieldAlert, Users } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   getCurrentStatus,
   getDashboardSummary,
@@ -15,6 +15,7 @@ import type { DashboardSummary, SafetyEvent, ZoneStatus } from "../types/event";
 import type { CurrentStatus } from "../types/status";
 
 const RECENT_EVENT_MINUTES = 10;
+const INITIAL_DASHBOARD_RETRY_INTERVAL_MS = 3000;
 
 function getZonesFromCurrentStatus(currentStatus: CurrentStatus): ZoneStatus[] {
   return currentStatus.zone_occupancy.map((zone) => ({
@@ -133,22 +134,7 @@ export default function MonitoringPage() {
     }));
   }, []);
 
-  useEffect(() => {
-    let isMounted = true;
-    const controller = new AbortController();
-
-    void loadDashboardData({
-      signal: controller.signal,
-      requestId: 0,
-      isActive: () => isMounted && !controller.signal.aborted,
-    });
-
-    return () => {
-      isMounted = false;
-      controller.abort();
-    };
-  }, [loadDashboardData]);
-
+  usePolling(loadDashboardData, INITIAL_DASHBOARD_RETRY_INTERVAL_MS, isLoading);
   usePolling(loadRecentEvents, 3000, !isLoading);
   usePolling(loadSummary, 10000, !isLoading);
   usePolling(loadCurrentStatus, 2000, !isLoading);
