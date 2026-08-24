@@ -735,7 +735,8 @@ bbox/Pose 보조 근거 요구 등)는 **구현하지 않는다** — 기본 비
   모델 아키텍처(Phase 4 temporal classifier) 방향이다.
 - Subject 9-10 holdout 평가 전, Subject 7-8 기반 수치를 "최종 성능"으로
   보고하지 않도록 문서·리포트에서 주의가 필요하다.
-- ReID 기반 Track 재연결과 공간 buffer 튜닝은 별도 후속 작업이다.
+- ReID 기반 Track 재연결과 공간 buffer 튜닝은 별도 후속 작업으로 분리하며,
+  Phase 4 비교 결과와 미채택 결정은 ADR-025에 기록한다.
 
 ---
 
@@ -958,3 +959,65 @@ E0의 Recall이 6.25%였다. 주요 원인은 후보 진입이 아니라 카메�
   검증한 뒤 기본 ON 전환을 별도 PR에서 판단한다.
 - 동일 환경 E0·E1 각 3회 측정 FPS 중앙값 비교로 하락률 -0.5%(개선)를 확인해
   FPS 채택 기준을 충족했다(`docs/fall_evaluation.md` §14.15).
+
+---
+
+## ADR-025: Phase 4 Tracker 비교 후 ByteTrack 유지
+
+**Date**: 2026-08-20
+**Status**: Accepted
+
+### Context
+
+ADR-020에서 후속 작업으로 분리한 ReID 기반 Track 재연결과 공간 buffer 조정을
+실제 촬영 다중 인원 12편에서 평가했다. 비교 대상은 동일한 E1 detector와 낙상
+설정을 사용하는 ByteTrack, BoT-SORT ReID OFF, BoT-SORT ReID ON 세 arm이다.
+Cause 후보 8편은 Event 검출 여부와 무관한 고정 분모로 채점했다.
+
+기본 `track_buffer=30`에서 Cause top-1은 각각 3/8, 4/8, 3/8이고 reviewed ID
+switch는 15건, 14건, 14건이었다. `track_buffer=60`에서는 Cause top-1이
+변하지 않았고 ID switch만 각 arm에서 1건씩 감소했다. BoT-SORT ReID ON은
+ReID OFF보다 ID switch를 더 줄이지 못했으며 Cause top-1도 낮았다.
+
+### Decision
+
+- Production association tracker는 기존 ByteTrack을 유지한다.
+- BoT-SORT와 `yolo26n-cls.pt` 기반 appearance ReID는 평가 도구에만 보존하고
+  Production 파이프라인에는 통합하지 않는다.
+- `track_buffer=60`은 buffer 효과를 분리한 진단값으로 보존하며 Production
+  기본값으로 채택하지 않는다.
+- 이번 결과는 사람 전용 ReID encoder의 일반적 효용을 기각하는 근거로
+  확대하지 않는다.
+- Phase 4에서는 OSNet 등 새 ReID encoder 통합과 추가 tracker 튜닝을 종료한다.
+
+### Reason
+
+- 세 arm 모두 Cause-null specificity 24/24, Recall 93.75%, timely Recall
+  90.63%를 유지했지만 Cause top-1 채택 기준 7/8을 충족하지 못했다.
+- BoT-SORT ReID OFF는 victim mismatch를 1건 줄이고 Cause top-1을 4/8로
+  높였으나 기준에는 미달했다.
+- 현재 ReID arm은 일반 분류 모델인 `yolo26n-cls.pt`를 사용한다. ReID ON이
+  OFF 대비 ID switch와 Cause 정확도를 개선하지 못했으므로 목표 환경의
+  Production 복잡도를 늘릴 근거가 없다.
+- `track_buffer=60`의 ID switch 감소는 세 arm에 동일하게 나타났고 Cause
+  정확도로 이어지지 않아 ReID 채택 근거와 분리한다.
+
+### Alternatives
+
+- **BoT-SORT ReID OFF 채택**: 세 arm 중 Cause top-1이 가장 높지만 사전 기준에
+  미달해 기각한다.
+- **BoT-SORT ReID ON 채택**: ReID OFF보다 ID switch를 더 줄이지 못하고 Cause
+  top-1도 낮아 기각한다.
+- **`track_buffer=60` 기본화**: ID switch를 1건 줄였지만 Cause 정확도 개선이
+  없어 기각한다.
+- **OSNet 등 사람 전용 encoder 추가 통합**: 별도 데이터와 통합 검증이 필요한
+  신규 개발이므로 Phase 4 종료 범위에서는 진행하지 않는다.
+
+### Consequences
+
+- Production 실행에는 BoT-SORT·ReID 선택 토글을 추가하지 않는다.
+- 평가 설정과 비식별 결과 artifact는
+  `docs/phase4_tracker_comparison/`에 보존한다.
+- 남은 ID switch와 Cause 오류는 현재 ByteTrack 경로의 알려진 한계다.
+- 사람 전용 ReID를 다시 검토하려면 새 평가 범위와 채택 기준을 먼저 동결하고
+  별도 실험으로 진행한다.

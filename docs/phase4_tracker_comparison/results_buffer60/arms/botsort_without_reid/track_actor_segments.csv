@@ -1,0 +1,68 @@
+run_id,video_id,start_frame,end_frame,track_id,actor_id,review_status,notes
+botsort_without_reid,P4_S01_A01_contact_fall_01_cam01,0,94,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_01_cam01,5,297,2,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_01_cam01,85,88,3,,reviewed,reviewed non-actor track; carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_01_cam01,120,176,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_01_cam01,183,183,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_01_cam01,193,297,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_02_cam01,0,89,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_02_cam01,13,240,2,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_02_cam01,102,270,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_02_cam01,248,270,4,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_03_cam01,0,107,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_03_cam01,30,256,2,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_03_cam01,144,270,1,A01,reviewed,
+botsort_without_reid,P4_S01_A01_contact_fall_04_cam01,0,98,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_04_cam01,4,248,2,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_04_cam01,67,77,3,,reviewed,reviewed non-actor track; carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_04_cam01,115,277,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_contact_fall_04_cam01,180,181,6,,reviewed,reviewed non-actor track; carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_near_pass_01_cam01,0,529,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_near_pass_01_cam01,0,211,2,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_near_pass_01_cam01,81,81,5,,reviewed,reviewed non-actor track; carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_near_pass_01_cam01,221,529,2,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_near_pass_02_cam01,0,59,1,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_near_pass_02_cam01,17,608,2,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_near_pass_02_cam01,66,229,1,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_near_pass_02_cam01,240,382,1,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_near_pass_02_cam01,391,625,1,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_near_pass_03_cam01,0,111,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_near_pass_03_cam01,26,244,2,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_near_pass_03_cam01,206,456,4,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_near_pass_03_cam01,253,509,2,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,0,132,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,29,37,2,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,55,57,2,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,143,169,6,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,171,272,10,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,184,194,6,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,203,246,6,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,255,292,11,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,282,449,10,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,386,494,13,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,482,545,16,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,502,520,13,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,574,579,17,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,596,627,18,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,604,604,17,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,634,658,20,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A01_occluded_cross_01_cam01,643,681,21,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_01_cam01,0,231,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_01_cam01,0,81,2,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_01_cam01,4,4,3,,reviewed,reviewed non-actor track; carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_01_cam01,198,231,5,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_02_cam01,0,123,1,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_02_cam01,26,260,4,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_02_cam01,98,99,5,,reviewed,reviewed non-actor track; carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_02_cam01,132,133,6,,reviewed,reviewed non-actor track; carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_02_cam01,133,151,1,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_02_cam01,158,171,1,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_02_cam01,186,198,1,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_02_cam01,223,260,1,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_03_cam01,0,264,1,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_03_cam01,3,112,2,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_04_cam01,0,131,1,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_04_cam01,34,324,3,A01,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_04_cam01,153,154,6,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_04_cam01,163,166,6,A02,reviewed,carried from reviewed buffer30 exact segment
+botsort_without_reid,P4_S01_A02_contact_fall_04_cam01,180,324,6,A02,reviewed,carried from reviewed buffer30 exact segment

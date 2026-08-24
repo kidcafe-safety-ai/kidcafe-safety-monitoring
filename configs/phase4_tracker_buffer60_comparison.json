@@ -1,0 +1,82 @@
+{
+  "schema_version": "phase4_tracker_comparison_v1",
+  "policy_version": "phase4_tracker_comparison_policy_v1",
+  "status": "buffer60_followup_pending",
+  "ultralytics_version": "8.4.56",
+  "selected_profile": {
+    "path": "configs/fall_e1_selected.json",
+    "execution_profile_sha256": "042372cd0ed6749a69e19421a60b408eecb944bd7ecc4eee3838181d7287bf5f"
+  },
+  "dataset": {
+    "manifest_path": "data/annotations/phase4/recordings_manifest.csv",
+    "manifest_sha256": "acfd84cf68641bafa268e18d2e09aba7e2b1579426cf41f65b40b23e3c524e42",
+    "annotations_path": "data/annotations/phase4/fall_cause_annotations.csv",
+    "annotations_sha256": "318a16602bc194e796d5e89eb0ebf87a769eb31f8eae5c6a2d1aa9bf443d5f13",
+    "split": "diagnostic",
+    "multiperson_scenarios": [
+      "contact_fall",
+      "near_pass",
+      "occluded_cross"
+    ],
+    "multiperson_video_count": 12,
+    "cause_candidate_video_count": 8,
+    "cause_null_video_count": 24
+  },
+  "fixed_inference": {
+    "tracker_type": "pose",
+    "tracker_model_path": "yolo26n-pose.pt",
+    "tracker_model_sha256": "eb3bb8268828aeaf515cec23a4bfafd793944a86fe9af94ba7823609c14522a9",
+    "tracker_confidence": 0.5,
+    "fall_model_path": "outputs/fall_training/models/fall_detector_phase4_e1.pt",
+    "fall_model_sha256": "41701c4686212447271f4dd81b71a14704b76cb9f38fe1c727d446477fbdd28b",
+    "fall_model_confidence": 0.5,
+    "fall_detector_config_path": "configs/fall_detection.json",
+    "fall_detector_config_sha256": "50ebecd28772d9ee81a2d79afd75f3ebbb8dfe4f19a7365ed03cf1039bdef8a6",
+    "fall_model_iou_threshold": 0.3,
+    "fall_model_interval_frames": 3,
+    "fall_pose_normal_gate_enabled": true,
+    "evaluation_protocol_version": "phase4_fall_eval_v1"
+  },
+  "arms": [
+    {
+      "arm_id": "bytetrack_baseline",
+      "tracker_config_path": "configs/trackers/phase4_bytetrack_buffer60.yaml",
+      "tracker_config_sha256": "1065fb3e5961e957c4f3cf232142c468386ae5a52f0a78b4aaf21ae73d224268",
+      "tracker_backend": "bytetrack",
+      "with_reid": false,
+      "reid_model_path": null,
+      "reid_model_sha256": null
+    },
+    {
+      "arm_id": "botsort_without_reid",
+      "tracker_config_path": "configs/trackers/phase4_botsort_no_reid_buffer60.yaml",
+      "tracker_config_sha256": "34b714eb76dc22c8ace9e8efcee37b65c2bb56e47517151be6e52c9fe7d0c5b7",
+      "tracker_backend": "botsort",
+      "with_reid": false,
+      "reid_model_path": null,
+      "reid_model_sha256": null
+    },
+    {
+      "arm_id": "botsort_with_reid",
+      "tracker_config_path": "configs/trackers/phase4_botsort_reid_buffer60.yaml",
+      "tracker_config_sha256": "fd6b55ba7dbeb29a2022354607de57c26907c6473c85c7ccef4b7e62e1a0bbd7",
+      "tracker_backend": "botsort",
+      "with_reid": true,
+      "reid_model_path": "outputs/phase4_tracker_comparison/models/yolo26n-cls.pt",
+      "reid_model_sha256": "0dd6f8dbc448870ac98a3cbb7156f923f7ce21fed3755d4019169ffffd279e81"
+    }
+  ],
+  "acceptance": {
+    "cause_top1_min_correct": 7,
+    "cause_top1_denominator": 8,
+    "cause_null_specificity_min": 0.9,
+    "recall_max_drop": 0.0,
+    "timely_recall_max_drop": 0.0,
+    "false_event_max_increase": 0,
+    "duplicate_event_max_increase": 0,
+    "victim_mismatch_must_decrease": true,
+    "id_switch_must_decrease": true,
+    "avg_onset_latency_max_increase_sec": 0.2,
+    "fps_max_drop_ratio": 0.2
+  }
+}

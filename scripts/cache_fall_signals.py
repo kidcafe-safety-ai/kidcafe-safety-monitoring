@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Optional
 
 import cv2
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -86,6 +87,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default=None)
     parser.add_argument("--conf", type=float, default=0.5)
     parser.add_argument("--device", default="auto")
+    parser.add_argument(
+        "--tracker-config",
+        default="bytetrack.yaml",
+        help="Ultralytics tracker YAML. 비교 실험은 저장소의 명시적 파일을 사용한다.",
+    )
+    parser.add_argument(
+        "--tracker-config-sha256",
+        default=None,
+        help="지정하면 tracker YAML을 열기 전에 SHA-256 일치를 강제한다.",
+    )
+    parser.add_argument(
+        "--reid-model-sha256",
+        default=None,
+        help="ReID ON YAML의 로컬 model SHA-256. auto/URL 모델은 허용하지 않는다.",
+    )
     parser.add_argument("--fall-model-path", default=None)
     parser.add_argument("--fall-model-conf", type=float, default=0.5)
     parser.add_argument("--fall-model-device", default="auto")
@@ -97,6 +113,80 @@ def parse_args() -> argparse.Namespace:
     )
     evaluation_protocol.add_cli_argument(parser)
     return parser.parse_args()
+
+
+def _tracker_config_metadata(args: argparse.Namespace) -> dict:
+    """Tracker YAML과 선택적 ReID 모델을 추론 시작 전에 검증한다."""
+    path = Path(args.tracker_config)
+    if not path.is_file():
+        if args.tracker_config != "bytetrack.yaml":
+            raise ValueError(f"tracker config 파일이 없습니다: {path}")
+        if args.tracker_config_sha256 or args.reid_model_sha256:
+            raise ValueError("내장 bytetrack.yaml에는 외부 SHA-256을 지정할 수 없습니다.")
+        return {
+            "tracker_config": args.tracker_config,
+            "tracker_config_sha256": None,
+            "tracker_backend": "bytetrack",
+            "with_reid": False,
+            "reid_model_path": None,
+            "reid_model_sha256": None,
+        }
+
+    actual_config_sha = cache.sha256_file(str(path))
+    if (
+        args.tracker_config_sha256 is not None
+        and actual_config_sha != args.tracker_config_sha256
+    ):
+        raise ValueError(
+            "tracker config SHA-256 불일치: "
+            f"actual={actual_config_sha}, expected={args.tracker_config_sha256}"
+        )
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"tracker config YAML을 읽을 수 없습니다: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("tracker config root는 object여야 합니다.")
+    backend = payload.get("tracker_type")
+    if backend not in {"bytetrack", "botsort"}:
+        raise ValueError(f"지원하지 않는 tracker_type입니다: {backend!r}")
+
+    with_reid = payload.get("with_reid", False)
+    if not isinstance(with_reid, bool):
+        raise ValueError("tracker config의 with_reid는 boolean이어야 합니다.")
+    reid_model_path = None
+    reid_model_sha = None
+    if with_reid:
+        model = payload.get("model")
+        if not isinstance(model, str) or not model:
+            raise ValueError("ReID ON tracker config에는 model 경로가 필요합니다.")
+        if model == "auto" or model.startswith(("http://", "https://")):
+            raise ValueError("ReID 모델 auto/URL 입력은 금지됩니다. 로컬 파일을 지정하세요.")
+        reid_model_path = model
+        model_path = Path(model)
+        if not model_path.is_file():
+            raise ValueError(
+                f"ReID 모델 파일이 없습니다: {model_path}. 자동 다운로드하지 않습니다."
+            )
+        reid_model_sha = cache.sha256_file(str(model_path))
+        if args.reid_model_sha256 is None:
+            raise ValueError("ReID ON 실행에는 --reid-model-sha256이 필요합니다.")
+        if reid_model_sha != args.reid_model_sha256:
+            raise ValueError(
+                "ReID 모델 SHA-256 불일치: "
+                f"actual={reid_model_sha}, expected={args.reid_model_sha256}"
+            )
+    elif args.reid_model_sha256 is not None:
+        raise ValueError("ReID OFF tracker config에는 --reid-model-sha256을 쓸 수 없습니다.")
+
+    return {
+        "tracker_config": str(path),
+        "tracker_config_sha256": actual_config_sha,
+        "tracker_backend": backend,
+        "with_reid": with_reid,
+        "reid_model_path": reid_model_path,
+        "reid_model_sha256": reid_model_sha,
+    }
 
 
 def _cache_one_video(
@@ -170,6 +260,7 @@ def main() -> None:
     cache_dir = Path(args.cache_dir)
 
     try:
+        tracker_config_meta = _tracker_config_metadata(args)
         annotation_schema_version = evaluation_protocol.validate_protocol_request(
             args.evaluation_protocol_version,
             args.annotations,
@@ -201,7 +292,13 @@ def main() -> None:
     tracker_cls = PoseTracker if args.tracker == "pose" else ByteTracker
     default_model = "yolo26n-pose.pt" if args.tracker == "pose" else "yolo26n.pt"
     model_path = args.model or default_model
-    tracker = tracker_cls(model_path=model_path, conf=args.conf, fps=30.0, device=args.device)
+    tracker = tracker_cls(
+        model_path=model_path,
+        conf=args.conf,
+        tracker_config=args.tracker_config,
+        fps=30.0,
+        device=args.device,
+    )
     tracker_resolved_device = _resolved_device_or_exit(
         "tracker", tracker, args.device
     )
@@ -210,8 +307,7 @@ def main() -> None:
         "model_path": model_path,
         "model_sha256": cache.sha256_file(model_path),
         "conf": args.conf,
-        "tracker_config": "bytetrack.yaml",
-        "tracker_config_sha256": cache.sha256_file("bytetrack.yaml"),
+        **tracker_config_meta,
         "requested_device": args.device,
         "resolved_device": tracker_resolved_device,
     }

@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import fall_signal_cache as cache  # noqa: E402
 import phase4_recording_contract as contract  # noqa: E402
+import phase4_tracker_comparison_contract as comparison_contract  # noqa: E402
 from evaluate_fall_from_cache import (  # noqa: E402
     PoseGateStats,
     _frame_source_from_cache,
@@ -52,6 +53,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--annotations", required=True)
     parser.add_argument("--cache-dir", required=True)
     parser.add_argument("--selected-profile", default="configs/fall_e1_selected.json")
+    parser.add_argument(
+        "--tracker-comparison-config",
+        default=None,
+        help="Tracker 비교 실행이면 phase4_tracker_comparison_v1 JSON 경로",
+    )
+    parser.add_argument(
+        "--tracker-arm-id",
+        choices=comparison_contract.ARM_IDS,
+        default=None,
+        help="--tracker-comparison-config와 함께 지정한다.",
+    )
     parser.add_argument(
         "--cache-source-manifest", default=DEFAULT_CACHE_SOURCE_MANIFEST
     )
@@ -231,6 +243,10 @@ def replay_video(
 def main() -> None:
     args = parse_args()
     try:
+        if bool(args.tracker_comparison_config) != bool(args.tracker_arm_id):
+            raise ValueError(
+                "--tracker-comparison-config와 --tracker-arm-id는 함께 지정해야 합니다."
+            )
         selected = json.loads(Path(args.selected_profile).read_text(encoding="utf-8"))
         config = FallDetectorConfig.from_file(args.config)
 
@@ -257,6 +273,19 @@ def main() -> None:
         cache_manifest = cache.read_manifest(cache_dir)
         if cache_manifest is None:
             raise ValueError(f"{cache_dir}에 manifest.json이 없습니다.")
+        comparison_arm = None
+        if args.tracker_comparison_config:
+            comparison = comparison_contract.load_config(
+                args.tracker_comparison_config,
+                require_model_artifacts=False,
+            )
+            comparison_contract.validate_cohort(
+                comparison, manifest_rows, annotation_rows
+            )
+            comparison_arm = comparison_contract.arm_by_id(
+                comparison, args.tracker_arm_id
+            )
+            comparison_contract.validate_cache_arm(cache_manifest, comparison_arm)
 
         results = []
         for video_id in video_ids:
@@ -277,8 +306,7 @@ def main() -> None:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with output_path.open("w", encoding="utf-8") as file:
-            json.dump(
-                {
+            payload = {
                     "selected_execution_profile_sha256": (
                         contract.selected_execution_profile_sha256(selected)
                     ),
@@ -295,7 +323,13 @@ def main() -> None:
                     "fall_model_interval_frames": args.fall_model_interval_frames,
                     "fall_pose_normal_gate_enabled": args.fall_pose_normal_gate_enabled,
                     "videos": results,
-                },
+                }
+            if comparison_arm is not None:
+                payload["tracker_comparison_arm"] = (
+                    comparison_contract.arm_provenance(comparison_arm)
+                )
+            json.dump(
+                payload,
                 file,
                 ensure_ascii=False,
                 indent=2,

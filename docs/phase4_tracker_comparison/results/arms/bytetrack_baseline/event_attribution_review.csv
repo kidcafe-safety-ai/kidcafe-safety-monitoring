@@ -1,0 +1,13 @@
+run_id,video_id,event_frame,victim_track_id,victim_actor_id,predicted_cause_track_id,predicted_cause_actor_id,related_switch_ids,id_switch_relation,event_error_type,review_status,notes
+bytetrack_baseline,P4_S01_A01_contact_fall_01_cam01,131,4,A01,2,A02,sw_P4_S01_A01_contact_fall_01_cam01_3_4_121,none,none,reviewed,"confirmed from reviewed Track-to-Actor mapping, frozen annotation, and official evaluation"
+bytetrack_baseline,P4_S01_A01_contact_fall_02_cam01,81,1,A01,2,A02,,none,none,reviewed,"confirmed from reviewed Track-to-Actor mapping, frozen annotation, and official evaluation"
+bytetrack_baseline,P4_S01_A01_contact_fall_03_cam01,98,1,A01,,,,none,missed_cause,reviewed,"confirmed from reviewed Track-to-Actor mapping, frozen annotation, and official evaluation"
+bytetrack_baseline,P4_S01_A01_contact_fall_04_cam01,98,1,A01,2,A02,,none,none,reviewed,"confirmed from reviewed Track-to-Actor mapping, frozen annotation, and official evaluation"
+bytetrack_baseline,P4_S01_A01_near_pass_01_cam01,,,,,,,none,true_negative,reviewed,"confirmed from reviewed Track-to-Actor mapping, frozen annotation, and official evaluation"
+bytetrack_baseline,P4_S01_A01_near_pass_02_cam01,,,,,,,none,true_negative,reviewed,"confirmed from reviewed Track-to-Actor mapping, frozen annotation, and official evaluation"
+bytetrack_baseline,P4_S01_A01_near_pass_03_cam01,,,,,,,none,true_negative,reviewed,"confirmed from reviewed Track-to-Actor mapping, frozen annotation, and official evaluation"
+bytetrack_baseline,P4_S01_A01_occluded_cross_01_cam01,645,20,A01,,,sw_P4_S01_A01_occluded_cross_01_cam01_1_6_143|sw_P4_S01_A01_occluded_cross_01_cam01_6_11_255|sw_P4_S01_A01_occluded_cross_01_cam01_11_13_386|sw_P4_S01_A01_occluded_cross_01_cam01_13_18_596|sw_P4_S01_A01_occluded_cross_01_cam01_18_20_634,none,false_alarm,reviewed,"confirmed from reviewed Track-to-Actor mapping, frozen annotation, and official evaluation"
+bytetrack_baseline,P4_S01_A02_contact_fall_01_cam01,,,,,,,none,missed_fall,reviewed,"confirmed from reviewed Track-to-Actor mapping, frozen annotation, and official evaluation"
+bytetrack_baseline,P4_S01_A02_contact_fall_02_cam01,123,5,,1,A02,,none,victim_mismatch,reviewed,"confirmed from reviewed Track-to-Actor mapping, frozen annotation, and official evaluation"
+bytetrack_baseline,P4_S01_A02_contact_fall_03_cam01,,,,,,,none,missed_fall,reviewed,"confirmed from reviewed Track-to-Actor mapping, frozen annotation, and official evaluation"
+bytetrack_baseline,P4_S01_A02_contact_fall_04_cam01,191,6,A02,,,sw_P4_S01_A02_contact_fall_04_cam01_1_6_153,associated,late_fall,reviewed,"confirmed from reviewed Track-to-Actor mapping, frozen annotation, and official evaluation"

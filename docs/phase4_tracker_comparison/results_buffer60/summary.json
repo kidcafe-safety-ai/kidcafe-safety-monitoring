@@ -1,0 +1,163 @@
+{
+  "schema_version": "phase4_tracker_comparison_summary_v1",
+  "policy_version": "phase4_tracker_comparison_policy_v1",
+  "decision": "baseline_retained",
+  "selected_arm": "bytetrack_baseline",
+  "reid_status": "not_adopted",
+  "evaluator_git_commit": "7a22844fd1f9aa035fdb6d0c05cd2aa82fab1066",
+  "acceptance": {
+    "cause_top1_min_correct": 7,
+    "cause_top1_denominator": 8,
+    "cause_null_specificity_min": 0.9,
+    "recall_max_drop": 0.0,
+    "timely_recall_max_drop": 0.0,
+    "false_event_max_increase": 0,
+    "duplicate_event_max_increase": 0,
+    "victim_mismatch_must_decrease": true,
+    "id_switch_must_decrease": true,
+    "avg_onset_latency_max_increase_sec": 0.2,
+    "fps_max_drop_ratio": 0.2
+  },
+  "arms": [
+    {
+      "arm_id": "bytetrack_baseline",
+      "tracker_backend": "bytetrack",
+      "with_reid": false,
+      "cause_top1_correct": 3,
+      "cause_top1_denominator": 8,
+      "cause_top1_accuracy": 0.375,
+      "cause_null_correct": 24,
+      "cause_null_denominator": 24,
+      "cause_null_specificity": 1.0,
+      "recall": 0.9375,
+      "timely_recall": 0.90625,
+      "false_alarm_per_min": 0.3681821863640045,
+      "false_event_count": 1,
+      "duplicate_events": 0,
+      "victim_mismatch": 1,
+      "reviewed_id_switches": 14,
+      "avg_onset_latency_sec": 0.31985977011494254,
+      "fps_avg": 6.628535291404228,
+      "provenance": {
+        "evaluator_git_commit": "7a22844fd1f9aa035fdb6d0c05cd2aa82fab1066",
+        "arm_run_manifest_sha256": "93dc84ff8f493e0cbeb88e3c1cd4852a841d84c3dbba8fc0cdfe105ded5ac48c",
+        "official_eval_sha256": "57462529fc0106fb9623538783233df17d7d62779ee7ea443e726300f3090f32",
+        "cause_summary_sha256": "b6ca66852de37e8bd9f7a93c8fc7e4fd4bbe60312d110c6348b7227fc4f950c8",
+        "timing_report_sha256": "82846b6743a27dff2e1d855d9dfe734abc75047956c65d7bd4a4c0e83b89d6c9"
+      }
+    },
+    {
+      "arm_id": "botsort_without_reid",
+      "tracker_backend": "botsort",
+      "with_reid": false,
+      "cause_top1_correct": 4,
+      "cause_top1_denominator": 8,
+      "cause_top1_accuracy": 0.5,
+      "cause_null_correct": 24,
+      "cause_null_denominator": 24,
+      "cause_null_specificity": 1.0,
+      "recall": 0.9375,
+      "timely_recall": 0.90625,
+      "false_alarm_per_min": 0.3681821863640045,
+      "false_event_count": 1,
+      "duplicate_events": 0,
+      "victim_mismatch": 0,
+      "reviewed_id_switches": 13,
+      "avg_onset_latency_sec": 0.27498735632183907,
+      "fps_avg": 5.464783703103324,
+      "provenance": {
+        "evaluator_git_commit": "7a22844fd1f9aa035fdb6d0c05cd2aa82fab1066",
+        "arm_run_manifest_sha256": "5004c79c586e259517e3d5a7b0011a9ad85d9e09dbfa7ca38d6b2e5f5145d2bd",
+        "official_eval_sha256": "a5335040a8dc8d1d4b9aa54c9659018c2a302ff5dc972fbbb16bf53b9df3ad0d",
+        "cause_summary_sha256": "8714915416a0baade31cad070f363c7ba09b97d1e9f01495e9ea792f7c92f511",
+        "timing_report_sha256": "5ef90acebc770bc7df82351c0e69cb727c5bbca51bf2618c25a4a0de390df726"
+      }
+    },
+    {
+      "arm_id": "botsort_with_reid",
+      "tracker_backend": "botsort",
+      "with_reid": true,
+      "cause_top1_correct": 3,
+      "cause_top1_denominator": 8,
+      "cause_top1_accuracy": 0.375,
+      "cause_null_correct": 24,
+      "cause_null_denominator": 24,
+      "cause_null_specificity": 1.0,
+      "recall": 0.9375,
+      "timely_recall": 0.90625,
+      "false_alarm_per_min": 0.3681821863640045,
+      "false_event_count": 1,
+      "duplicate_events": 0,
+      "victim_mismatch": 0,
+      "reviewed_id_switches": 13,
+      "avg_onset_latency_sec": 0.2726862068965517,
+      "fps_avg": 3.8116019734617197,
+      "provenance": {
+        "evaluator_git_commit": "7a22844fd1f9aa035fdb6d0c05cd2aa82fab1066",
+        "arm_run_manifest_sha256": "912c136dee8cc3c34a2e65f87b6d0ec3a393ae8ce554aaba00f7d977a22b18a9",
+        "official_eval_sha256": "25d637c3e061eb1012fe3e3db9ca3ed701b36451d780e776685b29135b8e07fa",
+        "cause_summary_sha256": "af67fe4a192c93c8aeb7bc79b12a4c2e0228efa177e3141cbffdb30d2a759286",
+        "timing_report_sha256": "592ce635331b789fbe470396b6cf9f9fcf72ca718c4bf72f78c825a0f40baf2c"
+      }
+    }
+  ],
+  "candidate_evaluations": {
+    "botsort_without_reid": {
+      "checks": {
+        "cause_top1": false,
+        "cause_null_specificity": true,
+        "recall_no_regression": true,
+        "timely_recall_no_regression": true,
+        "false_events_no_increase": true,
+        "duplicates_no_increase": true,
+        "victim_mismatch_decreased": true,
+        "id_switch_decreased": true,
+        "latency_within_limit": true
+      },
+      "diagnostic_checks": {
+        "fps_within_limit": true
+      },
+      "passed": false,
+      "deltas_from_baseline": {
+        "cause_top1_correct": 1,
+        "recall": 0.0,
+        "timely_recall": 0.0,
+        "false_event_count": 0,
+        "duplicate_events": 0,
+        "victim_mismatch": -1,
+        "reviewed_id_switches": -1,
+        "avg_onset_latency_sec": -0.04487241379310347,
+        "fps_drop_ratio": 0.17556692951609354
+      }
+    },
+    "botsort_with_reid": {
+      "checks": {
+        "cause_top1": false,
+        "cause_null_specificity": true,
+        "recall_no_regression": true,
+        "timely_recall_no_regression": true,
+        "false_events_no_increase": true,
+        "duplicates_no_increase": true,
+        "victim_mismatch_decreased": true,
+        "id_switch_decreased": true,
+        "latency_within_limit": true
+      },
+      "diagnostic_checks": {
+        "fps_within_limit": false
+      },
+      "passed": false,
+      "deltas_from_baseline": {
+        "cause_top1_correct": 0,
+        "recall": 0.0,
+        "timely_recall": 0.0,
+        "false_event_count": 0,
+        "duplicate_events": 0,
+        "victim_mismatch": -1,
+        "reviewed_id_switches": -1,
+        "avg_onset_latency_sec": -0.047173563218390835,
+        "fps_drop_ratio": 0.42497070530731873
+      }
+    }
+  },
+  "comparison_config_sha256": "735c452f9cdf0a8bb677223a5535aa9e6435a019102ef99f3c41d9221f735686"
+}

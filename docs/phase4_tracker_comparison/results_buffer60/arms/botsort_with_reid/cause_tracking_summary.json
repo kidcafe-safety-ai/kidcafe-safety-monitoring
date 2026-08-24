@@ -1,0 +1,98 @@
+{
+  "schema_version": "phase4_cause_tracking_summary_v1",
+  "evaluation_protocol_version": "phase4_fall_eval_v1",
+  "tracker_comparison_policy_version": "phase4_tracker_comparison_policy_v1",
+  "scope": {
+    "multiperson_videos": 12,
+    "cause_null_extension_videos": 24,
+    "event_review_rows": 12,
+    "reviewed_event_rows": 12
+  },
+  "cause_top1": {
+    "correct": 3,
+    "denominator": 8,
+    "accuracy": 0.375,
+    "target": 0.8,
+    "meets_target": false,
+    "matched_event_count": 5,
+    "missed_fall": 2,
+    "late_fall": 1,
+    "unmatched_event": 0,
+    "by_actor": {
+      "A01": {
+        "correct": 3,
+        "denominator": 4,
+        "matched_event_count": 4,
+        "missed_fall": 0,
+        "late_fall": 0,
+        "unmatched_event": 0,
+        "accuracy": 0.75
+      },
+      "A02": {
+        "correct": 0,
+        "denominator": 4,
+        "matched_event_count": 1,
+        "missed_fall": 2,
+        "late_fall": 1,
+        "unmatched_event": 0,
+        "accuracy": 0.0
+      }
+    },
+    "missed_cause": 2,
+    "wrong_cause_actor": 0,
+    "victim_mismatch_scored_independently": 0
+  },
+  "cause_null_specificity": {
+    "correct": 24,
+    "denominator": 24,
+    "specificity": 1.0,
+    "target": 0.9,
+    "meets_target": true,
+    "false_attribution": 0
+  },
+  "event_outcomes": {
+    "false_alarm": 1,
+    "late_fall": 1,
+    "missed_cause": 2,
+    "missed_fall": 2,
+    "none": 3,
+    "true_negative": 3
+  },
+  "tracking": {
+    "reviewed_id_switches": 13,
+    "id_switch_relations": {
+      "associated": 1,
+      "none": 11
+    },
+    "caused_event_errors": 0,
+    "tracker_comparison_required": true,
+    "tracker_comparison_reasons": [
+      "cause_top1_below_target"
+    ],
+    "comparison_order": [
+      "bytetrack_baseline",
+      "botsort_without_reid",
+      "botsort_with_reid"
+    ],
+    "reid_experiment_status": "required",
+    "reid_production_status": "pending_three_way_comparison"
+  },
+  "provenance": {
+    "selected_execution_profile_sha256": "042372cd0ed6749a69e19421a60b408eecb944bd7ecc4eee3838181d7287bf5f",
+    "recordings_manifest_sha256": "acfd84cf68641bafa268e18d2e09aba7e2b1579426cf41f65b40b23e3c524e42",
+    "fall_cause_annotations_sha256": "318a16602bc194e796d5e89eb0ebf87a769eb31f8eae5c6a2d1aa9bf443d5f13",
+    "event_attribution_review_sha256": "2acd93c6440d40171a12f0f996cb11bb7db13080366bee1e89a2110cd78651e1",
+    "track_id_switches_sha256": "9c6dc35435f4df2675e14dd25f5098944f4233bfbef382fff6e23a4f3d062669",
+    "official_eval_sha256": "25d637c3e061eb1012fe3e3db9ca3ed701b36451d780e776685b29135b8e07fa"
+  },
+  "tracker_comparison_arm": {
+    "arm_id": "botsort_with_reid",
+    "arm_config_sha256": "88e47b1eb67d1b1363ea59ccf6356076401b3b5628ac34c41b11c476fe63516f",
+    "tracker_config_path": "configs/trackers/phase4_botsort_reid_buffer60.yaml",
+    "tracker_config_sha256": "fd6b55ba7dbeb29a2022354607de57c26907c6473c85c7ccef4b7e62e1a0bbd7",
+    "tracker_backend": "botsort",
+    "with_reid": true,
+    "reid_model_path": "outputs/phase4_tracker_comparison/models/yolo26n-cls.pt",
+    "reid_model_sha256": "0dd6f8dbc448870ac98a3cbb7156f923f7ce21fed3755d4019169ffffd279e81"
+  }
+}
