@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getZones, putZones } from "../api/zoneSettingsApi";
 import type {
   Zone,
@@ -162,6 +162,9 @@ export default function ZoneSettingsPage() {
   const [saveDetails, setSaveDetails] = useState<string[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [conflictDraft, setConflictDraft] = useState<Zone[] | null>(null);
+  const loadRequestIdRef = useRef(0);
+  const loadAbortControllerRef = useRef<AbortController | null>(null);
+  const saveAbortControllerRef = useRef<AbortController | null>(null);
 
   const validationIssues = useMemo(() => validateZones(draftZones), [draftZones]);
   const originalZones = config?.zones ?? [];
@@ -197,6 +200,12 @@ export default function ZoneSettingsPage() {
 
   const loadZoneSettings = useCallback(
     async (options?: { keepMessages?: boolean }) => {
+      loadAbortControllerRef.current?.abort();
+      const requestId = loadRequestIdRef.current + 1;
+      const controller = new AbortController();
+      loadRequestIdRef.current = requestId;
+      loadAbortControllerRef.current = controller;
+
       setLoadState("loading");
       setLoadError(null);
 
@@ -206,7 +215,11 @@ export default function ZoneSettingsPage() {
         setSuccessMessage(null);
       }
 
-      const response = await getZones();
+      const response = await getZones({ signal: controller.signal });
+
+      if (controller.signal.aborted || loadRequestIdRef.current !== requestId) {
+        return null;
+      }
 
       if (response.status === "success" && response.data !== null) {
         applyLoadedConfig(response.data);
@@ -226,6 +239,11 @@ export default function ZoneSettingsPage() {
 
   useEffect(() => {
     void loadZoneSettings();
+
+    return () => {
+      loadAbortControllerRef.current?.abort();
+      saveAbortControllerRef.current?.abort();
+    };
   }, [loadZoneSettings]);
 
   const handleReload = async () => {
@@ -374,10 +392,18 @@ export default function ZoneSettingsPage() {
     setSuccessMessage(null);
     setConflictDraft(null);
 
+    saveAbortControllerRef.current?.abort();
+    const saveController = new AbortController();
+    saveAbortControllerRef.current = saveController;
+
     const response = await putZones({
       expected_version: config.version,
       zones: zonesToSave,
-    });
+    }, { signal: saveController.signal });
+
+    if (saveController.signal.aborted) {
+      return;
+    }
 
     if (response.status === "success" && response.data !== null) {
       applyLoadedConfig(response.data);

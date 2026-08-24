@@ -209,6 +209,14 @@ function isPaginatedResponse<T>(value: unknown): value is PaginatedResponse<T> {
   return isRecord(value) && Array.isArray(value.items);
 }
 
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
 function isOneOf<T extends string>(
   values: readonly T[],
   value: unknown,
@@ -355,6 +363,139 @@ function readTuple4(value: unknown): [number, number, number, number] {
   ];
 }
 
+function assertStringField(
+  value: Record<string, unknown>,
+  fieldName: string,
+  errorMessage: string,
+) {
+  if (
+    typeof value[fieldName] !== "string" ||
+    value[fieldName].trim().length === 0
+  ) {
+    throw new Error(errorMessage);
+  }
+}
+
+function assertOptionalStringOrNullField(
+  value: Record<string, unknown>,
+  fieldName: string,
+  errorMessage: string,
+) {
+  if (
+    value[fieldName] !== undefined &&
+    value[fieldName] !== null &&
+    typeof value[fieldName] !== "string"
+  ) {
+    throw new Error(errorMessage);
+  }
+}
+
+function assertNonNegativeIntegerField(
+  value: Record<string, unknown>,
+  fieldName: string,
+  errorMessage: string,
+) {
+  if (!isNonNegativeInteger(value[fieldName])) {
+    throw new Error(errorMessage);
+  }
+
+  return value[fieldName];
+}
+
+function assertPositiveIntegerField(
+  value: Record<string, unknown>,
+  fieldName: string,
+  errorMessage: string,
+) {
+  if (!isPositiveInteger(value[fieldName])) {
+    throw new Error(errorMessage);
+  }
+
+  return value[fieldName];
+}
+
+function assertNumberTuple(
+  value: unknown,
+  length: number,
+  errorMessage: string,
+) {
+  if (
+    !Array.isArray(value) ||
+    value.length !== length ||
+    !value.every((item) => typeof item === "number" && Number.isFinite(item))
+  ) {
+    throw new Error(errorMessage);
+  }
+}
+
+function assertSafetyEventData(value: unknown): void {
+  const errorMessage = "Event response format was invalid";
+
+  if (!isRecord(value)) {
+    throw new Error(errorMessage);
+  }
+
+  assertStringField(value, "event_id", errorMessage);
+  assertStringField(value, "timestamp", errorMessage);
+  assertStringField(value, "event_type", errorMessage);
+  assertStringField(value, "zone_id", errorMessage);
+  assertStringField(value, "video_source", errorMessage);
+  assertNonNegativeIntegerField(value, "track_id", errorMessage);
+  assertNonNegativeIntegerField(value, "frame_number", errorMessage);
+  assertNumberTuple(value.bbox, 4, errorMessage);
+  assertNumberTuple(value.foot_point, 2, errorMessage);
+  assertOptionalStringOrNullField(value, "created_at", errorMessage);
+  assertOptionalStringOrNullField(value, "zone_name", errorMessage);
+
+  if (value.zone_type !== undefined && !isOneOf(ZONE_TYPES, value.zone_type)) {
+    throw new Error(errorMessage);
+  }
+
+  if (value.severity !== undefined && !isOneOf(SEVERITIES, value.severity)) {
+    throw new Error(errorMessage);
+  }
+
+  if (
+    value.event_confidence !== undefined &&
+    value.event_confidence !== null &&
+    (typeof value.event_confidence !== "number" ||
+      !Number.isFinite(value.event_confidence) ||
+      value.event_confidence < 0 ||
+      value.event_confidence > 1)
+  ) {
+    throw new Error(errorMessage);
+  }
+}
+
+function assertPaginationMetadata(
+  data: unknown,
+  params?: GetEventsParams,
+): void {
+  const errorMessage = "Paginated event list response format was invalid";
+
+  if (!isRecord(data) || !Array.isArray(data.items)) {
+    throw new Error(errorMessage);
+  }
+
+  data.items.forEach(assertSafetyEventData);
+
+  const total = assertNonNegativeIntegerField(data, "total", errorMessage);
+  const limit = assertPositiveIntegerField(data, "limit", errorMessage);
+  const offset = assertNonNegativeIntegerField(data, "offset", errorMessage);
+  const count = assertNonNegativeIntegerField(data, "count", errorMessage);
+
+  if (count !== data.items.length || count > limit || count > total) {
+    throw new Error(errorMessage);
+  }
+
+  const expectedLimit = normalizeEventsLimit(params?.limit);
+  const expectedOffset = normalizeEventsOffset(params?.offset);
+
+  if (limit !== expectedLimit || offset !== expectedOffset) {
+    throw new Error(errorMessage);
+  }
+}
+
 function unwrapArray<T>(data: unknown): T[] {
   if (Array.isArray(data)) {
     return data as T[];
@@ -394,6 +535,33 @@ function normalizeSafetyEvents(data: unknown): SafetyEvent[] {
   return unwrapArray<unknown>(data).map((event, index) =>
     normalizeSafetyEvent(event, index),
   );
+}
+
+function assertEventListData(
+  data: unknown,
+  params?: GetEventsParams,
+  options?: { requirePagination?: boolean },
+): void {
+  if (Array.isArray(data)) {
+    if (options?.requirePagination) {
+      throw new Error("Paginated event list response format was invalid");
+    }
+
+    data.forEach(assertSafetyEventData);
+    return;
+  }
+
+  if (isPaginatedResponse<unknown>(data)) {
+    assertPaginationMetadata(data, params);
+    return;
+  }
+
+  throw new Error("Event list response format was invalid");
+}
+
+function normalizeSafetyEventsStrict(data: unknown): SafetyEvent[] {
+  assertEventListData(data);
+  return normalizeSafetyEvents(data);
 }
 
 function createEmptyEventListData(params?: GetEventsParams): EventListData {
@@ -446,6 +614,14 @@ function normalizeEventListData(
   };
 }
 
+function normalizeEventListDataStrict(
+  data: unknown,
+  params?: GetEventsParams,
+): EventListData {
+  assertEventListData(data, params, { requirePagination: true });
+  return normalizeEventListData(data, params);
+}
+
 function normalizeSummaryStats(value: unknown): SummaryStats {
   const summary = isRecord(value) ? value : {};
 
@@ -461,6 +637,14 @@ function normalizeSummaryStats(value: unknown): SummaryStats {
   };
 }
 
+function normalizeSummaryStatsStrict(value: unknown): SummaryStats {
+  if (!isRecord(value)) {
+    throw new Error("Summary response format was invalid");
+  }
+
+  return normalizeSummaryStats(value);
+}
+
 function normalizeZoneOccupancy(value: unknown): ZoneOccupancy {
   const zone = isRecord(value) ? value : {};
   const zoneId = readString(zone.zone_id).trim();
@@ -472,6 +656,40 @@ function normalizeZoneOccupancy(value: unknown): ZoneOccupancy {
     current_count: readNumber(zone.current_count),
     risk_level: normalizeStatusRiskLevel(zone.risk_level),
   };
+}
+
+function assertZoneOccupancyData(value: unknown): void {
+  const errorMessage = "Current status response format was invalid";
+
+  if (!isRecord(value)) {
+    throw new Error(errorMessage);
+  }
+
+  assertStringField(value, "zone_id", errorMessage);
+  assertOptionalStringOrNullField(value, "zone_name", errorMessage);
+  assertNonNegativeIntegerField(value, "current_count", errorMessage);
+
+  if (!isOneOf(STATUS_RISK_LEVELS, value.risk_level)) {
+    throw new Error(errorMessage);
+  }
+}
+
+function assertCurrentStatusData(value: unknown): void {
+  const errorMessage = "Current status response format was invalid";
+
+  if (!isRecord(value) || !Array.isArray(value.zone_occupancy)) {
+    throw new Error(errorMessage);
+  }
+
+  assertStringField(value, "source", errorMessage);
+  assertNonNegativeIntegerField(value, "frame_number", errorMessage);
+  assertNonNegativeIntegerField(value, "active_track_count", errorMessage);
+
+  if (!("updated_at" in value) || typeof value.updated_at !== "string" && value.updated_at !== null) {
+    throw new Error(errorMessage);
+  }
+
+  value.zone_occupancy.forEach(assertZoneOccupancyData);
 }
 
 function normalizeCurrentStatus(value: unknown): CurrentStatus {
@@ -486,6 +704,11 @@ function normalizeCurrentStatus(value: unknown): CurrentStatus {
     ),
     updated_at: readNullableString(status.updated_at),
   };
+}
+
+function normalizeCurrentStatusStrict(value: unknown): CurrentStatus {
+  assertCurrentStatusData(value);
+  return normalizeCurrentStatus(value);
 }
 
 function buildDashboardSummary(summary: SummaryStats): DashboardSummary {
@@ -604,12 +827,19 @@ export function isEventsApiMode() {
   return isApiMode();
 }
 
-export async function getEvents(): Promise<ApiResponse<SafetyEvent[]>> {
+export async function getEvents(options?: {
+  signal?: AbortSignal;
+}): Promise<ApiResponse<SafetyEvent[]>> {
   if (!isApiMode()) {
     return successResponse(mockEvents);
   }
 
-  const result = await loadApiData("/events", normalizeSafetyEvents, []);
+  const result = await loadApiData(
+    "/events",
+    normalizeSafetyEventsStrict,
+    [],
+    options,
+  );
 
   if (result.errorMessage !== null) {
     return fallbackResponse(result.data, result.errorMessage);
@@ -629,7 +859,7 @@ export async function getEventsPage(
   const fallback = createEmptyEventListData(params);
   const result = await loadApiData(
     `/events${buildEventsQuery(params)}`,
-    (data) => normalizeEventListData(data, params),
+    (data) => normalizeEventListDataStrict(data, params),
     fallback,
     options,
   );
@@ -643,7 +873,7 @@ export async function getEventsPage(
 
 export async function getRecentEvents(
   limit = RECENT_EVENT_LIMIT,
-  options?: { minutes?: number },
+  options?: { minutes?: number; signal?: AbortSignal },
 ): Promise<ApiResponse<SafetyEvent[]>> {
   const safeLimit = Math.max(
     1,
@@ -664,8 +894,9 @@ export async function getRecentEvents(
 
   const result = await loadApiData(
     `/events/recent?${searchParams.toString()}`,
-    normalizeSafetyEvents,
+    normalizeSafetyEventsStrict,
     [],
+    { signal: options?.signal },
   );
 
   if (result.errorMessage !== null) {
@@ -675,15 +906,18 @@ export async function getRecentEvents(
   return successResponse(result.data);
 }
 
-export async function getCurrentStatus(): Promise<ApiResponse<CurrentStatus>> {
+export async function getCurrentStatus(options?: {
+  signal?: AbortSignal;
+}): Promise<ApiResponse<CurrentStatus>> {
   if (!isApiMode()) {
     return successResponse(createMockCurrentStatus());
   }
 
   const result = await loadApiData(
     "/status/current",
-    normalizeCurrentStatus,
+    normalizeCurrentStatusStrict,
     createEmptyCurrentStatus(),
+    options,
   );
 
   if (result.errorMessage !== null) {
@@ -693,12 +927,19 @@ export async function getCurrentStatus(): Promise<ApiResponse<CurrentStatus>> {
   return successResponse(result.data);
 }
 
-export async function getDashboardSummary(): Promise<ApiResponse<DashboardSummary>> {
+export async function getDashboardSummary(options?: {
+  signal?: AbortSignal;
+}): Promise<ApiResponse<DashboardSummary>> {
   if (!isApiMode()) {
     return successResponse(mockSummary);
   }
 
-  const summaryResult = await loadApiData("/summary", normalizeSummaryStats, {});
+  const summaryResult = await loadApiData(
+    "/summary",
+    normalizeSummaryStatsStrict,
+    {},
+    options,
+  );
   const dashboardSummary = buildDashboardSummary(summaryResult.data);
 
   if (summaryResult.errorMessage !== null) {
@@ -712,12 +953,14 @@ export async function getSummary(): Promise<ApiResponse<DashboardSummary>> {
   return getDashboardSummary();
 }
 
-export async function getZoneStatus(): Promise<ApiResponse<ZoneStatus[]>> {
+export async function getZoneStatus(options?: {
+  signal?: AbortSignal;
+}): Promise<ApiResponse<ZoneStatus[]>> {
   if (!isApiMode()) {
     return successResponse(mockZoneStatus);
   }
 
-  const response = await getCurrentStatus();
+  const response = await getCurrentStatus(options);
   const zones = response.data.zone_occupancy.map((zone) => ({
     zone_id: zone.zone_id,
     zone_name: zone.zone_name,

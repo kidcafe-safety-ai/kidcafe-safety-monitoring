@@ -1,5 +1,5 @@
 import { AlertTriangle, Clock3, ShieldAlert, Users } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   getCurrentStatus,
   getDashboardSummary,
@@ -10,11 +10,12 @@ import KpiCard from "../components/KpiCard";
 import LiveFrameView from "../components/LiveFrameView";
 import RecentEventList from "../components/RecentEventList";
 import ZoneStatusPanel from "../components/ZoneStatusPanel";
-import { usePolling } from "../hooks/usePolling";
+import { usePolling, type PollingContext } from "../hooks/usePolling";
 import type { DashboardSummary, SafetyEvent, ZoneStatus } from "../types/event";
 import type { CurrentStatus } from "../types/status";
 
 const RECENT_EVENT_MINUTES = 10;
+const INITIAL_DASHBOARD_RETRY_INTERVAL_MS = 3000;
 
 function getZonesFromCurrentStatus(currentStatus: CurrentStatus): ZoneStatus[] {
   return currentStatus.zone_occupancy.map((zone) => ({
@@ -45,15 +46,28 @@ export default function MonitoringPage() {
     apiErrors.zones && zones.length === 0 ? "-" : dangerZoneOccupancy;
   const recentEventCount = summary?.recent_event_count ?? "-";
 
-  const loadDashboardData = useCallback(async () => {
+  const loadDashboardData = useCallback(async (context: PollingContext) => {
     const [summaryData, eventData, currentStatusData] = await Promise.all([
-      getDashboardSummary(),
-      getRecentEvents(RECENT_EVENT_LIMIT, { minutes: RECENT_EVENT_MINUTES }),
-      getCurrentStatus(),
+      getDashboardSummary({ signal: context.signal }),
+      getRecentEvents(RECENT_EVENT_LIMIT, {
+        minutes: RECENT_EVENT_MINUTES,
+        signal: context.signal,
+      }),
+      getCurrentStatus({ signal: context.signal }),
     ]);
 
-    setSummary(summaryData.data);
-    setRecentEvents(eventData.data);
+    if (!context.isActive()) {
+      return;
+    }
+
+    if (summaryData.status !== "error") {
+      setSummary(summaryData.data);
+    }
+
+    if (eventData.status !== "error") {
+      setRecentEvents(eventData.data);
+    }
+
     if (currentStatusData.status !== "error") {
       setActiveTrackCount(currentStatusData.data.active_track_count);
       setZones(getZonesFromCurrentStatus(currentStatusData.data));
@@ -66,10 +80,15 @@ export default function MonitoringPage() {
     setIsLoading(false);
   }, []);
 
-  const loadRecentEvents = useCallback(async () => {
+  const loadRecentEvents = useCallback(async (context: PollingContext) => {
     const eventData = await getRecentEvents(RECENT_EVENT_LIMIT, {
       minutes: RECENT_EVENT_MINUTES,
+      signal: context.signal,
     });
+
+    if (!context.isActive()) {
+      return;
+    }
 
     if (eventData.status !== "error") {
       setRecentEvents(eventData.data);
@@ -81,17 +100,30 @@ export default function MonitoringPage() {
     }));
   }, []);
 
-  const loadSummary = useCallback(async () => {
-    const summaryData = await getDashboardSummary();
-    setSummary(summaryData.data);
+  const loadSummary = useCallback(async (context: PollingContext) => {
+    const summaryData = await getDashboardSummary({ signal: context.signal });
+
+    if (!context.isActive()) {
+      return;
+    }
+
+    if (summaryData.status !== "error") {
+      setSummary(summaryData.data);
+    }
+
     setApiErrors((previous) => ({
       ...previous,
       summary: summaryData.status === "error",
     }));
   }, []);
 
-  const loadCurrentStatus = useCallback(async () => {
-    const currentStatusData = await getCurrentStatus();
+  const loadCurrentStatus = useCallback(async (context: PollingContext) => {
+    const currentStatusData = await getCurrentStatus({ signal: context.signal });
+
+    if (!context.isActive()) {
+      return;
+    }
+
     if (currentStatusData.status !== "error") {
       setActiveTrackCount(currentStatusData.data.active_track_count);
       setZones(getZonesFromCurrentStatus(currentStatusData.data));
@@ -102,10 +134,7 @@ export default function MonitoringPage() {
     }));
   }, []);
 
-  useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
-
+  usePolling(loadDashboardData, INITIAL_DASHBOARD_RETRY_INTERVAL_MS, isLoading);
   usePolling(loadRecentEvents, 3000, !isLoading);
   usePolling(loadSummary, 10000, !isLoading);
   usePolling(loadCurrentStatus, 2000, !isLoading);
@@ -125,7 +154,7 @@ export default function MonitoringPage() {
       {isLoading ? <div className="state-banner">데이터를 불러오는 중입니다.</div> : null}
       {hasApiError ? (
         <div className="state-banner error">
-          API 연결에 실패했습니다. mock 또는 기본값으로 화면을 표시합니다.
+          API 연결에 실패했습니다. 마지막으로 확인된 실제 데이터가 있으면 유지됩니다.
         </div>
       ) : null}
 

@@ -63,10 +63,15 @@ function sortByCountDescThenLabel<T extends { count: number; label: string }>(
 }
 
 export function aggregateReportEvents(events: SafetyEvent[]): ReportAggregation {
+  const uniqueEvents = events.filter(
+    (event, index, allEvents) =>
+      allEvents.findIndex((candidate) => candidate.event_id === event.event_id) ===
+      index,
+  );
   const typeCounts = new Map<string, number>();
   const zoneCounts = new Map<string, { label: string; count: number }>();
 
-  events.forEach((event) => {
+  uniqueEvents.forEach((event) => {
     typeCounts.set(event.event_type, (typeCounts.get(event.event_type) ?? 0) + 1);
 
     const zoneKey = getZoneKey(event);
@@ -92,12 +97,12 @@ export function aggregateReportEvents(events: SafetyEvent[]): ReportAggregation 
     .filter((item) => item.count > 0);
 
   return {
-    totalEvents: events.length,
-    fallSuspectCount: events.filter((event) => event.event_type === "FALL_SUSPECT")
+    totalEvents: uniqueEvents.length,
+    fallSuspectCount: uniqueEvents.filter((event) => event.event_type === "FALL_SUSPECT")
       .length,
-    highSeverityCount: events.filter((event) => getDerivedSeverity(event) === "HIGH")
+    highSeverityCount: uniqueEvents.filter((event) => getDerivedSeverity(event) === "HIGH")
       .length,
-    dangerZoneEventCount: events.filter(isDangerZoneRelated).length,
+    dangerZoneEventCount: uniqueEvents.filter(isDangerZoneRelated).length,
     eventTypeCounts,
     zoneCounts: sortByCountDescThenLabel(
       Array.from(zoneCounts.entries()).map(([zoneKey, value]) => ({
@@ -106,7 +111,7 @@ export function aggregateReportEvents(events: SafetyEvent[]): ReportAggregation 
         count: value.count,
       })),
     ),
-    fallSuspectItems: events
+    fallSuspectItems: uniqueEvents
       .filter((event) => event.event_type === "FALL_SUSPECT")
       .map((event) => ({
         eventId: event.event_id,

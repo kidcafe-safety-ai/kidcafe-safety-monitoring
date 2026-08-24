@@ -294,20 +294,23 @@ function createMockVersion() {
   return `sha256:${suffix}`;
 }
 
-export async function getZones(): Promise<ZoneApiResponse<ZoneConfig>> {
+export async function getZones(options?: {
+  signal?: AbortSignal;
+}): Promise<ZoneApiResponse<ZoneConfig>> {
   if (!isApiMode()) {
     return successResponse(cloneZoneConfig(mockConfig));
   }
 
   return requestZones<ZoneConfig>(
     "/zones",
-    { method: "GET" },
+    { method: "GET", signal: options?.signal },
     normalizeZoneConfig,
   );
 }
 
 export async function putZones(
   request: PutZonesRequest,
+  options?: { signal?: AbortSignal },
 ): Promise<ZoneApiResponse<ZoneConfig>> {
   if (!isApiMode()) {
     if (request.expected_version !== mockConfig.version) {
@@ -332,6 +335,7 @@ export async function putZones(
     {
       method: "PUT",
       body: JSON.stringify(request),
+      signal: options?.signal,
     },
     normalizeZoneConfig,
   );
