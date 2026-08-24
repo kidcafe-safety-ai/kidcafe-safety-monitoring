@@ -1,6 +1,6 @@
 # KidCafe Safety AI — 개발 로드맵
 
-> 최종 수정: 2026-07-29
+> 최종 수정: 2026-08-24
 > MVP baseline: `v0.1.0-mvp`
 > 본 문서는 MVP 1차 종료 이후 최종 제출까지의 상위 개발 로드맵이다.
 > 한이음 일정은 [2026년 창의도전형 공고](https://www.hanium.or.kr/comm/noticeView.do?ntcAtclSn=63940) 기준으로 갱신했다. 세부 일정(주차별 작업·보고서 내부 마감 등)은 팀 오피스 기준이며 공식 공고와 별개로 운영한다.
@@ -16,8 +16,9 @@
 | 6/8-6/21 | Phase 2 | 실시간 입력 연결 — 완료 |
 | 6/22-6/30 | Phase 2.5 | 실시간 운영 대시보드 v1 안정화 — 완료 |
 | 7월 | Phase 3 — **완료(7/27)** | 안전 감지 고도화 |
-| 7/29-8/29 | Phase 4 | 실제 데이터 검증·선택 개선·1차 공모전 준비 |
-| 9월 | Phase 5 | 성과 정리 및 2차 평가 준비 |
+| 7/29-8/24 | Phase 4 — **완료(8/24)** | 실제 데이터 검증·선택 개선·통합 동결 |
+| 8/25-9/8 | 1차 평가 준비 | 보고서·제작설계서·시연 영상·재현 검증 |
+| 9월 | Phase 5 | 1차 평가 대응 후 성과 정리·2차 평가 준비 |
 | 10월 이후 | Final | 최종 제출·시연·발표 |
 | 11월 | Post Final | 최종 평가 및 시상 대응 |
 
@@ -461,10 +462,10 @@ Phase 3 Open·계약 문서 PR
 
 ---
 
-## 7월 29일-8월 29일 — Phase 4: 실제 데이터 검증 및 공모전 준비
+## 7월 29일-8월 24일 — Phase 4: 실제 데이터 검증 및 선택 개선 완료
 
 **목표**: Phase 3의 낙상·원인 후보·공간 안전정책을 실제 촬영 데이터로
-검증하고, 조건을 충족한 개선만 production에 반영한 뒤 공모전 제출물을 만든다.
+검증하고, 조건을 충족한 개선만 채택한 뒤 모델·Tracker·API·UI 기준선을 동결한다.
 
 ### 주요 일정
 
@@ -473,24 +474,27 @@ Phase 3 Open·계약 문서 PR
 - 8/7: 실제 테스트 영상 공동 촬영
 - 8/8-8/12: 라벨링·기준선·cause·tracking·Homography 분석
 - 8/13-8/16: 조건을 충족한 개선만 선택 적용
-- 8/17-8/20: 모델·API·UI 동결과 최종 E2E
-- 8/21-8/28: 제출물 제작·검수, 8/28 내부 제출
-- 8/29: 공식 일정 확인과 제출 상태 대응
+- 8/17-8/20: 모델·API·UI 동결과 역할별 최종 회귀
+- 8/21-8/24: Cause·Tracker·Homography·Frontend 결과 병합과 Phase 4 종료
+- 8/25-9/7: 신규 기능 동결, 보고서·제작설계서·시연 영상·재현 검증
+- 9/8: 1차 평가
 
 ### 핵심 작업
 
 - 외부·촬영 데이터 기반 낙상 E1 개선 실험 — 완료
 - 실제 촬영 timely Recall·FAR 평가 — 완료
-- cause·ID switch 정량 분석 — 진행 중
-- Homography floor-plane Zone 기본 비활성 PoC
-- Zone Settings 실제 저장·version 충돌 처리
-- ReportPage 기간별 실제 Event 연동
-- Recent Event UX와 API mode 회귀
-- CAUCAFall 참고 holdout은 필요 시 회귀 확인용으로만 평가
-- 실제 영상 A/B/C E2E
-- 개발보고서·제작설계서·시연 영상 준비
+- Cause·ID switch 정량 분석 — 완료
+- Tracker 3-way·buffer 30/60 비교 — 완료, ByteTrack 유지
+- Homography floor-plane Zone PoC — 완료, image polygon 유지
+- Zone Settings 저장·version 충돌 처리 — 완료
+- ReportPage 기간별 실제 Event 연동 — 완료
+- Recent Event·API mode fail-closed·polling 안정화 — 완료
+- Backend·DB·RTSP 설정 동결과 회귀 — 완료
+- CAUCAFall S9-10 — 목표 환경 채택 근거가 아닌 참고 회귀로 분리, 자동 실행하지 않음
+- 실제 영상 Vision AI·API·SQLite·Live Frame E2E — 완료
+- 개발보고서·제작설계서·시연 영상 — 9월 8일 전 제출 준비 범위
 
-### A 진행 상태 (2026-08-11)
+### Phase 4 최종 결과 (2026-08-24)
 
 - 8월 7일 실제 키즈카페 목표 IP 카메라 구도의 성인 통제 재연 영상 64개를
   계약 형식으로 정리하고 R01·R02 검수를 완료했다.
@@ -498,21 +502,27 @@ Phase 3 Open·계약 문서 PR
 - 학습하지 않은 A03 actor-disjoint test에서 Recall 93.3%, timely Recall 93.3%,
   FAR 0.0/min, 평균 onset latency 0.441초, 중복 Event 0건을 기록했다.
 - E1 낙상 모델과 inference 설정은 목표 키즈카페 카메라의 selected profile로
-  동결했다. 장시간 RTSP·Cause 검증 전까지 실행은 명시적 opt-in으로 유지한다.
+  동결했다. 장시간 정상 행동 검증이 제한적이므로 실행은 명시적 opt-in으로 유지한다.
 - 실제 영상의 Vision AI·API·SQLite·Live Frame E2E를 통과했다.
-- 다음 A 작업은 다중 인원 Cause·ID switch 분석과 조건부 Tracker 비교다.
+- 다중 인원 12편과 단독 낙상 24편으로 Cause·Tracking을 정량화했다. Cause top-1은
+  3/8로 목표에 미달했고 `cause=null` specificity는 24/24였다.
+- ByteTrack, BoT-SORT ReID OFF·ON과 `track_buffer=30/60`을 비교했으나 채택
+  기준을 충족한 후보가 없어 Production ByteTrack을 유지했다.
+- Homography는 Zone 정확도 개선이 없고 촬영·holdout 계약을 충족하지 못해
+  미채택했으며 기존 image polygon을 유지했다.
+- Backend·DB·RTSP 설정을 동결하고 Zone Settings·Report·Frontend polling과
+  fail-closed API mode를 실제 계약에 맞게 완료했다.
 
-경량 temporal classifier는 E1 이후에도 같은 오탐이 실제 촬영에서 재현될 때만
-검토한다. BoT-SORT는 ID switch가 실제 missed·duplicate·cause 오류를 반복해서
-유발하거나 Cause top-1이 목표에 미달할 때 동일 영상에서 비교한다. ByteTrack,
-appearance ReID를 끈 BoT-SORT, ReID를 켠 BoT-SORT를 함께 평가해 ReID 효과를
-분리한다. Cross-camera ReID와 YOLO 모델 비교는 Phase 4 필수 범위가 아니다.
+경량 temporal classifier, 사람 전용 ReID encoder, cross-camera ReID와 추가
+Tracker 튜닝은 Phase 4에서 시작하지 않는다. 이후 재검토하려면 새 데이터와
+평가 범위·채택 기준을 먼저 동결한다.
 
-### 일정 기준
+### 종료 이후 변경 원칙
 
-2026년 공식 공고는 프로젝트 수행 기간을 4월 1일-10월 30일로 안내하고,
-공모전 상세 일정은 추후 별도 공지한다고 명시한다. 따라서 8월 28일과 29일은
-각각 팀 내부 제출일과 잠정 관리일이며 공식 마감으로 표현하지 않는다.
+9월 8일 1차 평가 전까지 신규 모델·Tracker·API·UI 기능, 재학습과 임계값 튜닝을
+시작하지 않는다. 허용 범위는 회귀·시연을 막는 결함, 잘못된 실행 문서,
+개인정보·민감정보 노출 수정과 제출물 제작이다. 수정은 별도 `fix/pre-eval-*`
+브랜치에서 최소 변경과 회귀 테스트로 처리한다.
 
 ### 산출물
 
@@ -520,16 +530,39 @@ appearance ReID를 끈 BoT-SORT, ReID를 켠 BoT-SORT를 함께 평가해 ReID �
 - 낙상·cause·tracking·Homography 결과표
 - 실제 촬영 manifest·annotation·재현 명령
 - Zone Settings·Report 실제 연동
-- 공모전 개발보고서·제작설계서·시연 영상
+- Phase 4 동결 문서와 종료 게이트
 
 구현 계약은 `docs/api_contract.md`, `docs/interfaces.md`,
 `docs/fall_evaluation.md`, `docs/data_sources.md`에 책임별로 기록한다.
 
 ---
 
-## 9월 — Phase 5: 성과 정리 및 2차 평가 준비
+## 8월 25일-9월 8일 — 1차 평가 제출물 준비
 
-**목표**: 논문, 발표, 2차 평가를 위한 결과물 완성도를 높인다.
+**목표**: 기능을 추가하지 않고 Phase 4 결과를 재현 가능한 보고서와 안정적인
+시연 영상으로 정리한다.
+
+### 핵심 작업
+
+- 개발보고서·제작설계서 작성과 수치 대조
+- 개인정보·비식별 처리와 데이터 출처 정리
+- 실제 촬영 낙상·Zone·Dashboard 시연 영상 제작
+- 모델·설정·실행 명령·SHA-256 확인
+- 깨끗한 환경과 시연 장비에서 실행 리허설
+- 실행 중단·CI 실패·잘못된 문서 명령만 최소 수정
+
+### 산출물
+
+- 1차 평가 개발보고서·제작설계서
+- 시연 영상과 발표용 핵심 화면
+- 실행·재현 안내와 외부 artifact 체크섬
+- 제출본 백업과 최종 검수표
+
+---
+
+## 9월 — Phase 5: 1차 평가 대응 및 2차 평가 준비
+
+**목표**: 9월 8일 1차 평가에 대응하고 논문·발표·2차 평가 결과물의 완성도를 높인다.
 
 ### 핵심 작업
 
@@ -607,23 +640,28 @@ appearance ReID를 끈 BoT-SORT, ReID를 켠 BoT-SORT를 함께 평가해 ReID �
 
 ### 실시간 입력 안정화 리스크
 
-RTSP / IP 카메라 연결은 네트워크, 코덱, 지연시간, 끊김 문제가 발생할 수 있다. 웹캠 입력을 먼저 안정화한 뒤 RTSP / IP 카메라로 확장한다.
+Phase 4에서 실제 IP 카메라 RTSP 연결과 최신 프레임 1장 유지 구조를 구현하고
+장비 입력을 확인했다. 다만 자동 재연결과 30분 이상 장시간 정상 행동 검증은
+완료하지 않았다. 시연 전에는 장비·네트워크를 사전 점검하고, 스트림 종료 시
+수동 재실행 절차를 준비한다.
 
-### Tracker / ReID 범위 조절
+### Tracker / ReID 최종 결과
 
-ByteTrack과 기존 handoff를 비교 기준선으로 유지한다. 실제 촬영에서 ID switch가
-Event 오류를 반복 유발하거나 Cause top-1이 목표에 미달하면 BoT-SORT를
-비교한다. 동일 영상에서 ReID OFF·ON을 모두 평가해 appearance ReID의 효과를
-분리하며, cross-camera ReID는 Phase 4 범위에서 제외한다.
+실제 촬영 다중 인원 영상에서 ByteTrack, BoT-SORT ReID OFF, BoT-SORT ReID ON을
+동일 조건으로 비교했고 `track_buffer=60`도 별도 진단했다. 모든 후보가 Cause
+top-1 채택 기준을 충족하지 못해 production association tracker는 ByteTrack을
+유지한다. BoT-SORT·appearance ReID 경로는 평가 도구에서만 검증했으며 production
+실행 경로에는 추가하지 않았다.
 
-이 조건은 공식 `phase4_fall_eval_v1` 점수 산출 규칙의 변경이 아니라 후속
-Tracker 진단 트리거다. 트리거 정책은 `phase4_tracker_comparison_policy_v1`로
-별도 버전 관리한다.
+이 비교는 공식 `phase4_fall_eval_v1` 점수 산출 규칙을 변경하지 않는 후속
+진단이며, `phase4_tracker_comparison_policy_v1`로 별도 버전 관리한다.
 
 Phase 4 ReID의 목적은 detector bbox가 잠깐 끊기거나 사람끼리 가린 뒤 다시
 검출됐을 때 기존 Track ID로 재연결해 victim·Cause attribution과 낙상 candidate
 state의 연속성을 높이는 것이다. detection이 없는 프레임의 bbox 보간, 장기
 퇴장 후 영구 ID 유지, 카메라 간 동일인 식별은 별도 문제로 구분한다.
+OSNet 계열 encoder 통합, 추가 tracker 튜닝, cross-camera ReID는 Phase 4 범위에서
+진행하지 않았다.
 
 ### 시연 안정성 우선
 
