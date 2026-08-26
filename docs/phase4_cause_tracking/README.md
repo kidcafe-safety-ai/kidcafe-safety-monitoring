@@ -38,13 +38,12 @@ Tracker 비교 트리거는 공식 낙상 점수의 protocol을 변경하지 않
 
 ID switch와 Event 오류가 함께 있었지만 인과가 확인되지 않은 1건은
 `associated`로 기록했다. `caused` 오류는 0건이지만 Cause top-1이 목표에
-미달했고 12편에서 ID switch 15건이 확인됐으므로 ReID 실험을 진행한다.
+미달했고 12편에서 ID switch 15건이 확인돼 Tracker 3-way 비교를 수행했다.
 동일 12편에서 ByteTrack, appearance ReID를 끈 BoT-SORT, ReID를 켠
-BoT-SORT를 비교해 tracker 변경과 ReID의 효과를 분리하고, victim·Cause
-정확도 개선과 Recall·FPS 유지를 확인한다.
+BoT-SORT를 비교해 tracker 변경과 ReID의 효과를 분리했다.
 
-현재 결정은 `ByteTrack 기준선 유지 / BoT-SORT·ReID 실험 도입 / production
-채택 대기`다. 비교 결과 없이 ReID를 운영 기본값으로 전환하지 않는다.
+최종 결정은 `ByteTrack 유지 / BoT-SORT·ReID 미채택`이다. 세부 비교 결과와
+채택 판정은 `docs/phase4_tracker_comparison/README.md`를 따른다.
 
 ### A03 annotation revision
 
@@ -68,7 +67,11 @@ ReID는 detection이 없는 프레임에 bbox를 새로 만드는 기능이 아�
 기존 Track과의 재연결을 돕는다. 장기 퇴장 후 재입장, 영구 ID, cross-camera
 ReID는 이번 Phase 4 비교 범위가 아니다.
 
-기계 판독 결과는 [summary.json](summary.json)에 보존한다.
+기계 판독 결과는 [summary.json](summary.json)에 보존한다. 이 artifact의
+`pending_three_way_comparison`은 Tracker 비교를 시작한 시점의 상태를 뜻한다.
+비교 완료 후 최종 결정은
+[`../phase4_tracker_comparison/results/summary.json`](../phase4_tracker_comparison/results/summary.json)에
+별도로 동결했다.
 
 ## 재현
 

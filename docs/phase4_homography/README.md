@@ -15,7 +15,6 @@
 | `holdout_loo-quad.json` | 보조 진단 (leave-one-out, 최대 면적 4점) |
 | `cost_benchmark.json` | frame당 추가 비용 (FPS 하락률은 추정치, `is_official: false`) |
 | `zone_eval_handover.md` | 채택 기준 2~5번 측정에 필요한 영상별 준비 상태·대응표 |
-| `zone_intervals_draft.csv` | B handover 시점의 Zone interval 빈 뼈대 artifact |
 | `zone_path_comparison.json` | **공식** 채택 기준 2~5번 측정 결과 (영상 12개) |
 | `_checksums.md` | 위 파일과 calibration config의 SHA-256 |
 

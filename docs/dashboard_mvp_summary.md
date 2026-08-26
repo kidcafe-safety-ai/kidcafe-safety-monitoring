@@ -1,7 +1,7 @@
 # Dashboard MVP 작업 정리
 
 > **작성일:** 2026-05-24  
-> **작성자:** 정현수(Dashboard 담당)
+> **작성자:** 정현수 (Dashboard 담당)
 > **관련 문서:**  
 > - `dashboard_api.md`  
 > - `dashboard_analysis.md`  

@@ -6,8 +6,8 @@ React 기반 운영 대시보드 구현
 ## 화면 범위
 - 실시간 모니터링 (MonitoringPage)
 - 이벤트 기록 / 통계 (EventsPage)
-- Zone 설정 (ZoneSettingsPage) — Phase 3까지 Mock, Phase 4 실제 API 연동 예정
-- 기간별 Report (ReportPage) — Phase 4 읽기 전용 실제 Event 연동 예정
+- Zone 설정 (ZoneSettingsPage) — Phase 4 실제 API 저장·충돌 처리 완료
+- 기간별 Report (ReportPage) — Phase 4 읽기 전용 실제 Event 연동 완료
 
 ## Event Schema v1
 필수 필드는 MVP 이벤트 로그와 FastAPI 응답 구조를 맞추기 위한 기준이다.
@@ -43,14 +43,15 @@ Phase 1.5에서 계획한 mock → FastAPI 전환이 Phase 2에서 완료됐고,
 | MonitoringPage | 실제 API 연동 |
 | EventsPage | 실제 API 연동 |
 | AlertHistoryPage | 실제 API 읽기 전용 연동 |
-| ReportPage | Mock Prototype |
-| ZoneSettingsPage | Mock Prototype |
+| ReportPage | 실제 기간·pagination Event 연동 |
+| ZoneSettingsPage | 실제 Zone 조회·저장·version 충돌 연동 |
 | SystemSettingsModal | Mock Prototype |
 | 영상 영역 | Live View latest-frame polling 연동 |
 
-Report·ZoneSettings·SystemSettings의 Mock 데이터는 서버에 저장되지 않는다.
+SystemSettings의 Mock 데이터는 서버에 저장되지 않는다. API mode의 Report와
+ZoneSettings는 Mock으로 자동 전환하지 않는다.
 
-## Polling 책임 (Phase 3 완료 기준)
+## Polling 책임 (Phase 4 완료 기준)
 
 MonitoringPage에서 각 API를 독립 polling한다.
 
@@ -63,18 +64,20 @@ MonitoringPage에서 각 API를 독립 polling한다.
 
 `recent_event_count`는 목록 길이가 아니라 `/summary`의 `recent_10min_event_count`를 사용한다.
 
-WebSocket은 Phase 4 이후 필요성 기반 재검토한다.
+Phase 4에서도 REST polling을 유지했다. 중복 요청, stale response, unmount cleanup,
+10초 watchdog과 오류 로그 cooldown을 적용했으며 WebSocket은 채택하지 않았다.
 
-## Zone Settings — Phase 4 전환 대상
+## Zone Settings — Phase 4 연동 완료
 
-Phase 3 종료 시점의 ZoneSettingsPage는 mock prototype이다.
+Phase 3 종료 시점의 mock prototype을 Phase 4에서 실제 API 경로로 전환했다.
 
-> Phase 4에서 `GET /zones`·`PUT /zones`·version 충돌 계약에 따라 실제 API로
-> 전환한다. 상세 계약은 `docs/api_contract.md`를 따른다.
+> `GET /zones`·`PUT /zones`·version 충돌 계약과 fail-closed 오류 처리는
+> `docs/api_contract.md`를 따른다.
 
-- `zoneSettingsMockApi.ts` — mock prototype only. FastAPI 미연동.
-- UI에 "Mock Prototype" badge 표시
-- zone_type: Phase 3 계약·Backend·Frontend 표시 구현 완료 (`docs/interfaces.md` 참조). Zone Settings 저장 연동은 Phase 4.
+- API mode에서 정상 빈 Zone과 조회 실패를 구분한다.
+- `sha256:` version token과 `409` 충돌 시 최신 설정 재조회 흐름을 사용한다.
+- `422` validation detail과 `500` 저장 실패를 성공 상태로 보정하지 않는다.
+- 저장 성공 후 `Vision AI 재시작 후 적용`을 안내한다.
 
 ## Docker API mode 검증 완료
 
@@ -128,9 +131,9 @@ Phase 3 종료 시점의 ZoneSettingsPage는 mock prototype이다.
 - 발생 시각: `created_at` (UTC → Asia/Seoul 변환)
 - `MOCK_TODAY` 하드코딩 제거
 - 처리 상태: `미확인` 고정
-- `확인중`·`처리완료`·조치 메모 저장 기능: 비활성화 (Phase 4 후속)
+- `확인중`·`처리완료`·조치 메모 저장 기능: 비활성화 (Phase 4 이후 후속)
 
-### Mock 유지 화면
+### Phase 3 종료 당시 Mock 유지 화면
 
 | 화면 | Phase 3 상태 |
 |---|---|
@@ -138,7 +141,7 @@ Phase 3 종료 시점의 ZoneSettingsPage는 mock prototype이다.
 | ZoneSettingsPage | Mock 유지 |
 | SystemSettingsModal | Mock 유지 |
 
-## Phase 4 Frontend 계약
+## Phase 4 Frontend 계약과 완료 결과
 
 ### Zone Settings
 
@@ -174,5 +177,14 @@ Phase 3 종료 시점의 ZoneSettingsPage는 mock prototype이다.
 
 - 읽음·확인·처리 상태는 Backend 계약이 없으므로 임의 생성하지 않는다.
 - SystemSettingsModal과 AlertHistory 조치 상태 저장은 후속 범위다.
+
+### 완료 상태 (2026-08-24)
+
+- Zone Settings 실제 조회·저장·409·422·500 처리 완료
+- Report 최대 31일·전체 pagination·중복 제거·partial result 차단 완료
+- API mode 장애 시 Mock fallback 금지와 응답 계약 fail-closed 적용
+- polling 중복·stale response·무한 pending·unmount cleanup 보강
+- Seoul 날짜 경계, Event 표시, Report 집계, Zone validation 회귀 테스트 추가
+- Frontend 전체 테스트 48개와 production build 통과
 
 상세 일정과 인수 기준은 `docs/roadmap.md`, `docs/api_contract.md`를 따른다.

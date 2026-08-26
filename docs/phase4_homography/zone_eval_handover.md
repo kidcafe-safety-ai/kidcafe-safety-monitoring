@@ -174,9 +174,7 @@ calibration 출처로만 기록한다.
 ## `zone_intervals.csv`
 
 계약 위치인 `data/annotations/phase4/zone_intervals.csv`에 최종 ground truth를
-기록했다. `zone_intervals_draft.csv`는 B handover 당시의 빈 뼈대 artifact로만
-보존하며 측정 입력으로 사용하지 않는다. 검수 규칙은 `docs/data_sources.md`에
-있고 핵심은 다음과 같다.
+기록했다. 검수 규칙은 `docs/data_sources.md`에 있고 핵심은 다음과 같다.
 
 - `video_id`는 `recordings_manifest.csv`와 정확히 같아야 한다.
 - `interval_index`는 같은 영상·Zone에서 1부터, 중복 없이.

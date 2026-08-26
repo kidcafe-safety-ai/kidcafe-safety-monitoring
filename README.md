@@ -4,10 +4,9 @@ Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
 한이음 드림업 프로젝트 (2026.04-2026.10)
 
-![status](https://img.shields.io/badge/status-Phase_4_active-blue)
+![status](https://img.shields.io/badge/status-Phase_4_complete-brightgreen)
 ![python](https://img.shields.io/badge/python-3.10-blue)
 ![tests](https://img.shields.io/badge/tests-pytest_passed-green)
-![license](https://img.shields.io/badge/license-Internal-lightgrey)
 
 ---
 
@@ -15,7 +14,7 @@ Vision AI 기반 키즈카페 아동 안전 모니터링 시스템
 
 KidCafe Safety AI는 YOLO + ByteTrack + Geofencing 기반으로 위험구역 진입 및 장시간 체류를 감지하는 Vision AI 안전 모니터링 시스템이다.
 
-**현재 상태: Phase 4 실제 키즈카페 촬영 기반 낙상 감지 고도화 완료**
+**현재 상태: Phase 4 기능·통합 완료, 2026년 9월 8일 1차 평가 제출물 준비 중**
 
 현재 구현 기준(`v0.3.0-safety` 이후):
 
@@ -34,9 +33,7 @@ Webcam / RTSP / File   ← 로컬 실행
 
 - macOS: 내장 웹캠 + Docker Compose (FastAPI·React·SQLite), Phase 4 E1 MPS E2E
 - Windows: USB C920 웹캠 + Docker Compose (Phase 2.5 baseline)
-
-Phase 4 E1 실행 코드는 Windows의 CPU/CUDA와 일반 파일 경로를 지원한다. 현재
-E1 모델의 Windows 장비 E2E는 별도 최종 검증 대상으로 남아 있다.
+- 공통 실행 경로: 파일·웹캠·RTSP 입력, CPU·CUDA·MPS 장치 선택 지원
 
 > Streamlit 대시보드는 MVP 검증용으로 사용되었으며 현재는 비활성 상태다.
 > React Dashboard (`frontend/`)는 REST polling 기반 운영 UI다. Docker frontend는 시연·검증용 Vite dev server로 운영 배포 구성은 아니다.
@@ -102,10 +99,14 @@ python -m src.main \
   --frames-limit 300 \
   --show
 
-# RTSP IP 카메라 (--rtsp-alias 로 URL이 로그/이벤트에 노출되지 않음)
+# RTSP IP 카메라 (인증정보는 환경변수로 주입)
+export KIDCAFE_RTSP_USERNAME=<계정>
+export KIDCAFE_RTSP_PASSWORD=<비밀번호>
 python -m src.main \
   --source-type rtsp \
-  --source rtsp://user:pass@192.168.1.10/stream \
+  --rtsp-host <호스트> \
+  --rtsp-port 554 \
+  --rtsp-stream sub \
   --rtsp-alias camera_01 \
   --infer-device auto
 
@@ -197,19 +198,17 @@ fine-tuning하고, 학습 참여자와 분리한 데이터로 평가했다.
 | --- | ---: |
 | 동일 diagnostic의 E0 → E1 Recall | 6.25% → 93.75% |
 | 독립 참여자 test Recall / timely Recall | 93.3% / 93.3% |
-| 독립 참여자 test FAR / 중복 Event | 0.0/min / 0건 (no-fall 27.2초) |
+| 독립 참여자 test FAR / 중복 Event | 0.0/min / 0건 |
 | 주요 hard-negative 앉기 6편·줍기 7편 | false Event 0건 |
 
-위 결과로 E1을 Phase 4 목표 환경의 opt-in 모델로 채택했다. 다만 A01·A02
-diagnostic의 다중 인원 가림 영상에서 false Event 1건이 있었고, 전체 촬영
-no-fall 노출은 190.2초다. 장시간 RTSP의 걷기·앉기·줍기·눕기·가림·정지와 Cause
-정량 평가가 끝날 때까지 CLI 기본값은 비활성으로 유지한다. 상세 분할과 동결값은
+위 결과로 E1을 Phase 4 목표 환경의 opt-in 모델로 채택했다. 장시간 RTSP 정상
+행동 검증은 운영 전 별도 게이트로 분리해 CLI 기본값은 비활성으로 유지한다.
+평가 표본, 오류 분석과 동결값은
 `docs/fall_evaluation.md` 및
 `configs/fall_e1_selected.json`을 따른다.
 
 Pose NORMAL gate와 interval `3`의 M1/MPS 단일 파일 steady-state 성능은 낙상 OFF
-14.571 FPS, ON 13.511 FPS로 하락률 7.3%였다. 다른 장치와 장시간 RTSP 환경은
-Phase 4 E2E에서 계속 확인한다.
+14.571 FPS, ON 13.511 FPS로 하락률 7.3%였다.
 
 > 기본 Ultralytics YOLO 모델 파일(`*.pt`)은 Git에 포함하지 않는다. 최초 실행 시 자동 다운로드되며, 다운로드된 `.pt` 파일은 `.gitignore`에 의해 추적되지 않는다. fine-tuned 낙상 보조 모델은 위 공유 위치에서 별도로 받아야 한다.
 > Phase 2 기본 모델은 `yolo26n.pt`이며, `yolov8n.pt`는 MVP baseline/fallback으로 유지한다.
@@ -306,6 +305,8 @@ kidcafe-safety-monitoring/
 │   │   ├── schemas.py
 │   │   ├── database.py
 │   │   ├── repositories.py
+│   │   ├── zone_store.py       # Zone version·원자적 저장
+│   │   ├── live_frame_store.py # 최신 JPEG frame 보관
 │   │   └── routers/
 │   ├── common/              # 공통 타입 + 이벤트 IO/집계/분석 API + PipelineMetrics
 │   ├── input/               # Webcam/RTSP/File 입력 소스
@@ -318,11 +319,15 @@ kidcafe-safety-monitoring/
 │   └── main.py              # 파이프라인 진입점
 ├── frontend/                # React Dashboard
 │   ├── src/
-│   │   ├── pages/           # Monitoring/Events/AlertHistory (API), Report/ZoneSettings (Mock)
+│   │   ├── pages/           # Monitoring/Events/AlertHistory/Report/ZoneSettings (API)
 │   │   ├── components/      # KpiCard, EventTable, EventChart, SystemSettingsModal 등
-│   │   ├── api/             # eventsApi.ts (VITE_API_MODE 기반 mock/API 전환)
+│   │   ├── api/             # Event·Zone·Live Frame API client
+│   │   ├── hooks/           # polling lifecycle·stale 응답 제어
+│   │   ├── utils/           # Report 집계·날짜·Zone 검증
 │   │   ├── mocks/           # mock 데이터
-│   │   └── types/           # event.ts
+│   │   ├── test/            # Vitest 공통 setup
+│   │   ├── types/           # Event·Status·Zone·Report 타입
+│   │   └── ...
 │   ├── Dockerfile           # React 컨테이너 (Vite dev server)
 │   └── package.json
 ├── Dockerfile.api           # FastAPI 컨테이너
@@ -335,14 +340,25 @@ kidcafe-safety-monitoring/
 │   ├── cache_fall_signals.py
 │   ├── evaluate_fall.py
 │   ├── evaluate_fall_from_cache.py
-│   └── tracker_sweep.py
+│   ├── tracker_sweep.py
+│   ├── build_phase4_recordings_manifest.py
+│   ├── review_phase4_fall_annotations.py
+│   ├── run_phase4_tracker_arm.py
+│   ├── summarize_phase4_tracker_comparison.py
+│   └── ...
 ├── configs/                 # 낙상 상태머신·학습·데이터 분할 설정
 │   ├── fall_detection.json
 │   ├── caucafall_v5_split.json
-│   └── camera_calibration/  # Phase 4 Homography calibration (기본 비활성)
+│   ├── fall_e1_selected.json       # Phase 4 E1 동결 profile·SHA-256
+│   ├── phase4_tracker_comparison.json
+│   ├── trackers/                   # ByteTrack·BoT-SORT 비교 설정
+│   ├── camera_calibration/         # Phase 4 Homography calibration
+│   └── ...
 ├── data/
+│   ├── annotations/         # 촬영 manifest·낙상·Cause·Track·Zone ground truth
+│   ├── datasets/            # 외부·실제 촬영 데이터 메타데이터
 │   ├── videos/              # 입력 영상 (.gitignore)
-│   └── zones/               # Zone JSON
+│   └── zones/               # image/floor Zone JSON
 ├── docs/
 │   ├── interfaces.md        # A/B/C 공통 계약 (가장 중요)
 │   ├── decisions.md         # ADR 기록
@@ -352,7 +368,7 @@ kidcafe-safety-monitoring/
 │   ├── docker_phase_2_5.md  # Docker 실행 가이드 (Phase 2.5)
 │   ├── fall_evaluation.md   # 낙상 PoC 평가·튜닝·runtime 최적화 기록
 │   ├── homography_calibration.md  # Phase 4 floor-plane 좌표계·측정 절차
-│   ├── realtime_test.md     # Phase 2-3 실시간 실험 로그
+│   ├── realtime_test.md     # Phase 2-4 실시간 실험·종료 게이트 로그
 │   └── ...
 ├── tests/
 │   └── test_*.py
@@ -363,7 +379,7 @@ kidcafe-safety-monitoring/
 
 ---
 
-## 역할 분담 (Phase 3 완료 기준)
+## 역할 분담 (Phase 4 완료 기준)
 
 | 팀원 | 담당 | 주력 모듈 |
 |------|------|---------|
@@ -493,7 +509,7 @@ AI를 재시작해 변경 내용을 적용한다.
 | React mock Dashboard 2페이지 | Done — Phase 1.5 |
 | 실시간 입력 인터페이스 초안 | Done — Phase 1.5 |
 | 웹캠 실시간 입력 연결 | Done — Phase 2 |
-| RTSPSource 인터페이스 | 구현 완료, 실장비 검증 보류 |
+| RTSPSource 인터페이스 | Done — Phase 4 실장비 연결·최신 프레임 입력 검증 |
 | React mock → API 연동 | Done — Phase 2 |
 | Current Status API (`/status/current`) | Done — Phase 2 |
 | React Dashboard API mode 안정화 | Done — Phase 2.5 |
@@ -502,24 +518,24 @@ AI를 재시작해 변경 내용을 적용한다.
 | USB C920 E2E 테스트 (Windows) | Done — Phase 2.5 |
 | React Live View (영상 영역) | Done — Phase 3 (latest-frame polling) |
 | AlertHistory 실제 API 읽기 연동 | Done — Phase 3 |
-| WebSocket 실시간 push | Phase 4 이후 필요성 기반 재검토 |
+| 실시간 Dashboard 갱신 | Done — REST polling 안정화 |
 | FALL_SUSPECT 낙상 감지 | Done — Phase 4 E1 목표 환경 opt-in 모델 채택, A03 Recall·timely Recall 93.3%, FAR 0.0/min |
-| FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 | Done — Phase 3 (근접·접근 근거 기반 PoC, 정량 정확도 미검증) |
+| FALL_SUSPECT.cause 외부 접촉 원인 후보 추정 | Done — Phase 4 정량 평가 완료, 진단 범위로 분리 |
 | Phase 4 계약·평가 프로토콜 | Done — Contract v1·`phase4_fall_eval_v1` 동결 |
 | 낙상 오탐 개선(hard-negative 재학습, 외부·촬영 데이터) | Done — Phase 4 E1 목표 환경 채택 |
-| 경량 temporal classifier | E1과 실제 촬영 결과가 조건을 충족할 때만 검토 |
-| BoT-SORT / ReID | Done — Phase 4 평가 완료, 채택 기준 미달로 ByteTrack 유지 |
-| Homography floor-plane Zone | Phase 4 기본 비활성 PoC |
-| Zone Settings 저장·Report 실제 연동 | Phase 4 |
-
-Phase 3에서 공간 안전정책 temporal hysteresis, `FALL_SUSPECT`/`cause` opt-in PoC와
-런타임 통합, AlertHistory 실제 연동을 완료했다. 낙상 오탐 개선(hard-negative
-재학습과 외부·촬영 데이터 검증)과 Subject 9-10 최종 holdout은 Phase 4로
-이관한다. temporal classifier는 E1 이후에도 같은 문제가 실제 촬영에서
-재현될 때만 조건부로 검토한다.
+| BoT-SORT / ReID | Done — Phase 4 비교 평가 후 ByteTrack 유지 |
+| Homography floor-plane Zone | Done — Phase 4 PoC 평가 후 image polygon 유지 |
+| Zone Settings 저장·Report 실제 연동 | Done — Phase 4 API·Frontend 연동 및 회귀 테스트 완료 |
 
 Phase 4는 계약과 평가 프로토콜을 먼저 동결한 뒤 실제 촬영 데이터로 개선안을
-선택한다. 일정은 [`docs/roadmap.md`](docs/roadmap.md), 구현 계약은
+선택했다. 목표 카메라 E1을 opt-in으로 채택하고 Tracker는 ByteTrack, Zone은 image
+polygon을 유지했다. Zone Settings, Report와 Frontend fail-closed·polling
+안정화도 실제 API 경로로 완료했다. Cause attribution은 정량 비교
+결과에 따라 진단 범위로 분리했다.
+
+Phase 4 종료 이후에는 신규 학습·Tracker·API·UI 기능을 추가하지 않는다. 9월 8일
+1차 평가 전까지 회귀 수정, 실행 재현, 보고서와 시연 영상 제작만 진행한다. 일정은
+[`docs/roadmap.md`](docs/roadmap.md), 구현 계약은
 [`docs/api_contract.md`](docs/api_contract.md), 평가 기준은
 [`docs/fall_evaluation.md`](docs/fall_evaluation.md)를 따른다.
 
@@ -541,21 +557,21 @@ Phase 4는 계약과 평가 프로토콜을 먼저 동결한 뒤 실제 촬영 �
 | ADR-008 | Dashboard API 모듈 분리 및 요약 출력 추가 | C 대시보드 연동을 위한 API/출력 확장 |
 | ADR-009 | 파일 영상 기반 MVP 1차 종료 및 Phase 2 분리 | Streamlit 검증용 확정, React/FastAPI는 Phase 2 |
 | ADR-010 | Streamlit 종료 및 React Dashboard 전환 | Phase 1.5 운영 UI 확정 |
-| ADR-011 | Phase 2/2.5 실시간 갱신은 polling 유지 | WebSocket은 Phase 4 이후 필요성 기반 재검토 |
+| ADR-011 | 실시간 갱신은 REST polling 유지 | Phase 4에서 중복·stale·timeout 처리 보강 |
 | ADR-012 | Event 로그와 Current Status 분리 | 현재 인원은 Event 누적으로 계산 불가 |
 | ADR-013 | Phase 2는 웹캠 기반 end-to-end 우선 | RTSP는 fallback 가능 |
 | ADR-014 | Phase 2.5 제한적 Docker 도입 | 운영 배포 아닌 실행 환경 통일과 시연 재현성 확보 |
 | ADR-015 | Live View latest-frame polling | WebSocket·MJPEG 대비 구현 단순, FastAPI 단일 worker에 적합 |
 | ADR-016 | FALL_SUSPECT.cause 기반 외부 접촉 원인 후보 기록 | 독립 COLLISION_SUSPECT는 오탐 제어 어려움, 낙상 확정 후 소급 조회가 실용적 |
 | ADR-017 | AsyncEventDispatcher 기반 비차단 전송 | API 장애 시 추론 FPS 저하 방지, EventApiClient는 감싸는 구조로 유지 |
-| ADR-018 | Phase 3 인증/인가 경계만 정의, 구현은 Phase 4 이관 | 계약 확정이 우선, 인증은 배포 단계 관심사 |
+| ADR-018 | 인증/인가 경계만 정의, 구현은 운영 배포 단계로 이관 | Phase 4도 로컬 시연·검증 범위로 종료 |
 | ADR-019 | 공간 안전정책 temporal hysteresis | 경계 진동을 즉시 Event로 확정하지 않고 시간 기반 상태를 사용 |
 | ADR-020 | Track ID 안정화 후 임계값 게이트 추가 중단 | 확인된 Recall 손실을 피하고 다음 정확도 개선을 데이터·모델 문제로 분리 |
 | ADR-021 | opt-in Pose NORMAL 추론 스케줄링 | 불확실 구간은 원래 경로를 유지하면서 안정적 정상 구간의 보조 모델 비용 절감 |
 | ADR-022 | Phase 4 계약·평가 프로토콜 선행 동결 | A/B/C 병렬 구현과 S9-10 holdout 오염 방지 |
 | ADR-023 | Homography 기본 비활성·조건부 채택 | 실제 Zone 정확도 개선과 운영 비용을 측정한 뒤 production 여부 결정 |
 | ADR-024 | 목표 카메라 E1 낙상 모델 채택 | 실제 키즈카페 actor-disjoint 평가를 근거로 opt-in 프로파일 동결 |
-| ADR-025 | Phase 4 Tracker 비교 후 ByteTrack 유지 | BoT-SORT·ReID·buffer 60이 사전 채택 기준을 충족하지 못함 |
+| ADR-025 | Phase 4 Tracker 비교 후 ByteTrack 유지 | 동일 촬영 cohort의 사전 기준으로 비교해 기존 경로 선택 |
 
 ---
 
@@ -574,25 +590,18 @@ Phase 4는 계약과 평가 프로토콜을 먼저 동결한 뒤 실제 촬영 �
 
 ---
 
-## 알려진 한계 및 개선 계획
+## 검증 범위와 알려진 제약
 
-| 한계 | 원인 | 개선 계획 |
-|------|------|----------------|
-| 원거리·소형 객체 탐지 한계 | 경량 모델 및 촬영 환경 한계 | Phase 4: 라벨 데이터 평가 및 fine-tuning 검토 |
-| 작은 객체 bbox 깜빡임 | 작은 객체 confidence 흔들림 | Phase 3 범위에서 미착수 — Phase 4: 후처리 보강 |
-| track_id 자주 변경 | ReID 없음 | 3-way 비교에서 채택 기준 미달, ByteTrack 유지 |
-| 가려짐 후 재등장 시 ID 분리 | ByteTrack만으로는 한계 | 평가 도구에서 ReID 효과를 측정했으나 Production에는 미통합 |
+| 범위 | Phase 4 결론·제약 |
+|------|----------------|
+| 낙상 감지 | 목표 카메라 E1을 opt-in으로 채택. 다른 카메라 구도는 별도 평가가 필요하며, 장시간 정상 행동 RTSP 검증 전까지 기본 비활성 유지 |
+| Cause·Tracking | attribution을 정량 평가해 진단 범위로 분리하고 ByteTrack 유지 |
+| Zone | temporal hysteresis와 image polygon을 유지. Homography는 비교 평가했으나 현재 실행 경로에는 포함하지 않음 |
+| 운영 범위 | 로컬 시연·통합 검증 범위. 인증, 알림 처리 상태·메모 저장, RTSP 자동 재연결과 production web serving은 운영 배포 전 별도 계약이 필요 |
 
-Phase 4의 ReID 비교는 짧은 detector 누락이나 가림 뒤 detection이 복구됐을 때
-기존 Track ID로 재연결하는 것이 목표다. detection이 없는 프레임에 bbox를
-생성하거나 장기·cross-camera identity를 유지하는 기능은 포함하지 않는다.
-동일 촬영분 비교에서 `yolo26n-cls.pt` 기반 ReID가 사전 채택 기준을 충족하지
-못해 Production 파이프라인에는 통합하지 않았고 기존 ByteTrack을 유지한다.
-| ENTER/EXIT 경계 흔들림 | zone 경계 foot_point 진동 | Phase 3에서 temporal hysteresis 적용 완료, 실제 카메라 재튜닝은 Phase 4 |
-| 낙상 처리량 비용 | PoseTracker와 보조 detector를 함께 실행 | Pose NORMAL gate+interval 3을 기본 적용하고 다른 장치·API E2E를 계속 검증 |
-| 카메라 구도별 성능 차이 | 구도·행동 분포 차이 | 실제 키즈카페 A03 기준 E1을 채택하고 다른 구도는 별도 검증 |
-| 알림 조치 상태·리포트·설정 저장 미연동 | 조치 API 미구현, 일부 화면 Mock | Phase 4에서 Zone·Report를 연동하고 알림 조치 저장은 후속 범위 유지 |
-> 상세 분석: [`docs/tracking_analysis.md`](docs/tracking_analysis.md)
+> 상세 분석: [`docs/fall_evaluation.md`](docs/fall_evaluation.md),
+> [`docs/phase4_tracker_comparison/README.md`](docs/phase4_tracker_comparison/README.md),
+> [`docs/homography_calibration.md`](docs/homography_calibration.md)
 
 ---
 

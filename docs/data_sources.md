@@ -20,7 +20,7 @@ data/datasets/
 ├─ gmdcsa24/                 # v2.1 공식 archive, 실제 RGB
 ├─ omnifall/                 # OF-Synthetic 진단 기록 전용
 ├─ up_fall/                  # 실제 RGB 선별 pilot archive
-├─ ur_fall/                  # 선택
+├─ ur_fall/                  # 검토 후 미사용
 ├─ phase4_recordings/        # 2026-08-07 촬영 원본, Git 제외
 └─ fall_cause_mini_set/
 ```
@@ -240,7 +240,7 @@ UP-Fall과 8월 7일 직접 촬영 실제 RGB로 전환한다.
 | 접근 방법 | 공식 사이트 직접 다운로드 |
 | 라이선스 | CC BY-NC-SA 4.0 |
 | 용도 | 선택적 시점 검증 |
-| 검토 상태 | 공식 메타데이터·라이선스 확인 완료, 사용 여부·다운로드·체크섬 확인 예정 |
+| 검토 상태 | 공식 메타데이터·라이선스 확인 후 Phase 4 미사용으로 검토 종료 |
 
 ---
 
@@ -490,7 +490,12 @@ timely Recall 66.7%, false alarm 0회/분, 중복 Event 0건이다. Subject 7-8
 2.34→1.75/min으로 감소했다. 이 값은 API·Live Frame을 제외한 단일 파일
 측정이며 S7-8도 tuning 데이터이므로 최종 성능으로 해석하지 않는다.
 
-Subject 9-10 Holdout은 설정 동결 후에도 이번 통합 범위에서는 실행하지 않았다.
-Phase 4 최종 평가에서 한 번만 사용한다. `FALL_SUSPECT.cause`의 원인 후보 Track
-정확도·false attribution도 아직 정량 검증하지 않았으며, Phase 4에서 위 Mini
-Set 또는 원인 라벨이 명확한 외부 데이터로 평가한다.
+Subject 9-10 Holdout은 Phase 4에서도 실행하지 않았다. CAUCAFall은 초기 구현용
+공개 데이터와 참고 회귀로만 보존하며 목표 환경 최종 성능 근거로 사용하지 않는다.
+Phase 4 최종 평가는 실제 키즈카페 목표 카메라의 actor-disjoint A03을 사용했다.
+
+`FALL_SUSPECT.cause`는 실제 촬영 데이터로 정량 검증했다. Cause 후보 8편의
+top-1은 3/8(37.5%)로 목표에 미달했고, 단독 낙상 24편의 `cause=null`
+specificity는 24/24(100.0%)였다. Tracker 3-way 비교 후에도 채택 기준을 충족한
+후보가 없어 Production ByteTrack을 유지했다. 상세 결과는
+`docs/phase4_cause_tracking/`과 `docs/phase4_tracker_comparison/`에 기록한다.
