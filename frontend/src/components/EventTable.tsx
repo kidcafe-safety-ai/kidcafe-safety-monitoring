@@ -48,7 +48,6 @@ export default function EventTable({
             <tbody>
               {events.map((event) => {
                 const meta = getEventDisplayMeta(event.event_type);
-                const shouldShowTechnicalType = meta.label !== event.event_type;
                 const causeText =
                   event.event_type === "FALL_SUSPECT"
                     ? formatEventCause(event.cause)
@@ -61,9 +60,6 @@ export default function EventTable({
                       <span className={`type-badge ${meta.badgeClass}`}>
                         {meta.label}
                       </span>
-                      {shouldShowTechnicalType ? (
-                        <span className="event-raw-type">{event.event_type}</span>
-                      ) : null}
                     </td>
                     <td>{event.track_id}</td>
                     <td>{event.zone_id}</td>
@@ -78,7 +74,7 @@ export default function EventTable({
           </table>
         </div>
       ) : (
-        <div className="table-empty-state">표시할 이벤트가 없습니다.</div>
+        <div className="table-empty-state">현재 감지된 안전 이벤트가 없습니다.</div>
       )}
       {shouldShowPagination ? (
         <div className="table-pagination">

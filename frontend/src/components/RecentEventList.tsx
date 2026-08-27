@@ -43,6 +43,34 @@ function navigateToAlertHistory(eventId: string) {
   );
 }
 
+function getRecentEventMessage(event: SafetyEvent) {
+  if (event.event_type === "FALL_SUSPECT") {
+    return "넘어짐 의심 상황이 감지되었습니다.";
+  }
+
+  if (event.event_type === "ENTER_RESTRICTED") {
+    return "제한구역 접근이 감지되었습니다.";
+  }
+
+  if (event.event_type === "DANGER_ZONE_DWELL") {
+    return "위험구역 체류 상황이 감지되었습니다.";
+  }
+
+  if (event.event_type === "ENTER") {
+    return "아동의 구역 입장이 감지되었습니다.";
+  }
+
+  if (event.event_type === "DWELL") {
+    return "아동이 구역에 머무르고 있습니다.";
+  }
+
+  if (event.event_type === "EXIT") {
+    return "아동이 구역을 벗어났습니다.";
+  }
+
+  return getEventDisplayMeta(event.event_type).description;
+}
+
 export default function RecentEventList({
   events,
   hasError = false,
@@ -130,14 +158,14 @@ export default function RecentEventList({
     if (hasError) {
       return (
         <div className="state-banner error">
-          최근 이벤트 API 연결에 실패했습니다.
+          최근 안전 이벤트를 불러오지 못했습니다. 연결 상태를 확인해 주세요.
         </div>
       );
     }
 
     if (events.length === 0) {
       return (
-        <div className="state-banner empty">표시할 최근 이벤트가 없습니다.</div>
+        <div className="state-banner empty">현재 감지된 최근 안전 이벤트가 없습니다.</div>
       );
     }
 
@@ -163,15 +191,7 @@ export default function RecentEventList({
               onClick={() => navigateToAlertHistory(event.event_id)}
               type="button"
             >
-              <div className="event-summary">
-                <strong>{formatOccurredAt(event)}</strong>
-                <p>{meta.description}</p>
-                <span className="recent-event-zone">{formatEventZone(event)}</span>
-                {causeText ? (
-                  <span className="recent-event-cause">{causeText}</span>
-                ) : null}
-              </div>
-              <div className="event-meta">
+              <div className="recent-event-badge-row">
                 <span className={`type-badge ${meta.badgeClass}`}>
                   {meta.label}
                 </span>
@@ -181,7 +201,17 @@ export default function RecentEventList({
                 >
                   {severityDisplay.iconLabel} · {severityDisplay.label}
                 </span>
-                <span className="track-id">{formatTrackId(event.track_id)}</span>
+              </div>
+              <div className="event-summary">
+                <strong>{getRecentEventMessage(event)}</strong>
+                <span className="recent-event-time">{formatOccurredAt(event)}</span>
+                <span className="recent-event-meta-row">
+                  <span>{formatEventZone(event)}</span>
+                  <span>{formatTrackId(event.track_id)}</span>
+                </span>
+                {causeText ? (
+                  <span className="recent-event-cause">{causeText}</span>
+                ) : null}
               </div>
             </button>
           );

@@ -78,13 +78,15 @@ export default function EventsPage() {
     <main className="page">
       <div className="page-heading">
         <div>
-          <h1>이벤트 기록 / 통계</h1>
-          <p>안전 이벤트 조회와 타입별 통계</p>
+          <div className="title-row">
+            <h1>이벤트 기록 / 통계</h1>
+            <span className="status-pill">안전 이벤트 현황</span>
+          </div>
         </div>
       </div>
 
       <section className="card filter-card">
-        <span>Event Type</span>
+        <span>이벤트 유형</span>
         <div className="segmented-control">
           {FILTERS.map((item) => (
             <button
@@ -102,7 +104,7 @@ export default function EventsPage() {
       {isLoading ? <div className="state-banner">데이터를 불러오는 중입니다.</div> : null}
       {hasApiError ? (
         <div className="state-banner error">
-          API 연결에 실패했습니다. 마지막으로 확인된 실제 데이터가 있으면 유지됩니다.
+          안전 이벤트 데이터를 불러오지 못했습니다. 연결 상태를 확인해 주세요.
         </div>
       ) : null}
       <section className="events-grid">

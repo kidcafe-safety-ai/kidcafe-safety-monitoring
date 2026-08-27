@@ -455,7 +455,10 @@ button {
 }
 
 .recent-event-button {
+  display: grid;
   width: 100%;
+  justify-content: stretch;
+  gap: 10px;
   border: 1px solid transparent;
   color: inherit;
   font: inherit;
@@ -485,9 +488,28 @@ button {
   margin: 3px 0 0;
 }
 
+.recent-event-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.recent-event-badge-row .type-badge,
+.recent-event-badge-row .risk-badge {
+  white-space: nowrap;
+}
+
+.event-summary {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
 .event-summary strong {
   color: var(--text-main);
   font-size: 14px;
+  line-height: 1.35;
 }
 
 .event-meta {
@@ -498,19 +520,29 @@ button {
   font-size: 12px;
 }
 
-.track-id {
+.track-id,
+.recent-event-time,
+.recent-event-meta-row {
   color: var(--text-muted);
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.recent-event-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
 }
 
 .recent-event-zone,
 .recent-event-cause {
   display: block;
-  max-width: 220px;
+  max-width: 100%;
   overflow: hidden;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1405,7 +1437,8 @@ tbody tr:hover {
 
 .alert-table-card,
 .alert-detail-card,
-.alert-action-card {
+.alert-action-card,
+.alert-summary-card {
   padding: 22px;
 }
 
@@ -1520,6 +1553,36 @@ tbody tr:hover {
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
+}
+
+.alert-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.alert-summary-item {
+  display: grid;
+  gap: 6px;
+  min-height: 86px;
+  align-content: center;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--panel-bg);
+}
+
+.alert-summary-item span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.alert-summary-item strong {
+  color: var(--text-main);
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .alert-action-buttons button:disabled,

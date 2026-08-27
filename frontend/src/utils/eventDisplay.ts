@@ -163,7 +163,7 @@ export function formatEventZone(event: SafetyEvent) {
     return "전체 구역";
   }
 
-  return zoneId || "Zone 정보 없음";
+  return zoneId || "구역 정보 없음";
 }
 
 export function formatTrackId(trackId: number | null | undefined) {

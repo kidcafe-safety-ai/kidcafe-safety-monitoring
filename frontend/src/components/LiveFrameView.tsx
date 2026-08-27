@@ -22,14 +22,14 @@ interface LiveFrameViewProps {
 
 function getStatusMessage(status: LiveFrameStatus) {
   if (status === "loading") {
-    return "Live frame을 불러오는 중입니다.";
+    return "실시간 카메라 영상을 불러오는 중입니다.";
   }
 
   if (status === "error") {
-    return "Live frame 연결이 불안정합니다.";
+    return "카메라 영상을 불러오지 못했습니다. 연결 상태를 확인해 주세요.";
   }
 
-  return "수신된 live frame이 없습니다.";
+  return "카메라 연결을 기다리고 있습니다.";
 }
 
 function formatMetadataValue(value: string | null) {
@@ -149,17 +149,17 @@ export default function LiveFrameView({
             src={frameUrl}
             alt="실시간 키즈카페 모니터링 화면"
           />
-          <dl className="live-frame-meta" aria-label="Live frame metadata">
+          <dl className="live-frame-meta" aria-label="실시간 영상 정보">
             <div>
-              <dt>X-Source</dt>
+              <dt>영상 소스</dt>
               <dd>{formatMetadataValue(metadata.source)}</dd>
             </div>
             <div>
-              <dt>X-Frame-Number</dt>
+              <dt>프레임 번호</dt>
               <dd>{formatMetadataValue(metadata.frameNumber)}</dd>
             </div>
             <div>
-              <dt>X-Captured-At</dt>
+              <dt>수신 시각</dt>
               <dd>{formatMetadataValue(metadata.capturedAt)}</dd>
             </div>
           </dl>

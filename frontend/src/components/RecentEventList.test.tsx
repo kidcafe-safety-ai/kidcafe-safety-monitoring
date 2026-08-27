@@ -25,7 +25,7 @@ describe("RecentEventList", () => {
       <RecentEventList events={[]} hasError isLoading={false} />,
     );
 
-    expect(screen.getByText("최근 이벤트 API 연결에 실패했습니다.")).toBeInTheDocument();
+    expect(screen.getByText("최근 안전 이벤트를 불러오지 못했습니다. 연결 상태를 확인해 주세요.")).toBeInTheDocument();
 
     rerender(
       <RecentEventList

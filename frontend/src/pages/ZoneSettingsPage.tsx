@@ -435,9 +435,8 @@ export default function ZoneSettingsPage() {
         <div>
           <div className="title-row">
             <h1>안전구역 / 알림 설정</h1>
-            <span className="status-pill">실제 Zone API 연동</span>
+            <span className="status-pill">안전구역 관리</span>
           </div>
-          <p>GET /zones와 PUT /zones 계약 기반으로 전체 Zone 목록을 조회·편집·저장합니다.</p>
         </div>
       </div>
 

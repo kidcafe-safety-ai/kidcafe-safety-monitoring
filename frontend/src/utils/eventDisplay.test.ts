@@ -8,7 +8,7 @@ import {
 } from "./eventDisplay";
 
 describe("eventDisplay", () => {
-  it("defines display metadata for all known Phase 4 event types", () => {
+  it("defines display metadata for all known safety event types", () => {
     expect(KNOWN_EVENT_TYPES).toEqual([
       "ENTER",
       "DWELL",

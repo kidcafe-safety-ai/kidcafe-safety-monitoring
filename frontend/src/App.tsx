@@ -5,11 +5,9 @@ import {
   MapPinned,
   Monitor,
   Moon,
-  Settings,
   Sun,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import SystemSettingsModal from "./components/SystemSettingsModal";
 import AlertHistoryPage from "./pages/AlertHistoryPage";
 import EventsPage from "./pages/EventsPage";
 import MonitoringPage from "./pages/MonitoringPage";
@@ -40,7 +38,6 @@ export default function App() {
   const [page, setPage] = useState<PageKey>("monitoring");
   const [focusedAlertEventId, setFocusedAlertEventId] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
-  const [isSystemSettingsOpen, setIsSystemSettingsOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -132,7 +129,7 @@ export default function App() {
             type="button"
           >
             <FileText size={18} strokeWidth={2.2} />
-            <span>리포트 생성</span>
+            <span>안전 리포트</span>
           </button>
           <button
             className={page === "zone-settings" ? "active" : ""}
@@ -159,23 +156,8 @@ export default function App() {
         </div>
       </aside>
       <div className="content">
-        <div className="content-toolbar">
-          <button
-            aria-label="시스템 설정 열기"
-            className="settings-icon-button"
-            onClick={() => setIsSystemSettingsOpen(true)}
-            title="시스템 설정"
-            type="button"
-          >
-            <Settings size={19} strokeWidth={2.2} />
-          </button>
-        </div>
         {activePage}
       </div>
-      <SystemSettingsModal
-        isOpen={isSystemSettingsOpen}
-        onClose={() => setIsSystemSettingsOpen(false)}
-      />
     </div>
   );
 }

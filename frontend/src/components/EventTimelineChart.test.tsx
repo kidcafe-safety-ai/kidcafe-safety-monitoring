@@ -39,7 +39,7 @@ describe("EventTimelineChart", () => {
     );
 
     expect(
-      screen.getByLabelText("시간대별 이벤트 발생 추이 Line Chart"),
+      screen.getByLabelText("시간대별 이벤트 발생 추이"),
     ).toBeInTheDocument();
     expect(screen.getByText("01:00:00~01:00:10: 1건")).toBeInTheDocument();
     expect(screen.getByText("02:00:00~02:00:10: 1건")).toBeInTheDocument();
