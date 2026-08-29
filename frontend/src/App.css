@@ -356,55 +356,27 @@ button {
   color: #fecaca;
 }
 
-.live-frame-meta {
+.live-frame-connection-badge {
   position: absolute;
-  right: 16px;
-  bottom: 16px;
-  left: 16px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0;
-  padding: 12px;
-  border: 1px solid rgba(219, 234, 254, 0.18);
-  border-radius: 12px;
-  background: rgba(2, 6, 23, 0.72);
-  color: #dbeafe;
+  top: 14px;
+  right: 14px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 10px;
+  border: 1px solid rgba(187, 247, 208, 0.55);
+  border-radius: 999px;
+  color: #dcfce7;
+  background: rgba(22, 101, 52, 0.76);
+  font-size: 12px;
+  font-weight: 900;
   backdrop-filter: blur(8px);
-}
-
-.live-frame-meta div {
-  min-width: 0;
-}
-
-.live-frame-meta dt {
-  margin-bottom: 4px;
-  color: #93c5fd;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.live-frame-meta dd {
-  margin: 0;
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 @media (max-width: 720px) {
   .live-frame-view {
     min-height: 260px;
-  }
-
-  .live-frame-meta {
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
-    grid-template-columns: 1fr;
   }
 }
 
@@ -939,7 +911,7 @@ tbody tr:hover {
 
 .zone-toolbar {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(140px, 0.8fr) auto;
+  grid-template-columns: minmax(160px, 0.5fr) auto;
   gap: 14px;
   align-items: center;
   margin-bottom: 16px;
@@ -979,7 +951,10 @@ tbody tr:hover {
 
 .zone-toolbar button,
 .zone-table-card button,
-.zone-points-card button {
+.zone-points-card button,
+.zone-reference-tools button,
+.zone-click-actions button,
+.zone-video-file-picker {
   min-height: 38px;
   padding: 8px 12px;
   border: 1px solid var(--border-color);
@@ -991,7 +966,9 @@ tbody tr:hover {
 }
 
 .zone-toolbar-actions button:last-child,
-.zone-points-card .panel-header button {
+.zone-points-card .panel-header button,
+.zone-click-actions button:last-child,
+.zone-video-file-picker {
   color: #ffffff;
   border-color: #2563eb;
   background: #2563eb;
@@ -999,7 +976,9 @@ tbody tr:hover {
 
 .zone-toolbar button:disabled,
 .zone-table-card button:disabled,
-.zone-points-card button:disabled {
+.zone-points-card button:disabled,
+.zone-reference-tools button:disabled,
+.zone-click-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.54;
 }
@@ -1037,6 +1016,33 @@ tbody tr:hover {
     var(--panel-bg);
 }
 
+.zone-reference-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.zone-video-file-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.zone-video-file-picker input {
+  display: none;
+}
+
+.zone-video-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .video-frame-preview {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -1049,6 +1055,29 @@ tbody tr:hover {
     radial-gradient(circle at 78% 68%, rgba(20, 184, 166, 0.14), transparent 24%),
     linear-gradient(145deg, #111827 0%, #0f172a 52%, #020617 100%);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.video-frame-preview.is-clickable {
+  cursor: crosshair;
+}
+
+.video-frame-preview.has-reference-video {
+  background: #020617;
+}
+
+.video-frame-preview.has-reference-video::before,
+.video-frame-preview.has-reference-video::after {
+  display: none;
+}
+
+.zone-reference-video {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #020617;
 }
 
 .video-frame-preview::before {
@@ -1174,8 +1203,14 @@ tbody tr:hover {
   height: 100%;
 }
 
-.zone-overlay polygon {
+.zone-overlay polygon,
+.zone-overlay polyline {
   stroke-width: 1.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.zone-overlay polyline {
+  fill: none;
 }
 
 .zone-overlay text {
@@ -1192,8 +1227,16 @@ tbody tr:hover {
   stroke: #ef4444;
 }
 
+.zone-danger polyline {
+  stroke: #ef4444;
+}
+
 .zone-warning polygon {
   fill: rgba(247, 144, 9, 0.2);
+  stroke: #f79009;
+}
+
+.zone-warning polyline {
   stroke: #f79009;
 }
 
@@ -1202,12 +1245,62 @@ tbody tr:hover {
   stroke: #14b8a6;
 }
 
+.zone-watch polyline {
+  stroke: #14b8a6;
+}
+
+.selected-zone polygon,
+.selected-zone polyline {
+  stroke-width: 2.6;
+}
+
 .zone-danger circle,
 .zone-warning circle,
 .zone-watch circle {
   fill: #f8fafc;
   stroke: rgba(2, 6, 23, 0.82);
   stroke-width: 0.5;
+}
+
+.zone-click-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--panel-bg);
+}
+
+.zone-click-actions > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.zone-click-actions strong {
+  color: var(--text-main);
+  font-size: 14px;
+}
+
+.zone-click-actions span,
+.zone-reference-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.zone-click-actions > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.zone-reference-note {
+  margin: 10px 0 0;
 }
 
 .zone-form-preview {
@@ -2549,7 +2642,7 @@ tbody tr:hover {
   }
 
   .zone-toolbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .zone-toolbar-actions {

@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type MouseEvent,
+} from "react";
 import { getZones, putZones } from "../api/zoneSettingsApi";
 import type {
   Zone,
@@ -91,24 +99,6 @@ function normalizeNumberInput(value: string) {
   return Number(value);
 }
 
-function formatUpdatedAt(updatedAt: string) {
-  const parsedDate = new Date(updatedAt);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return updatedAt || "-";
-  }
-
-  return parsedDate.toLocaleString("ko-KR", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
 function prepareZonesForSave(zones: Zone[]) {
   return zones.map((zone) => ({
     ...zone,
@@ -151,6 +141,51 @@ function hasIssue(issues: ZoneValidationIssue[], field: string) {
   return issues.some((issue) => issue.field === field || issue.field.startsWith(`${field}.`));
 }
 
+function roundNormalizedCoordinate(value: number) {
+  return Math.round(value * 10000) / 10000;
+}
+
+function getContainedVideoBounds(
+  containerRect: DOMRect,
+  videoElement: HTMLVideoElement | null,
+) {
+  if (
+    videoElement === null ||
+    videoElement.videoWidth <= 0 ||
+    videoElement.videoHeight <= 0
+  ) {
+    return {
+      left: containerRect.left,
+      top: containerRect.top,
+      width: containerRect.width,
+      height: containerRect.height,
+    };
+  }
+
+  const videoAspectRatio = videoElement.videoWidth / videoElement.videoHeight;
+  const containerAspectRatio = containerRect.width / containerRect.height;
+
+  if (videoAspectRatio > containerAspectRatio) {
+    const height = containerRect.width / videoAspectRatio;
+
+    return {
+      left: containerRect.left,
+      top: containerRect.top + (containerRect.height - height) / 2,
+      width: containerRect.width,
+      height,
+    };
+  }
+
+  const width = containerRect.height * videoAspectRatio;
+
+  return {
+    left: containerRect.left + (containerRect.width - width) / 2,
+    top: containerRect.top,
+    width,
+    height: containerRect.height,
+  };
+}
+
 export default function ZoneSettingsPage() {
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -162,9 +197,17 @@ export default function ZoneSettingsPage() {
   const [saveDetails, setSaveDetails] = useState<string[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [conflictDraft, setConflictDraft] = useState<Zone[] | null>(null);
+  const [referenceVideoUrl, setReferenceVideoUrl] = useState<string | null>(null);
+  const [referenceVideoName, setReferenceVideoName] = useState<string | null>(null);
+  const [referenceVideoAspectRatio, setReferenceVideoAspectRatio] = useState<string | null>(
+    null,
+  );
   const loadRequestIdRef = useRef(0);
   const loadAbortControllerRef = useRef<AbortController | null>(null);
   const saveAbortControllerRef = useRef<AbortController | null>(null);
+  const referenceVideoUrlRef = useRef<string | null>(null);
+  const referenceVideoRef = useRef<HTMLVideoElement | null>(null);
+  const referenceVideoInputRef = useRef<HTMLInputElement | null>(null);
 
   const validationIssues = useMemo(() => validateZones(draftZones), [draftZones]);
   const originalZones = config?.zones ?? [];
@@ -182,6 +225,8 @@ export default function ZoneSettingsPage() {
   const isSaving = saveState === "saving";
   const isLoadFailed = loadState === "error";
   const isEditingDisabled = isLoading || isSaving || isLoadFailed;
+  const canEditSelectedZone = selectedZone !== null && !isEditingDisabled;
+  const hasSelectedZonePoints = selectedZone !== null && selectedZone.points.length > 0;
   const canSave =
     config !== null &&
     !isEditingDisabled &&
@@ -245,6 +290,15 @@ export default function ZoneSettingsPage() {
       saveAbortControllerRef.current?.abort();
     };
   }, [loadZoneSettings]);
+
+  useEffect(
+    () => () => {
+      if (referenceVideoUrlRef.current !== null) {
+        URL.revokeObjectURL(referenceVideoUrlRef.current);
+      }
+    },
+    [],
+  );
 
   const handleReload = async () => {
     if (
@@ -371,6 +425,120 @@ export default function ZoneSettingsPage() {
     setSuccessMessage(null);
   };
 
+  const handleReferenceVideoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+
+    if (referenceVideoUrlRef.current !== null) {
+      URL.revokeObjectURL(referenceVideoUrlRef.current);
+      referenceVideoUrlRef.current = null;
+    }
+
+    if (file === null) {
+      setReferenceVideoUrl(null);
+      setReferenceVideoName(null);
+      setReferenceVideoAspectRatio(null);
+      return;
+    }
+
+    const nextUrl = URL.createObjectURL(file);
+    referenceVideoUrlRef.current = nextUrl;
+    setReferenceVideoUrl(nextUrl);
+    setReferenceVideoName(file.name);
+    setReferenceVideoAspectRatio(null);
+  };
+
+  const handleClearReferenceVideo = () => {
+    if (referenceVideoUrlRef.current !== null) {
+      URL.revokeObjectURL(referenceVideoUrlRef.current);
+      referenceVideoUrlRef.current = null;
+    }
+
+    setReferenceVideoUrl(null);
+    setReferenceVideoName(null);
+    setReferenceVideoAspectRatio(null);
+
+    if (referenceVideoInputRef.current !== null) {
+      referenceVideoInputRef.current.value = "";
+    }
+  };
+
+  const handleReferenceVideoLoadedMetadata = () => {
+    const videoElement = referenceVideoRef.current;
+
+    if (
+      videoElement === null ||
+      videoElement.videoWidth <= 0 ||
+      videoElement.videoHeight <= 0
+    ) {
+      setReferenceVideoAspectRatio(null);
+      return;
+    }
+
+    setReferenceVideoAspectRatio(
+      `${videoElement.videoWidth} / ${videoElement.videoHeight}`,
+    );
+  };
+
+  const handlePlayReferenceVideo = () => {
+    const playPromise = referenceVideoRef.current?.play();
+
+    if (playPromise) {
+      void playPromise.catch(() => undefined);
+    }
+  };
+
+  const handlePauseReferenceVideo = () => {
+    referenceVideoRef.current?.pause();
+  };
+
+  const handleReferenceFrameClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (referenceVideoUrl === null || !canEditSelectedZone) {
+      return;
+    }
+
+    const bounds = getContainedVideoBounds(
+      event.currentTarget.getBoundingClientRect(),
+      referenceVideoRef.current,
+    );
+
+    const x = (event.clientX - bounds.left) / bounds.width;
+    const y = (event.clientY - bounds.top) / bounds.height;
+
+    if (x < 0 || x > 1 || y < 0 || y > 1) {
+      return;
+    }
+
+    updateZoneAt(selectedIndex, (zone) => ({
+      ...zone,
+      points: [
+        ...zone.points,
+        [roundNormalizedCoordinate(x), roundNormalizedCoordinate(y)],
+      ],
+    }));
+  };
+
+  const handleUndoLastPoint = () => {
+    if (!canEditSelectedZone) {
+      return;
+    }
+
+    updateZoneAt(selectedIndex, (zone) => ({
+      ...zone,
+      points: zone.points.slice(0, -1),
+    }));
+  };
+
+  const handleClearSelectedPoints = () => {
+    if (!canEditSelectedZone) {
+      return;
+    }
+
+    updateZoneAt(selectedIndex, (zone) => ({
+      ...zone,
+      points: [],
+    }));
+  };
+
   const handleSave = async () => {
     if (config === null || isSaving) {
       return;
@@ -480,15 +648,7 @@ export default function ZoneSettingsPage() {
 
       <div className="zone-toolbar card">
         <div>
-          <span>Version</span>
-          <strong>{config?.version ?? "-"}</strong>
-        </div>
-        <div>
-          <span>Updated</span>
-          <strong>{config ? formatUpdatedAt(config.updated_at) : "-"}</strong>
-        </div>
-        <div>
-          <span>변경 상태</span>
+          <span>저장 상태</span>
           <strong>{hasUnsavedChanges ? "저장 안 됨" : "저장됨"}</strong>
         </div>
         <div className="zone-toolbar-actions">
@@ -498,9 +658,6 @@ export default function ZoneSettingsPage() {
           <button disabled={isEditingDisabled} onClick={handleAddZone} type="button">
             Zone 추가
           </button>
-          <button disabled={!canSave} onClick={handleSave} type="button">
-            {isSaving ? "저장 중..." : "전체 Zone 저장"}
-          </button>
         </div>
       </div>
 
@@ -509,18 +666,74 @@ export default function ZoneSettingsPage() {
           <div className="panel-header">
             <div>
               <h2>영상 프레임 미리보기</h2>
-              <span>0.0~1.0 normalized image coordinate 기준 polygon 표시</span>
+              <span>촬영 영상을 보며 마우스로 구역 꼭짓점을 설정합니다.</span>
+            </div>
+          </div>
+          <div className="zone-reference-tools">
+            <label className="zone-video-file-picker">
+              <span>로컬 촬영 영상 선택</span>
+              <input
+                accept="video/*"
+                onChange={handleReferenceVideoChange}
+                ref={referenceVideoInputRef}
+                type="file"
+              />
+            </label>
+            <div className="zone-video-controls">
+              <button
+                disabled={referenceVideoUrl === null}
+                onClick={handlePlayReferenceVideo}
+                type="button"
+              >
+                재생
+              </button>
+              <button
+                disabled={referenceVideoUrl === null}
+                onClick={handlePauseReferenceVideo}
+                type="button"
+              >
+                일시정지
+              </button>
+              <button
+                disabled={referenceVideoUrl === null}
+                onClick={handleClearReferenceVideo}
+                type="button"
+              >
+                영상 제거
+              </button>
             </div>
           </div>
           <div className="zone-map">
-            <div className="video-frame-preview">
+            <div
+              className={`video-frame-preview ${referenceVideoUrl ? "has-reference-video" : ""} ${
+                referenceVideoUrl && canEditSelectedZone ? "is-clickable" : ""
+              }`}
+              onClick={handleReferenceFrameClick}
+              style={
+                referenceVideoAspectRatio
+                  ? { aspectRatio: referenceVideoAspectRatio }
+                  : undefined
+              }
+            >
+              {referenceVideoUrl ? (
+                <video
+                  className="zone-reference-video"
+                  muted
+                  onLoadedMetadata={handleReferenceVideoLoadedMetadata}
+                  playsInline
+                  ref={referenceVideoRef}
+                  src={referenceVideoUrl}
+                />
+              ) : null}
               <div className="video-hud top-left">
-                <strong>ZONE</strong>
-                <span>normalized</span>
+                <strong>{referenceVideoUrl ? "VIDEO" : "ZONE"}</strong>
+                <span>{referenceVideoName ?? "normalized"}</span>
               </div>
               <div className="video-hud top-right">
                 <strong>{draftZones.length} zones</strong>
-                <span>{hasUnsavedChanges ? "draft" : "saved"}</span>
+                <span>
+                  {selectedZone ? `${selectedZone.points.length} points` : "구역 선택"}
+                </span>
               </div>
               <div className="video-guide horizontal" />
               <div className="video-guide vertical" />
@@ -529,41 +742,84 @@ export default function ZoneSettingsPage() {
                 className="zone-overlay"
                 viewBox="0 0 100 100"
               >
-                {draftZones.map((zone, index) => (
-                  <g className={getZoneClass(zone.zone_type)} key={`${index}-${zone.zone_id}`}>
-                    <polygon points={formatPoints(zone.points)} />
-                    {zone.points.map(([x, y], pointIndex) => (
-                      <circle
-                        cx={x * 100}
-                        cy={y * 100}
-                        key={`${zone.zone_id}-${pointIndex}`}
-                        r="1.5"
-                      />
-                    ))}
-                    {zone.points[0] ? (
-                      <text x={zone.points[0][0] * 100 + 2} y={zone.points[0][1] * 100 + 8}>
-                        {zone.zone_name || zone.zone_id}
-                      </text>
-                    ) : null}
-                  </g>
-                ))}
+                {draftZones.map((zone, index) => {
+                  const points = formatPoints(zone.points);
+
+                  return (
+                    <g
+                      className={`${getZoneClass(zone.zone_type)} ${
+                        selectedIndex === index ? "selected-zone" : ""
+                      }`}
+                      key={`${index}-${zone.zone_id}`}
+                    >
+                      {zone.points.length >= 3 ? (
+                        <polygon points={points} />
+                      ) : zone.points.length > 1 ? (
+                        <polyline points={points} />
+                      ) : null}
+                      {zone.points.map(([x, y], pointIndex) => (
+                        <circle
+                          cx={x * 100}
+                          cy={y * 100}
+                          key={`${zone.zone_id}-${pointIndex}`}
+                          r="1.5"
+                        />
+                      ))}
+                      {zone.points[0] ? (
+                        <text x={zone.points[0][0] * 100 + 2} y={zone.points[0][1] * 100 + 8}>
+                          {zone.zone_name || zone.zone_id}
+                        </text>
+                      ) : null}
+                    </g>
+                  );
+                })}
               </svg>
             </div>
           </div>
+          <div className="zone-click-actions">
+            <div>
+              <strong>{selectedZone ? selectedZone.zone_name || selectedZone.zone_id : "구역 선택"}</strong>
+              <span>
+                영상을 일시정지한 뒤 꼭짓점을 순서대로 클릭하세요. 좌표는 아래에서 세부 조정할 수 있습니다.
+              </span>
+            </div>
+            <div>
+              <button
+                disabled={!canEditSelectedZone || !hasSelectedZonePoints}
+                onClick={handleUndoLastPoint}
+                type="button"
+              >
+                마지막 점 취소
+              </button>
+              <button
+                disabled={!canEditSelectedZone || !hasSelectedZonePoints}
+                onClick={handleClearSelectedPoints}
+                type="button"
+              >
+                전체 초기화
+              </button>
+              <button disabled={!canSave} onClick={handleSave} type="button">
+                {isSaving ? "저장 중..." : "구역 저장"}
+              </button>
+            </div>
+          </div>
+          <p className="zone-reference-note">
+            선택한 영상은 서버에 업로드되지 않으며 브라우저 안에서만 사용됩니다.
+          </p>
         </section>
 
         <section className="card zone-config-card">
           <div className="panel-header">
             <div>
               <h2>선택 구역 설정</h2>
-              <span>선택한 Zone의 식별자, 정책, polygon 좌표를 편집합니다.</span>
+              <span>선택한 구역의 이름, 종류, 알림 기준을 설정합니다.</span>
             </div>
           </div>
 
           {selectedZone ? (
             <div className="zone-form-preview editable-zone-form">
               <label className={hasIssue(selectedZoneIssues, "zone_id") ? "invalid" : ""}>
-                <span>zone_id</span>
+                <span>구역 ID</span>
                 <input
                   disabled={isEditingDisabled}
                   onChange={(event) =>
@@ -573,7 +829,7 @@ export default function ZoneSettingsPage() {
                 />
               </label>
               <label className={hasIssue(selectedZoneIssues, "zone_name") ? "invalid" : ""}>
-                <span>zone_name</span>
+                <span>구역 이름</span>
                 <input
                   disabled={isEditingDisabled}
                   onChange={(event) =>
@@ -583,7 +839,7 @@ export default function ZoneSettingsPage() {
                 />
               </label>
               <label>
-                <span>zone_type</span>
+                <span>구역 종류</span>
                 <select
                   disabled={isEditingDisabled}
                   onChange={(event) =>
@@ -603,7 +859,7 @@ export default function ZoneSettingsPage() {
                   hasIssue(selectedZoneIssues, "rules.dwell_threshold_sec") ? "invalid" : ""
                 }
               >
-                <span>dwell_threshold_sec</span>
+                <span>체류 알림 기준 시간(초)</span>
                 <input
                   disabled={isEditingDisabled}
                   max={3600}
@@ -622,7 +878,7 @@ export default function ZoneSettingsPage() {
                 />
               </label>
               <div className="setting-row">
-                <span>enter_alert</span>
+                <span>진입 알림</span>
                 <label className="zone-checkbox-row">
                   <input
                     checked={selectedZone.rules.enter_alert}
@@ -634,10 +890,6 @@ export default function ZoneSettingsPage() {
                   />
                   <strong>{selectedZone.rules.enter_alert ? "ON" : "OFF"}</strong>
                 </label>
-              </div>
-              <div className="setting-row">
-                <span>type</span>
-                <strong>polygon</strong>
               </div>
               <div className="zone-field-errors">
                 {selectedZoneIssues.map((issue, index) => (
