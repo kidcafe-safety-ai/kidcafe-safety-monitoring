@@ -1447,6 +1447,81 @@ tbody tr:hover {
 
 .zone-points-card {
   margin-top: 16px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.zone-points-card summary {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 76px;
+  padding: 20px 24px;
+  cursor: pointer;
+  list-style: none;
+  background: var(--card-bg);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.zone-points-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.zone-points-card summary:hover {
+  background: var(--panel-bg);
+}
+
+.zone-points-card summary::after {
+  content: "열기";
+  min-width: 64px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  color: var(--nav-text);
+  background: var(--panel-bg);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.zone-points-card[open] summary::after {
+  content: "닫기";
+}
+
+.zone-points-card summary div {
+  display: grid;
+  gap: 6px;
+}
+
+.zone-points-card summary h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.zone-points-card summary span,
+.zone-points-panel-header span {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.zone-points-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px 24px 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.zone-points-panel-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .zone-points-grid {

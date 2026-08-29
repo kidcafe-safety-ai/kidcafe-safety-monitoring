@@ -726,13 +726,13 @@ export default function ZoneSettingsPage() {
                 />
               ) : null}
               <div className="video-hud top-left">
-                <strong>{referenceVideoUrl ? "VIDEO" : "ZONE"}</strong>
-                <span>{referenceVideoName ?? "normalized"}</span>
+                <strong>{referenceVideoUrl ? "선택 영상" : "구역 미리보기"}</strong>
+                <span>{referenceVideoName ?? "영상 기준 좌표"}</span>
               </div>
               <div className="video-hud top-right">
-                <strong>{draftZones.length} zones</strong>
+                <strong>구역 {draftZones.length}개</strong>
                 <span>
-                  {selectedZone ? `${selectedZone.points.length} points` : "구역 선택"}
+                  {selectedZone ? `꼭짓점 ${selectedZone.points.length}개` : "구역 선택"}
                 </span>
               </div>
               <div className="video-guide horizontal" />
@@ -969,68 +969,73 @@ export default function ZoneSettingsPage() {
       </section>
 
       {selectedZone ? (
-        <section className="card zone-table-card zone-points-card">
-          <div className="panel-header">
+        <details className="card zone-table-card zone-points-card">
+          <summary>
             <div>
-              <h2>Polygon Points</h2>
-              <span>x, y는 0.0 이상 1.0 이하 normalized coordinate입니다.</span>
+              <h2>세부 좌표 조정</h2>
+              <span>마우스로 찍은 좌표를 숫자로 조정합니다.</span>
             </div>
-            <button
-              disabled={isEditingDisabled}
-              onClick={() => handleAddPoint(selectedIndex)}
-              type="button"
-            >
-              Point 추가
-            </button>
-          </div>
-          <div className="zone-points-grid">
-            {selectedZone.points.map(([x, y], pointIndex) => (
-              <div
-                className={
-                  hasIssue(selectedZoneIssues, `points.${pointIndex}`) ? "zone-point-row invalid" : "zone-point-row"
-                }
-                key={`${selectedZone.zone_id}-point-${pointIndex}`}
+          </summary>
+          <div className="zone-points-panel">
+            <div className="zone-points-panel-header">
+              <span>각 값은 영상의 왼쪽 위를 기준으로 0.0부터 1.0 사이에서 입력합니다.</span>
+              <button
+                disabled={isEditingDisabled}
+                onClick={() => handleAddPoint(selectedIndex)}
+                type="button"
               >
-                <strong>#{pointIndex + 1}</strong>
-                <label>
-                  <span>x</span>
-                  <input
-                    disabled={isEditingDisabled}
-                    max={1}
-                    min={0}
-                    onChange={(event) =>
-                      handlePointChange(selectedIndex, pointIndex, 0, event.target.value)
-                    }
-                    step={0.001}
-                    type="number"
-                    value={Number.isFinite(x) ? x : ""}
-                  />
-                </label>
-                <label>
-                  <span>y</span>
-                  <input
-                    disabled={isEditingDisabled}
-                    max={1}
-                    min={0}
-                    onChange={(event) =>
-                      handlePointChange(selectedIndex, pointIndex, 1, event.target.value)
-                    }
-                    step={0.001}
-                    type="number"
-                    value={Number.isFinite(y) ? y : ""}
-                  />
-                </label>
-                <button
-                  disabled={isEditingDisabled}
-                  onClick={() => handleRemovePoint(selectedIndex, pointIndex)}
-                  type="button"
+                좌표 추가
+              </button>
+            </div>
+            <div className="zone-points-grid">
+              {selectedZone.points.map(([x, y], pointIndex) => (
+                <div
+                  className={
+                    hasIssue(selectedZoneIssues, `points.${pointIndex}`) ? "zone-point-row invalid" : "zone-point-row"
+                  }
+                  key={`${selectedZone.zone_id}-point-${pointIndex}`}
                 >
-                  삭제
-                </button>
-              </div>
-            ))}
+                  <strong>#{pointIndex + 1}</strong>
+                  <label>
+                    <span>가로 위치</span>
+                    <input
+                      disabled={isEditingDisabled}
+                      max={1}
+                      min={0}
+                      onChange={(event) =>
+                        handlePointChange(selectedIndex, pointIndex, 0, event.target.value)
+                      }
+                      step={0.001}
+                      type="number"
+                      value={Number.isFinite(x) ? x : ""}
+                    />
+                  </label>
+                  <label>
+                    <span>세로 위치</span>
+                    <input
+                      disabled={isEditingDisabled}
+                      max={1}
+                      min={0}
+                      onChange={(event) =>
+                        handlePointChange(selectedIndex, pointIndex, 1, event.target.value)
+                      }
+                      step={0.001}
+                      type="number"
+                      value={Number.isFinite(y) ? y : ""}
+                    />
+                  </label>
+                  <button
+                    disabled={isEditingDisabled}
+                    onClick={() => handleRemovePoint(selectedIndex, pointIndex)}
+                    type="button"
+                  >
+                    삭제
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
-        </section>
+        </details>
       ) : null}
     </section>
   );
