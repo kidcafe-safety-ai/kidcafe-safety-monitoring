@@ -483,7 +483,7 @@ export default function ReportPage() {
                         </td>
                         <td>
                           <span className={`risk-badge ${severityDisplay.className}`}>
-                            {severityDisplay.iconLabel} · {severityDisplay.label}
+                            {severityDisplay.label}
                           </span>
                         </td>
                         <td>{formatTrackId(event.track_id)}</td>

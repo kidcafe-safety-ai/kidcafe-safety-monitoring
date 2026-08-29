@@ -135,7 +135,7 @@ export default function MonitoringPage() {
   }, []);
 
   usePolling(loadDashboardData, INITIAL_DASHBOARD_RETRY_INTERVAL_MS, isLoading);
-  usePolling(loadRecentEvents, 3000, !isLoading);
+  usePolling(loadRecentEvents, 1000, !isLoading);
   usePolling(loadSummary, 10000, !isLoading);
   usePolling(loadCurrentStatus, 2000, !isLoading);
 

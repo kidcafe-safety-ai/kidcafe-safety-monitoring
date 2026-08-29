@@ -199,7 +199,7 @@ export default function RecentEventList({
                   aria-label={severityDisplay.ariaLabel}
                   className={`risk-badge ${severityDisplay.className}`}
                 >
-                  {severityDisplay.iconLabel} · {severityDisplay.label}
+                  {severityDisplay.label}
                 </span>
               </div>
               <div className="event-summary">

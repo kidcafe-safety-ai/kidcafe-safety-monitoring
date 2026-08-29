@@ -116,22 +116,22 @@ function prepareZonesForSave(zones: Zone[]) {
 
 function getSafeErrorMessage(response: ZoneApiResponse<ZoneConfig>) {
   if (response.error_type === "conflict") {
-    return "다른 사용자가 Zone 설정을 먼저 변경했습니다. 서버의 최신 설정을 불러왔습니다. 기존 변경 내용을 다시 확인한 후 저장해 주세요.";
+    return "다른 사용자가 안전구역 설정을 먼저 변경했습니다. 최신 설정을 불러왔습니다. 기존 변경 내용을 다시 확인한 후 저장해 주세요.";
   }
 
   if (response.error_type === "validation") {
-    return response.message ?? "Zone schema 또는 polygon validation에 실패했습니다.";
+    return response.message ?? "구역 정보 형식 또는 좌표 검증에 실패했습니다.";
   }
 
   if (response.error_type === "network") {
-    return "API 연결에 실패했습니다. Zone 설정을 처리할 수 없습니다.";
+    return "서버 연결에 실패했습니다. 안전구역 설정을 처리할 수 없습니다.";
   }
 
   if (response.error_type === "schema") {
-    return "Zone 설정 응답 형식이 올바르지 않습니다.";
+    return "안전구역 설정 응답 형식이 올바르지 않습니다.";
   }
 
-  return response.message ?? "Zone 설정 요청에 실패했습니다.";
+  return response.message ?? "안전구역 설정 요청에 실패했습니다.";
 }
 
 function getIssuesForZone(issues: ZoneValidationIssue[], zoneIndex: number) {
@@ -215,7 +215,6 @@ export default function ZoneSettingsPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [conflictDraft, setConflictDraft] = useState<Zone[] | null>(null);
   const [referenceVideoUrl, setReferenceVideoUrl] = useState<string | null>(null);
-  const [referenceVideoName, setReferenceVideoName] = useState<string | null>(null);
   const [referenceVideoAspectRatio, setReferenceVideoAspectRatio] = useState<string | null>(
     null,
   );
@@ -436,7 +435,7 @@ export default function ZoneSettingsPage() {
     setConflictDraft(null);
     setSaveState("error");
     setSaveError(
-      "보존된 미저장 draft를 다시 적용했습니다. 서버 최신 설정 기준으로 다시 확인한 뒤 저장해 주세요.",
+      "보존된 미저장 변경 내용을 다시 적용했습니다. 최신 설정 기준으로 다시 확인한 뒤 저장해 주세요.",
     );
     setSaveDetails([]);
     setSuccessMessage(null);
@@ -452,7 +451,6 @@ export default function ZoneSettingsPage() {
 
     if (file === null) {
       setReferenceVideoUrl(null);
-      setReferenceVideoName(null);
       setReferenceVideoAspectRatio(null);
       return;
     }
@@ -460,7 +458,6 @@ export default function ZoneSettingsPage() {
     const nextUrl = URL.createObjectURL(file);
     referenceVideoUrlRef.current = nextUrl;
     setReferenceVideoUrl(nextUrl);
-    setReferenceVideoName(file.name);
     setReferenceVideoAspectRatio(null);
   };
 
@@ -471,7 +468,6 @@ export default function ZoneSettingsPage() {
     }
 
     setReferenceVideoUrl(null);
-    setReferenceVideoName(null);
     setReferenceVideoAspectRatio(null);
 
     if (referenceVideoInputRef.current !== null) {
@@ -566,7 +562,7 @@ export default function ZoneSettingsPage() {
 
     if (nextValidationIssues.length > 0) {
       setSaveState("error");
-      setSaveError("입력값 validation을 먼저 해결해 주세요.");
+      setSaveError("입력값을 먼저 확인해 주세요.");
       setSaveDetails(nextValidationIssues.slice(0, 5).map((issue) => issue.message));
       return;
     }
@@ -593,7 +589,7 @@ export default function ZoneSettingsPage() {
     if (response.status === "success" && response.data !== null) {
       applyLoadedConfig(response.data);
       setSaveState("success");
-      setSuccessMessage("Zone 설정이 저장되었습니다. Vision AI 재시작 후 적용됩니다.");
+      setSuccessMessage("안전구역 설정이 저장되었습니다. Vision AI 재시작 후 적용됩니다.");
       return;
     }
 
@@ -625,10 +621,10 @@ export default function ZoneSettingsPage() {
         </div>
       </div>
 
-      {isLoading ? <div className="state-banner">Zone 설정을 불러오는 중입니다.</div> : null}
+      {isLoading ? <div className="state-banner">안전구역 설정을 불러오는 중입니다.</div> : null}
       {loadError ? (
         <div className="state-banner error zone-state-panel">
-          <strong>Zone 설정을 불러올 수 없습니다.</strong>
+          <strong>안전구역 설정을 불러올 수 없습니다.</strong>
           <span>{loadError}</span>
           <button onClick={handleReload} type="button">
             재시도
@@ -637,8 +633,8 @@ export default function ZoneSettingsPage() {
       ) : null}
       {loadState === "empty" && !loadError ? (
         <div className="state-banner empty zone-state-panel">
-          <strong>저장된 Zone이 없습니다.</strong>
-          <span>빈 Zone 설정은 정상 상태입니다. 새 Zone을 추가해 저장할 수 있습니다.</span>
+          <strong>저장된 구역이 없습니다.</strong>
+          <span>아직 등록된 구역이 없습니다. 새 구역을 추가해 저장할 수 있습니다.</span>
         </div>
       ) : null}
       {saveError ? (
@@ -649,7 +645,7 @@ export default function ZoneSettingsPage() {
           ))}
           {conflictDraft ? (
             <>
-              <span>보존된 미저장 draft: {conflictDraft.length}개 Zone</span>
+              <span>보존된 미저장 변경 내용: {conflictDraft.length}개 구역</span>
               <button onClick={handleRestoreConflictDraft} type="button">
                 내 변경 다시 적용
               </button>
@@ -673,7 +669,7 @@ export default function ZoneSettingsPage() {
             다시 불러오기
           </button>
           <button disabled={isEditingDisabled} onClick={handleAddZone} type="button">
-            Zone 추가
+            구역 추가
           </button>
         </div>
       </div>
@@ -683,12 +679,12 @@ export default function ZoneSettingsPage() {
           <div className="panel-header">
             <div>
               <h2>영상 프레임 미리보기</h2>
-              <span>촬영 영상을 보며 마우스로 구역 꼭짓점을 설정합니다.</span>
+              <span>기준 영상을 보며 마우스로 구역 꼭짓점을 설정합니다.</span>
             </div>
           </div>
           <div className="zone-reference-tools">
             <label className="zone-video-file-picker">
-              <span>로컬 촬영 영상 선택</span>
+              <span>기준 영상 불러오기</span>
               <input
                 accept="video/*"
                 onChange={handleReferenceVideoChange}
@@ -742,10 +738,6 @@ export default function ZoneSettingsPage() {
                   src={referenceVideoUrl}
                 />
               ) : null}
-              <div className="video-hud top-left">
-                <strong>{referenceVideoUrl ? "선택 영상" : "구역 미리보기"}</strong>
-                <span>{referenceVideoName ?? "영상 기준 좌표"}</span>
-              </div>
               <div className="video-hud top-right">
                 <strong>구역 {draftZones.length}개</strong>
                 <span>
@@ -836,7 +828,7 @@ export default function ZoneSettingsPage() {
             </div>
           </div>
           <p className="zone-reference-note">
-            선택한 영상은 서버에 업로드되지 않으며 브라우저 안에서만 사용됩니다.
+            기준 영상은 브라우저 안에서만 사용됩니다.
           </p>
         </section>
 
@@ -881,7 +873,7 @@ export default function ZoneSettingsPage() {
                 >
                   {ZONE_TYPES.map((zoneType) => (
                     <option key={zoneType} value={zoneType}>
-                      {ZONE_TYPE_LABELS[zoneType]} ({zoneType})
+                      {ZONE_TYPE_LABELS[zoneType]}
                     </option>
                   ))}
                 </select>
@@ -920,7 +912,7 @@ export default function ZoneSettingsPage() {
                     }
                     type="checkbox"
                   />
-                  <strong>{selectedZone.rules.enter_alert ? "ON" : "OFF"}</strong>
+                  <strong>{selectedZone.rules.enter_alert ? "켜짐" : "꺼짐"}</strong>
                 </label>
               </div>
               <div className="zone-field-errors">
@@ -930,7 +922,7 @@ export default function ZoneSettingsPage() {
               </div>
             </div>
           ) : (
-            <div className="table-empty-state">선택된 Zone이 없습니다.</div>
+            <div className="table-empty-state">선택된 구역이 없습니다.</div>
           )}
         </section>
       </div>
@@ -939,7 +931,7 @@ export default function ZoneSettingsPage() {
         <div className="panel-header">
           <div>
             <h2>구역 목록</h2>
-            <span>PUT /zones 저장 시 현재 목록 전체가 전송됩니다.</span>
+            <span>저장할 안전구역 목록을 확인합니다.</span>
           </div>
           <span>{draftZones.length}개</span>
         </div>
@@ -948,12 +940,12 @@ export default function ZoneSettingsPage() {
             <thead>
               <tr>
                 <th>번호</th>
-                <th>zone_id</th>
-                <th>zone_name</th>
-                <th>zone_type</th>
-                <th>points</th>
-                <th>enter_alert</th>
-                <th>dwell</th>
+                <th>구역 ID</th>
+                <th>구역 이름</th>
+                <th>구역 종류</th>
+                <th>꼭짓점</th>
+                <th>진입 알림</th>
+                <th>체류 기준</th>
                 <th>상태</th>
                 <th>작업</th>
               </tr>
@@ -977,7 +969,7 @@ export default function ZoneSettingsPage() {
                       </span>
                     </td>
                     <td>{zone.points.length}</td>
-                    <td>{zone.rules.enter_alert ? "ON" : "OFF"}</td>
+                    <td>{zone.rules.enter_alert ? "켜짐" : "꺼짐"}</td>
                     <td>{zone.rules.dwell_threshold_sec}초</td>
                     <td>{zoneIssues.length > 0 ? `${zoneIssues.length}개 오류` : "정상"}</td>
                     <td>

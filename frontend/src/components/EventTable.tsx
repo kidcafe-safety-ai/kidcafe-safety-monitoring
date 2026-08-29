@@ -1,5 +1,12 @@
 import type { SafetyEvent } from "../types/event";
-import { formatEventCause, getEventDisplayMeta } from "../utils/eventDisplay";
+import {
+  formatEventCause,
+  formatEventSource,
+  formatEventZone,
+  getEventDisplayMeta,
+  getEventSeverity,
+  getSeverityDisplay,
+} from "../utils/eventDisplay";
 
 interface EventTableProps {
   events: SafetyEvent[];
@@ -41,7 +48,7 @@ export default function EventTable({
                 <th>구역</th>
                 <th>원인 후보</th>
                 <th>프레임</th>
-                <th>영상 소스</th>
+                <th>입력 출처</th>
                 <th>위험도</th>
               </tr>
             </thead>
@@ -52,6 +59,9 @@ export default function EventTable({
                   event.event_type === "FALL_SUSPECT"
                     ? formatEventCause(event.cause)
                     : "-";
+                const severityDisplay = getSeverityDisplay(
+                  getEventSeverity(event.event_type, event.severity),
+                );
 
                 return (
                   <tr key={event.event_id}>
@@ -62,11 +72,11 @@ export default function EventTable({
                       </span>
                     </td>
                     <td>{event.track_id}</td>
-                    <td>{event.zone_id}</td>
+                    <td>{formatEventZone(event)}</td>
                     <td>{causeText}</td>
                     <td>{event.frame_number}</td>
-                    <td>{event.video_source}</td>
-                    <td>{meta.severity ?? event.severity ?? "-"}</td>
+                    <td>{formatEventSource(event.video_source)}</td>
+                    <td>{severityDisplay.label}</td>
                   </tr>
                 );
               })}

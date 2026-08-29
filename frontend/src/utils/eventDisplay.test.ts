@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EventCause } from "../types/event";
 import {
   formatEventCause,
+  formatEventSource,
   getEventDisplayMeta,
   getEventSeverity,
   KNOWN_EVENT_TYPES,
@@ -73,5 +74,13 @@ describe("eventDisplay", () => {
 
     expect(formatEventCause(cause)).toBe("외부 접촉 의심 · Track #42");
     expect(formatEventCause(null)).toBe("원인 후보 없음");
+  });
+
+  it("formats video sources without exposing original filenames or paths", () => {
+    expect(formatEventSource("webcam:1")).toBe("카메라 1");
+    expect(formatEventSource("camera_02")).toBe("카메라 2");
+    expect(formatEventSource("C:\\demo\\fall_test.mp4")).toBe("입력 채널 1");
+    expect(formatEventSource("outputs/reference_scene.mp4")).toBe("입력 채널 1");
+    expect(formatEventSource(null)).toBe("입력 채널 1");
   });
 });
