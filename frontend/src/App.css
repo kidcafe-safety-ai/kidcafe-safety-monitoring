@@ -1062,6 +1062,7 @@ tbody tr:hover {
 }
 
 .video-frame-preview.has-reference-video {
+  min-height: 0;
   background: #020617;
 }
 
@@ -1213,15 +1214,6 @@ tbody tr:hover {
   fill: none;
 }
 
-.zone-overlay text {
-  fill: #f8fafc;
-  font-size: 4px;
-  font-weight: 800;
-  paint-order: stroke;
-  stroke: rgba(2, 6, 23, 0.82);
-  stroke-width: 1px;
-}
-
 .zone-danger polygon {
   fill: rgba(239, 68, 68, 0.18);
   stroke: #ef4444;
@@ -1260,6 +1252,45 @@ tbody tr:hover {
   fill: #f8fafc;
   stroke: rgba(2, 6, 23, 0.82);
   stroke-width: 0.5;
+}
+
+.zone-overlay-label {
+  position: absolute;
+  z-index: 4;
+  max-width: min(180px, 46%);
+  overflow: hidden;
+  padding: 3px 8px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 999px;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.16);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.25;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  transform: translate(-100%, calc(-100% - 6px));
+  white-space: nowrap;
+}
+
+.zone-overlay-label.zone-danger {
+  color: #991b1b;
+}
+
+.zone-overlay-label.zone-warning {
+  color: #92400e;
+}
+
+.zone-overlay-label.zone-watch {
+  color: #115e59;
+}
+
+.zone-overlay-label.selected-zone-label {
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow:
+    0 8px 18px rgba(15, 23, 42, 0.18),
+    0 0 0 2px rgba(37, 99, 235, 0.16);
 }
 
 .zone-click-actions {

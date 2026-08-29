@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
   type MouseEvent,
 } from "react";
 import { getZones, putZones } from "../api/zoneSettingsApi";
@@ -183,6 +184,22 @@ function getContainedVideoBounds(
     top: containerRect.top,
     width,
     height: containerRect.height,
+  };
+}
+
+function getZoneLabelStyle(points: ZonePoint[]): CSSProperties | undefined {
+  if (points.length === 0) {
+    return undefined;
+  }
+
+  const rightX = Math.max(...points.map(([x]) => x));
+  const topY = Math.min(...points.map(([, y]) => y));
+  const leftPercent = Math.min(Math.max(rightX * 100, 8), 98);
+  const topPercent = Math.min(Math.max(topY * 100, 7), 98);
+
+  return {
+    left: `${leftPercent}%`,
+    top: `${topPercent}%`,
   };
 }
 
@@ -738,8 +755,9 @@ export default function ZoneSettingsPage() {
               <div className="video-guide horizontal" />
               <div className="video-guide vertical" />
               <svg
-                aria-label="영상 프레임 Zone polygon"
+                aria-label="영상 프레임 구역 표시"
                 className="zone-overlay"
+                preserveAspectRatio="none"
                 viewBox="0 0 100 100"
               >
                 {draftZones.map((zone, index) => {
@@ -765,15 +783,29 @@ export default function ZoneSettingsPage() {
                           r="1.5"
                         />
                       ))}
-                      {zone.points[0] ? (
-                        <text x={zone.points[0][0] * 100 + 2} y={zone.points[0][1] * 100 + 8}>
-                          {zone.zone_name || zone.zone_id}
-                        </text>
-                      ) : null}
                     </g>
                   );
                 })}
               </svg>
+              {draftZones.map((zone, index) => {
+                const labelStyle = getZoneLabelStyle(zone.points);
+
+                if (labelStyle === undefined) {
+                  return null;
+                }
+
+                return (
+                  <span
+                    className={`zone-overlay-label ${getZoneClass(zone.zone_type)} ${
+                      selectedIndex === index ? "selected-zone-label" : ""
+                    }`}
+                    key={`label-${index}-${zone.zone_id}`}
+                    style={labelStyle}
+                  >
+                    {zone.zone_name || zone.zone_id}
+                  </span>
+                );
+              })}
             </div>
           </div>
           <div className="zone-click-actions">
