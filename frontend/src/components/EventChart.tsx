@@ -30,9 +30,9 @@ export default function EventChart({ events }: EventChartProps) {
     <section className="card panel">
       <div className="panel-header">
         <h2>이벤트 타입별 발생 수</h2>
-        <span>Bar Chart</span>
+        <span>유형별 현황</span>
       </div>
-      <div className="bar-chart" aria-label="이벤트 타입별 발생 수 Bar Chart">
+      <div className="bar-chart" aria-label="이벤트 유형별 발생 현황">
         {counts.map((item) => (
           <div className="bar-row" key={item.type}>
             <span className="bar-label">{item.label}</span>

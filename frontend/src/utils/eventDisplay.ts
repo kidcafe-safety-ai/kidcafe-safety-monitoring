@@ -119,7 +119,6 @@ export function getSeverityDisplay(severity: Severity | string | null | undefine
   if (severity === "HIGH") {
     return {
       label: "높음",
-      iconLabel: "긴급",
       className: "risk-high",
       ariaLabel: "위험도 높음",
     };
@@ -128,7 +127,6 @@ export function getSeverityDisplay(severity: Severity | string | null | undefine
   if (severity === "MEDIUM") {
     return {
       label: "중간",
-      iconLabel: "주의",
       className: "risk-medium",
       ariaLabel: "위험도 중간",
     };
@@ -137,7 +135,6 @@ export function getSeverityDisplay(severity: Severity | string | null | undefine
   if (severity === "LOW") {
     return {
       label: "낮음",
-      iconLabel: "낮음",
       className: "risk-low",
       ariaLabel: "위험도 낮음",
     };
@@ -145,10 +142,49 @@ export function getSeverityDisplay(severity: Severity | string | null | undefine
 
   return {
     label: "확인 필요",
-    iconLabel: "확인",
     className: "risk-unknown",
     ariaLabel: "위험도 확인 필요",
   };
+}
+
+function extractDisplayChannelNumber(source: string) {
+  const numberMatch = source.match(
+    /(?:camera|cam|webcam|source|channel|ch|입력|채널)[\s_:-]*(\d+)/i,
+  );
+
+  if (numberMatch === null) {
+    return null;
+  }
+
+  const parsedNumber = Number(numberMatch[1]);
+
+  if (!Number.isFinite(parsedNumber)) {
+    return null;
+  }
+
+  return Math.max(1, parsedNumber);
+}
+
+export function formatEventSource(source: string | null | undefined) {
+  const trimmedSource = source?.trim() ?? "";
+
+  if (trimmedSource.length === 0) {
+    return "입력 채널 1";
+  }
+
+  const channelNumber = extractDisplayChannelNumber(trimmedSource);
+  const normalizedSource = trimmedSource.toLowerCase();
+
+  if (
+    normalizedSource.includes("camera") ||
+    normalizedSource.includes("cam") ||
+    normalizedSource.includes("webcam") ||
+    normalizedSource.includes("rtsp")
+  ) {
+    return `카메라 ${channelNumber ?? 1}`;
+  }
+
+  return `입력 채널 ${channelNumber ?? 1}`;
 }
 
 export function formatEventZone(event: SafetyEvent) {
@@ -163,7 +199,7 @@ export function formatEventZone(event: SafetyEvent) {
     return "전체 구역";
   }
 
-  return zoneId || "Zone 정보 없음";
+  return zoneId || "구역 정보 없음";
 }
 
 export function formatTrackId(trackId: number | null | undefined) {

@@ -21,7 +21,7 @@ function event(overrides: Partial<SafetyEvent>): SafetyEvent {
 }
 
 describe("reportAggregation", () => {
-  it("aggregates Phase 4 report counts without inventing backend fields", () => {
+  it("aggregates safety report counts without inventing backend fields", () => {
     const result = aggregateReportEvents([
       event({ event_id: "enter-1", event_type: "ENTER", severity: "MEDIUM" }),
       event({
@@ -75,8 +75,8 @@ describe("reportAggregation", () => {
           count: 1,
         }),
         expect.objectContaining({
-          zoneKey: "Zone 정보 없음",
-          label: "Zone 정보 없음",
+          zoneKey: "구역 정보 없음",
+          label: "구역 정보 없음",
           count: 1,
         }),
       ]),

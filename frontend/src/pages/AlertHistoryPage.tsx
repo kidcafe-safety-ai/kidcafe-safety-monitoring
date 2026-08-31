@@ -25,24 +25,12 @@ type AlertStatusFilter = "전체" | AlertStatus;
 type AlertTypeFilter = "전체" | EventType;
 
 const PERIOD_FILTERS: PeriodFilter[] = ["전체", "오늘", "최근 7일"];
-const STATUS_FILTERS: AlertStatusFilter[] = [
-  "전체",
-  "미확인",
-  "확인중",
-  "처리완료",
-];
+const STATUS_FILTERS: AlertStatusFilter[] = ["전체", "미확인"];
 const TYPE_FILTERS: AlertTypeFilter[] = ["전체", ...KNOWN_EVENT_TYPES];
 const ALERT_POLLING_INTERVAL_MS = 5000;
-const API_MODE = typeof import.meta.env.VITE_API_MODE === "string"
-  ? import.meta.env.VITE_API_MODE.toLowerCase()
-  : "mock";
-
+const ALERT_PAGE_SIZE = 9;
 interface AlertHistoryPageProps {
   focusedEventId?: string | null;
-}
-
-function isApiMode() {
-  return API_MODE === "api";
 }
 
 function getDateDiffDays(fromDateKey: string, toDateKey: string) {
@@ -137,27 +125,27 @@ function getZoneName(event: SafetyEvent) {
 
 function getAlertMessage(event: SafetyEvent, causeText?: string) {
   if (event.event_type === "FALL_SUSPECT") {
-    return `낙상 의심 이벤트가 발생했습니다. ${causeText ?? "원인 후보 없음"}`;
+    return `낙상 가능성이 감지되었습니다. ${causeText ?? "원인 후보 없음"}`;
   }
 
   if (event.event_type === "ENTER_RESTRICTED") {
-    return "제한구역 진입 이벤트가 발생했습니다.";
+    return "제한구역 접근이 감지되었습니다.";
   }
 
   if (event.event_type === "DANGER_ZONE_DWELL") {
-    return "위험구역 체류 이벤트가 발생했습니다.";
+    return "위험구역에 기준 시간 이상 머무른 상황이 감지되었습니다.";
   }
 
   if (event.event_type === "ENTER") {
-    return "구역 진입 이벤트가 발생했습니다.";
+    return "아동의 구역 입장이 감지되었습니다.";
   }
 
   if (event.event_type === "DWELL") {
-    return "구역 체류 이벤트가 발생했습니다.";
+    return "아동이 구역에 머무르고 있습니다.";
   }
 
   if (event.event_type === "EXIT") {
-    return "구역 이탈 이벤트가 발생했습니다.";
+    return "아동이 구역을 벗어났습니다.";
   }
 
   return `${getEventDisplayMeta(event.event_type).label} 이벤트가 발생했습니다.`;
@@ -187,7 +175,7 @@ function mapEventToAlertHistoryItem(event: SafetyEvent): AlertHistoryItem {
     status: "미확인",
     event_type: event.event_type,
     message: getAlertMessage(event, causeText),
-    action_note: "조치 상태 저장은 Phase 4에서 연동 예정입니다.",
+    action_note: "관리자 확인이 필요한 안전 이벤트입니다.",
     cause_text: causeText,
   };
 }
@@ -201,6 +189,7 @@ export default function AlertHistoryPage({
   const [statusFilter, setStatusFilter] = useState<AlertStatusFilter>("전체");
   const [typeFilter, setTypeFilter] = useState<AlertTypeFilter>("전체");
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [hasApiError, setHasApiError] = useState(false);
 
@@ -263,6 +252,29 @@ export default function AlertHistoryPage({
     [alerts, periodFilter, statusFilter, typeFilter, zoneFilter],
   );
 
+  const totalPages = Math.ceil(filteredAlerts.length / ALERT_PAGE_SIZE);
+  const safeCurrentPage =
+    totalPages === 0 ? 0 : Math.min(Math.max(currentPage, 1), totalPages);
+  const pageStart =
+    safeCurrentPage > 0 ? (safeCurrentPage - 1) * ALERT_PAGE_SIZE : 0;
+  const paginatedAlerts = filteredAlerts.slice(
+    pageStart,
+    pageStart + ALERT_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [periodFilter, statusFilter, typeFilter, zoneFilter]);
+
+  useEffect(() => {
+    if (totalPages === 0) {
+      setCurrentPage(1);
+      return;
+    }
+
+    setCurrentPage((page) => Math.min(Math.max(page, 1), totalPages));
+  }, [totalPages]);
+
   useEffect(() => {
     if (
       focusedEventId !== null &&
@@ -282,13 +294,22 @@ export default function AlertHistoryPage({
     setSelectedAlertId(filteredAlerts[0]?.alert_id ?? null);
   }, [filteredAlerts, focusedEventId, selectedAlertId]);
 
+  const goToPreviousPage = () => {
+    setCurrentPage((page) => Math.max(1, page - 1));
+  };
+
+  const goToNextPage = () => {
+    setCurrentPage((page) =>
+      totalPages === 0 ? 1 : Math.min(totalPages, page + 1),
+    );
+  };
+
   const selectedAlert =
     filteredAlerts.find((alert) => alert.alert_id === selectedAlertId) ??
     filteredAlerts[0] ??
     null;
-  const eventScopeText = isApiMode()
-    ? `현재 /events 응답으로 수신한 최근 ${alerts.length}건 범위 기준입니다. 기간 필터도 이 범위 안에서 적용됩니다.`
-    : `Mock 이벤트 ${alerts.length}건 범위 기준입니다.`;
+  const shouldShowPagination = totalPages > 0;
+  const eventScopeText = `최근 수신된 안전 이벤트 ${alerts.length}건을 표시합니다.`;
 
   return (
     <main className="page alert-history-page">
@@ -296,15 +317,8 @@ export default function AlertHistoryPage({
         <div>
           <div className="title-row">
             <h1>알림 기록</h1>
-            <span className="status-pill">
-              {isApiMode() ? "실제 이벤트 연동" : "Mock 데이터 모드"}
-            </span>
+            <span className="status-pill">안전 이벤트 기록</span>
           </div>
-          <p>
-            {isApiMode()
-              ? "FastAPI 이벤트 데이터를 기반으로 위험 알림 발생 내역을 표시합니다."
-              : "Mock 이벤트 데이터를 기반으로 위험 알림 화면을 표시합니다."}
-          </p>
         </div>
       </div>
 
@@ -340,15 +354,7 @@ export default function AlertHistoryPage({
             }
           >
             {STATUS_FILTERS.map((status) => (
-              <option
-                disabled={status === "확인중" || status === "처리완료"}
-                key={status}
-              >
-                {status}
-                {status === "확인중" || status === "처리완료"
-                  ? " (Phase 4)"
-                  : ""}
-              </option>
+              <option key={status}>{status}</option>
             ))}
           </select>
         </label>
@@ -372,7 +378,7 @@ export default function AlertHistoryPage({
       ) : null}
       {hasApiError ? (
         <div className="state-banner error">
-          API 연결에 실패했습니다. 이벤트 데이터를 불러올 수 없습니다.
+          안전 이벤트 데이터를 불러오지 못했습니다. 연결 상태를 확인해 주세요.
         </div>
       ) : null}
       {isLoading ? null : (
@@ -381,7 +387,7 @@ export default function AlertHistoryPage({
         </div>
       )}
       {!isLoading && filteredAlerts.length === 0 ? (
-        <div className="state-banner empty">표시할 알림 기록이 없습니다.</div>
+        <div className="state-banner empty">현재 확인할 안전 알림이 없습니다.</div>
       ) : null}
 
       <section className="alert-history-grid">
@@ -405,7 +411,7 @@ export default function AlertHistoryPage({
                 </tr>
               </thead>
               <tbody>
-                {filteredAlerts.map((alert) => {
+                {paginatedAlerts.map((alert) => {
                   const meta = getEventDisplayMeta(alert.event_type);
 
                   return (
@@ -438,6 +444,27 @@ export default function AlertHistoryPage({
               </tbody>
             </table>
           </div>
+          {shouldShowPagination ? (
+            <div className="table-pagination">
+              <button
+                disabled={safeCurrentPage <= 1}
+                onClick={goToPreviousPage}
+                type="button"
+              >
+                이전
+              </button>
+              <span>
+                {safeCurrentPage} / {totalPages}
+              </span>
+              <button
+                disabled={safeCurrentPage >= totalPages}
+                onClick={goToNextPage}
+                type="button"
+              >
+                다음
+              </button>
+            </div>
+          ) : null}
         </section>
 
         <aside className="alert-detail-stack">
@@ -485,41 +512,10 @@ export default function AlertHistoryPage({
                 </dl>
               </div>
             ) : (
-              <div className="state-banner empty">표시할 알림 기록이 없습니다.</div>
+              <div className="state-banner empty">현재 확인할 안전 알림이 없습니다.</div>
             )}
           </section>
 
-          <section className="card alert-action-card">
-            <div className="panel-header">
-              <div>
-                <h2>메모 / 조치</h2>
-                <span>조치 상태 저장은 Phase 4에서 연동 예정</span>
-              </div>
-            </div>
-            <textarea
-              readOnly
-              value={selectedAlert?.action_note ?? "선택된 알림이 없습니다."}
-            />
-            <p className="alert-disabled-action">
-              확인 및 처리 완료 저장은 Phase 4에서 연동 예정입니다.
-            </p>
-            <div className="alert-action-buttons">
-              <button
-                disabled
-                title="조치 상태 저장은 Phase 4에서 연동 예정입니다."
-                type="button"
-              >
-                확인
-              </button>
-              <button
-                disabled
-                title="조치 상태 저장은 Phase 4에서 연동 예정입니다."
-                type="button"
-              >
-                처리 완료
-              </button>
-            </div>
-          </section>
         </aside>
       </section>
     </main>

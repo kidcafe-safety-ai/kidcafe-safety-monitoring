@@ -356,55 +356,27 @@ button {
   color: #fecaca;
 }
 
-.live-frame-meta {
+.live-frame-connection-badge {
   position: absolute;
-  right: 16px;
-  bottom: 16px;
-  left: 16px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0;
-  padding: 12px;
-  border: 1px solid rgba(219, 234, 254, 0.18);
-  border-radius: 12px;
-  background: rgba(2, 6, 23, 0.72);
-  color: #dbeafe;
+  top: 14px;
+  right: 14px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 10px;
+  border: 1px solid rgba(187, 247, 208, 0.55);
+  border-radius: 999px;
+  color: #dcfce7;
+  background: rgba(22, 101, 52, 0.76);
+  font-size: 12px;
+  font-weight: 900;
   backdrop-filter: blur(8px);
-}
-
-.live-frame-meta div {
-  min-width: 0;
-}
-
-.live-frame-meta dt {
-  margin-bottom: 4px;
-  color: #93c5fd;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.live-frame-meta dd {
-  margin: 0;
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 @media (max-width: 720px) {
   .live-frame-view {
     min-height: 260px;
-  }
-
-  .live-frame-meta {
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
-    grid-template-columns: 1fr;
   }
 }
 
@@ -455,7 +427,10 @@ button {
 }
 
 .recent-event-button {
+  display: grid;
   width: 100%;
+  justify-content: stretch;
+  gap: 10px;
   border: 1px solid transparent;
   color: inherit;
   font: inherit;
@@ -485,9 +460,28 @@ button {
   margin: 3px 0 0;
 }
 
+.recent-event-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.recent-event-badge-row .type-badge,
+.recent-event-badge-row .risk-badge {
+  white-space: nowrap;
+}
+
+.event-summary {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
 .event-summary strong {
   color: var(--text-main);
   font-size: 14px;
+  line-height: 1.35;
 }
 
 .event-meta {
@@ -498,19 +492,29 @@ button {
   font-size: 12px;
 }
 
-.track-id {
+.track-id,
+.recent-event-time,
+.recent-event-meta-row {
   color: var(--text-muted);
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.recent-event-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
 }
 
 .recent-event-zone,
 .recent-event-cause {
   display: block;
-  max-width: 220px;
+  max-width: 100%;
   overflow: hidden;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -907,7 +911,7 @@ tbody tr:hover {
 
 .zone-toolbar {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(140px, 0.8fr) auto;
+  grid-template-columns: minmax(160px, 0.5fr) auto;
   gap: 14px;
   align-items: center;
   margin-bottom: 16px;
@@ -947,7 +951,10 @@ tbody tr:hover {
 
 .zone-toolbar button,
 .zone-table-card button,
-.zone-points-card button {
+.zone-points-card button,
+.zone-reference-tools button,
+.zone-click-actions button,
+.zone-video-file-picker {
   min-height: 38px;
   padding: 8px 12px;
   border: 1px solid var(--border-color);
@@ -959,7 +966,9 @@ tbody tr:hover {
 }
 
 .zone-toolbar-actions button:last-child,
-.zone-points-card .panel-header button {
+.zone-points-card .panel-header button,
+.zone-click-actions button:last-child,
+.zone-video-file-picker {
   color: #ffffff;
   border-color: #2563eb;
   background: #2563eb;
@@ -967,7 +976,9 @@ tbody tr:hover {
 
 .zone-toolbar button:disabled,
 .zone-table-card button:disabled,
-.zone-points-card button:disabled {
+.zone-points-card button:disabled,
+.zone-reference-tools button:disabled,
+.zone-click-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.54;
 }
@@ -1005,6 +1016,33 @@ tbody tr:hover {
     var(--panel-bg);
 }
 
+.zone-reference-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.zone-video-file-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.zone-video-file-picker input {
+  display: none;
+}
+
+.zone-video-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .video-frame-preview {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -1017,6 +1055,30 @@ tbody tr:hover {
     radial-gradient(circle at 78% 68%, rgba(20, 184, 166, 0.14), transparent 24%),
     linear-gradient(145deg, #111827 0%, #0f172a 52%, #020617 100%);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.video-frame-preview.is-clickable {
+  cursor: crosshair;
+}
+
+.video-frame-preview.has-reference-video {
+  min-height: 0;
+  background: #020617;
+}
+
+.video-frame-preview.has-reference-video::before,
+.video-frame-preview.has-reference-video::after {
+  display: none;
+}
+
+.zone-reference-video {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #020617;
 }
 
 .video-frame-preview::before {
@@ -1142,21 +1204,22 @@ tbody tr:hover {
   height: 100%;
 }
 
-.zone-overlay polygon {
+.zone-overlay polygon,
+.zone-overlay polyline {
   stroke-width: 1.8;
+  vector-effect: non-scaling-stroke;
 }
 
-.zone-overlay text {
-  fill: #f8fafc;
-  font-size: 4px;
-  font-weight: 800;
-  paint-order: stroke;
-  stroke: rgba(2, 6, 23, 0.82);
-  stroke-width: 1px;
+.zone-overlay polyline {
+  fill: none;
 }
 
 .zone-danger polygon {
   fill: rgba(239, 68, 68, 0.18);
+  stroke: #ef4444;
+}
+
+.zone-danger polyline {
   stroke: #ef4444;
 }
 
@@ -1165,9 +1228,22 @@ tbody tr:hover {
   stroke: #f79009;
 }
 
+.zone-warning polyline {
+  stroke: #f79009;
+}
+
 .zone-watch polygon {
   fill: rgba(20, 184, 166, 0.18);
   stroke: #14b8a6;
+}
+
+.zone-watch polyline {
+  stroke: #14b8a6;
+}
+
+.selected-zone polygon,
+.selected-zone polyline {
+  stroke-width: 2.6;
 }
 
 .zone-danger circle,
@@ -1176,6 +1252,86 @@ tbody tr:hover {
   fill: #f8fafc;
   stroke: rgba(2, 6, 23, 0.82);
   stroke-width: 0.5;
+}
+
+.zone-overlay-label {
+  position: absolute;
+  z-index: 4;
+  max-width: min(180px, 46%);
+  overflow: hidden;
+  padding: 3px 8px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 999px;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.16);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.25;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  transform: translate(-100%, calc(-100% - 6px));
+  white-space: nowrap;
+}
+
+.zone-overlay-label.zone-danger {
+  color: #991b1b;
+}
+
+.zone-overlay-label.zone-warning {
+  color: #92400e;
+}
+
+.zone-overlay-label.zone-watch {
+  color: #115e59;
+}
+
+.zone-overlay-label.selected-zone-label {
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow:
+    0 8px 18px rgba(15, 23, 42, 0.18),
+    0 0 0 2px rgba(37, 99, 235, 0.16);
+}
+
+.zone-click-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--panel-bg);
+}
+
+.zone-click-actions > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.zone-click-actions strong {
+  color: var(--text-main);
+  font-size: 14px;
+}
+
+.zone-click-actions span,
+.zone-reference-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.zone-click-actions > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.zone-reference-note {
+  margin: 10px 0 0;
 }
 
 .zone-form-preview {
@@ -1322,6 +1478,81 @@ tbody tr:hover {
 
 .zone-points-card {
   margin-top: 16px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.zone-points-card summary {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 76px;
+  padding: 20px 24px;
+  cursor: pointer;
+  list-style: none;
+  background: var(--card-bg);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.zone-points-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.zone-points-card summary:hover {
+  background: var(--panel-bg);
+}
+
+.zone-points-card summary::after {
+  content: "열기";
+  min-width: 64px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  color: var(--nav-text);
+  background: var(--panel-bg);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.zone-points-card[open] summary::after {
+  content: "닫기";
+}
+
+.zone-points-card summary div {
+  display: grid;
+  gap: 6px;
+}
+
+.zone-points-card summary h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.zone-points-card summary span,
+.zone-points-panel-header span {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.zone-points-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px 24px 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.zone-points-panel-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .zone-points-grid {
@@ -1405,7 +1636,8 @@ tbody tr:hover {
 
 .alert-table-card,
 .alert-detail-card,
-.alert-action-card {
+.alert-action-card,
+.alert-summary-card {
   padding: 22px;
 }
 
@@ -1520,6 +1752,36 @@ tbody tr:hover {
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
+}
+
+.alert-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.alert-summary-item {
+  display: grid;
+  gap: 6px;
+  min-height: 86px;
+  align-content: center;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--panel-bg);
+}
+
+.alert-summary-item span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.alert-summary-item strong {
+  color: var(--text-main);
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .alert-action-buttons button:disabled,
@@ -2486,7 +2748,7 @@ tbody tr:hover {
   }
 
   .zone-toolbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .zone-toolbar-actions {

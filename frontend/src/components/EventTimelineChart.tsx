@@ -117,9 +117,9 @@ export default function EventTimelineChart({ events }: EventTimelineChartProps) 
         <div className="panel-header">
           <div>
             <h2>시간대별 이벤트 발생 추이</h2>
-            <span>이벤트 저장 시각(created_at)을 기준으로 구간별 이벤트 수를 표시합니다.</span>
+            <span>이벤트 발생 시각을 기준으로 구간별 발생 수를 표시합니다.</span>
           </div>
-          <span>Line Chart</span>
+          <span>시간대별 추이</span>
         </div>
         <div className="timeline-empty-state">표시할 이벤트 데이터가 없습니다.</div>
       </section>
@@ -157,7 +157,7 @@ export default function EventTimelineChart({ events }: EventTimelineChartProps) 
       <div className="panel-header">
         <div>
           <h2>시간대별 이벤트 발생 추이</h2>
-          <span>이벤트 저장 시각(created_at)을 기준으로 구간별 이벤트 수를 표시합니다.</span>
+          <span>이벤트 발생 시각을 기준으로 구간별 발생 수를 표시합니다.</span>
         </div>
         <div className="timeline-summary">
           <span>총 {totalCount}건</span>
@@ -167,7 +167,7 @@ export default function EventTimelineChart({ events }: EventTimelineChartProps) 
       </div>
       <div className="timeline-chart">
         <svg
-          aria-label="시간대별 이벤트 발생 추이 Line Chart"
+          aria-label="시간대별 이벤트 발생 추이"
           role="img"
           viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
         >

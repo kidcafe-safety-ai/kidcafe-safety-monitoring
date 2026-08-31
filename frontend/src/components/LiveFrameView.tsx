@@ -1,20 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  getLiveFrame,
-  isLiveFrameApiMode,
-  type LiveFrameMetadata,
-} from "../api/liveFrameApi";
+import { getLiveFrame, isLiveFrameApiMode } from "../api/liveFrameApi";
 
 type LiveFrameStatus = "loading" | "live" | "empty" | "error";
 
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 const REQUEST_TIMEOUT_MS = 3000;
-
-const emptyMetadata: LiveFrameMetadata = {
-  source: null,
-  frameNumber: null,
-  capturedAt: null,
-};
 
 interface LiveFrameViewProps {
   pollIntervalMs?: number;
@@ -22,18 +12,14 @@ interface LiveFrameViewProps {
 
 function getStatusMessage(status: LiveFrameStatus) {
   if (status === "loading") {
-    return "Live frame을 불러오는 중입니다.";
+    return "실시간 카메라 영상을 불러오는 중입니다.";
   }
 
   if (status === "error") {
-    return "Live frame 연결이 불안정합니다.";
+    return "카메라 영상을 불러오지 못했습니다. 연결 상태를 확인해 주세요.";
   }
 
-  return "수신된 live frame이 없습니다.";
-}
-
-function formatMetadataValue(value: string | null) {
-  return value && value.trim().length > 0 ? value : "-";
+  return "카메라 연결을 기다리고 있습니다.";
 }
 
 export default function LiveFrameView({
@@ -43,7 +29,6 @@ export default function LiveFrameView({
     isLiveFrameApiMode() ? "loading" : "empty",
   );
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
-  const [metadata, setMetadata] = useState<LiveFrameMetadata>(emptyMetadata);
   const objectUrlRef = useRef<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const isRequestRunningRef = useRef(false);
@@ -82,8 +67,6 @@ export default function LiveFrameView({
           return;
         }
 
-        setMetadata(result.metadata);
-
         if (result.status === "live") {
           const nextUrl = URL.createObjectURL(result.blob);
           const previousUrl = objectUrlRef.current;
@@ -105,7 +88,6 @@ export default function LiveFrameView({
         }
 
         revokeCurrentObjectUrl();
-        setMetadata(emptyMetadata);
         setStatus("error");
       } finally {
         window.clearTimeout(timeoutId);
@@ -118,7 +100,6 @@ export default function LiveFrameView({
 
     if (!isLiveFrameApiMode()) {
       revokeCurrentObjectUrl();
-      setMetadata(emptyMetadata);
       setStatus("empty");
       return () => {
         isMounted = false;
@@ -149,20 +130,7 @@ export default function LiveFrameView({
             src={frameUrl}
             alt="실시간 키즈카페 모니터링 화면"
           />
-          <dl className="live-frame-meta" aria-label="Live frame metadata">
-            <div>
-              <dt>X-Source</dt>
-              <dd>{formatMetadataValue(metadata.source)}</dd>
-            </div>
-            <div>
-              <dt>X-Frame-Number</dt>
-              <dd>{formatMetadataValue(metadata.frameNumber)}</dd>
-            </div>
-            <div>
-              <dt>X-Captured-At</dt>
-              <dd>{formatMetadataValue(metadata.capturedAt)}</dd>
-            </div>
-          </dl>
+          <span className="live-frame-connection-badge">연결됨</span>
         </>
       ) : (
         <div className="live-frame-state" role="status" aria-live="polite">

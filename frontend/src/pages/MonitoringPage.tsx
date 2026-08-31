@@ -4,7 +4,6 @@ import {
   getCurrentStatus,
   getDashboardSummary,
   getRecentEvents,
-  RECENT_EVENT_LIMIT,
 } from "../api/eventsApi";
 import KpiCard from "../components/KpiCard";
 import LiveFrameView from "../components/LiveFrameView";
@@ -15,6 +14,7 @@ import type { DashboardSummary, SafetyEvent, ZoneStatus } from "../types/event";
 import type { CurrentStatus } from "../types/status";
 
 const RECENT_EVENT_MINUTES = 10;
+const RECENT_DASHBOARD_EVENT_LIMIT = 2;
 const INITIAL_DASHBOARD_RETRY_INTERVAL_MS = 3000;
 
 function getZonesFromCurrentStatus(currentStatus: CurrentStatus): ZoneStatus[] {
@@ -49,7 +49,7 @@ export default function MonitoringPage() {
   const loadDashboardData = useCallback(async (context: PollingContext) => {
     const [summaryData, eventData, currentStatusData] = await Promise.all([
       getDashboardSummary({ signal: context.signal }),
-      getRecentEvents(RECENT_EVENT_LIMIT, {
+      getRecentEvents(RECENT_DASHBOARD_EVENT_LIMIT, {
         minutes: RECENT_EVENT_MINUTES,
         signal: context.signal,
       }),
@@ -81,7 +81,7 @@ export default function MonitoringPage() {
   }, []);
 
   const loadRecentEvents = useCallback(async (context: PollingContext) => {
-    const eventData = await getRecentEvents(RECENT_EVENT_LIMIT, {
+    const eventData = await getRecentEvents(RECENT_DASHBOARD_EVENT_LIMIT, {
       minutes: RECENT_EVENT_MINUTES,
       signal: context.signal,
     });
@@ -135,7 +135,7 @@ export default function MonitoringPage() {
   }, []);
 
   usePolling(loadDashboardData, INITIAL_DASHBOARD_RETRY_INTERVAL_MS, isLoading);
-  usePolling(loadRecentEvents, 3000, !isLoading);
+  usePolling(loadRecentEvents, 1000, !isLoading);
   usePolling(loadSummary, 10000, !isLoading);
   usePolling(loadCurrentStatus, 2000, !isLoading);
 
@@ -145,16 +145,15 @@ export default function MonitoringPage() {
         <div>
           <div className="title-row">
             <h1>실시간 모니터링</h1>
-            <span className="status-pill">Polling Dashboard</span>
+            <span className="status-pill">실시간 안전 모니터링</span>
           </div>
-          <p>Polling 기반 실시간 안전 대시보드</p>
         </div>
       </div>
 
       {isLoading ? <div className="state-banner">데이터를 불러오는 중입니다.</div> : null}
       {hasApiError ? (
         <div className="state-banner error">
-          API 연결에 실패했습니다. 마지막으로 확인된 실제 데이터가 있으면 유지됩니다.
+          안전 데이터를 불러오지 못했습니다. 연결 상태를 확인해 주세요.
         </div>
       ) : null}
 

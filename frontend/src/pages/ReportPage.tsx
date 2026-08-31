@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getEventsPage, isEventsApiMode } from "../api/eventsApi";
+import { getEventsPage } from "../api/eventsApi";
 import type { SafetyEvent } from "../types/event";
 import {
   buildSeoulInclusiveDateRange,
@@ -73,7 +73,7 @@ export async function loadAllEventsForReport(
     }
 
     if (requestedOffsets.has(offset)) {
-      throw new Error("이벤트 pagination offset이 반복되어 조회를 중단했습니다.");
+      throw new Error("이벤트 조회 순서가 반복되어 리포트를 완성할 수 없습니다. 다시 조회해 주세요.");
     }
 
     requestedOffsets.add(offset);
@@ -125,14 +125,14 @@ export async function loadAllEventsForReport(
     }
 
     if (pageCount === 0) {
-      throw new Error("이벤트 pagination 응답이 비정상입니다.");
+      throw new Error("이벤트 조회 응답이 비정상입니다. 다시 조회해 주세요.");
     }
 
     offset += pageLimit;
   }
 
   if (!completed && pagesLoaded >= MAX_REPORT_PAGES) {
-    throw new Error("이벤트 page 수가 너무 많아 조회를 중단했습니다.");
+    throw new Error("조회할 이벤트가 너무 많아 리포트를 완성할 수 없습니다. 기간을 줄여 다시 조회해 주세요.");
   }
 
   const expectedTotal = referenceTotal ?? 0;
@@ -160,8 +160,8 @@ export default function ReportPage() {
     null,
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [pagesLoaded, setPagesLoaded] = useState(0);
-  const [reportedTotal, setReportedTotal] = useState(0);
+  const [, setPagesLoaded] = useState(0);
+  const [, setReportedTotal] = useState(0);
   const requestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -274,13 +274,7 @@ export default function ReportPage() {
         <dl className="report-preview-list">
           <div>
             <dt>조회 기준</dt>
-            <dd>Event created_at 기준, Asia/Seoul 날짜 범위</dd>
-          </div>
-          <div>
-            <dt>API 요청 범위</dt>
-            <dd>
-              {activeRange?.createdFrom ?? "-"} 이상, {activeRange?.createdTo ?? "-"} 미만
-            </dd>
+            <dd>이벤트 발생 시각 기준</dd>
           </div>
           <div>
             <dt>전체 이벤트</dt>
@@ -295,14 +289,8 @@ export default function ReportPage() {
             <dd>{reportSummary.fallSuspectCount}건</dd>
           </div>
           <div>
-            <dt>위험 Zone 관련</dt>
+            <dt>위험구역 관련</dt>
             <dd>{reportSummary.dangerZoneEventCount}건</dd>
-          </div>
-          <div>
-            <dt>Pagination</dt>
-            <dd>
-              {pagesLoaded} page 조회 · total {reportedTotal}건 · 중복 event_id 제외
-            </dd>
           </div>
         </dl>
       </div>
@@ -314,12 +302,9 @@ export default function ReportPage() {
       <div className="page-heading">
         <div>
           <div className="title-row">
-            <h1>리포트 생성</h1>
-            <span className="status-pill">
-              {isEventsApiMode() ? "실제 이벤트 연동" : "Mock 데이터 모드"}
-            </span>
+            <h1>안전 리포트</h1>
+            <span className="status-pill">안전 이벤트 분석</span>
           </div>
-          <p>GET /events 기간 조회 결과를 기반으로 읽기 전용 안전 리포트를 집계합니다.</p>
         </div>
       </div>
 
@@ -329,7 +314,7 @@ export default function ReportPage() {
             <div className="panel-header">
               <div>
                 <h2>기간 선택</h2>
-                <span>서울 날짜 기준으로 created_at 범위를 조회합니다.</span>
+                <span>조회할 안전 이벤트 기간을 선택합니다.</span>
               </div>
             </div>
             <div className="report-form">
@@ -357,7 +342,7 @@ export default function ReportPage() {
                 onClick={handleLoadReport}
                 type="button"
               >
-                {reportState === "loading" ? "조회 중..." : "리포트 조회"}
+                {reportState === "loading" ? "조회 중..." : "안전 리포트 조회"}
               </button>
             </div>
           </section>
@@ -384,7 +369,7 @@ export default function ReportPage() {
                   <strong>{reportSummary.highSeverityCount}</strong>
                 </div>
                 <div>
-                  <span>위험 Zone 관련</span>
+                  <span>위험구역 관련</span>
                   <strong>{reportSummary.dangerZoneEventCount}</strong>
                 </div>
               </div>
@@ -396,7 +381,7 @@ export default function ReportPage() {
           <div className="panel-header">
             <div>
               <h2>기간별 안전 이벤트 리포트</h2>
-              <span>저장·공유 없이 Frontend에서 읽기 전용으로 집계합니다.</span>
+              <span>선택 기간의 안전 이벤트를 유형과 구역별로 분석합니다.</span>
             </div>
             <span>{formatReportRange(activeRange)}</span>
           </div>
@@ -409,8 +394,8 @@ export default function ReportPage() {
           <section className="card report-list-card">
             <div className="panel-header">
               <div>
-                <h2>EventType별 발생 수</h2>
-                <span>공통 이벤트 표시 메타데이터 기준</span>
+                <h2>이벤트 유형별 발생 현황</h2>
+                <span>이벤트 유형 기준</span>
               </div>
               <span>{reportSummary.eventTypeCounts.length}종</span>
             </div>
@@ -433,16 +418,16 @@ export default function ReportPage() {
           <section className="card report-list-card">
             <div className="panel-header">
               <div>
-                <h2>Zone별 발생 수</h2>
-                <span>Event에 포함된 zone_name 또는 zone_id 기준</span>
+                <h2>구역별 발생 현황</h2>
+                <span>이벤트에 포함된 구역 정보 기준</span>
               </div>
-              <span>{reportSummary.zoneCounts.length}개 Zone</span>
+              <span>{reportSummary.zoneCounts.length}개 구역</span>
             </div>
             <div className="table-scroll">
               <table>
                 <thead>
                   <tr>
-                    <th>Zone</th>
+                    <th>구역</th>
                     <th>발생 수</th>
                   </tr>
                 </thead>
@@ -462,7 +447,7 @@ export default function ReportPage() {
             <div className="panel-header">
               <div>
                 <h2>조회된 안전 이벤트</h2>
-                <span>created_at 최신순, 최대 {EVENT_PREVIEW_LIMIT}건 미리보기</span>
+                <span>최근 발생순, 최대 {EVENT_PREVIEW_LIMIT}건 미리보기</span>
               </div>
               <span>{events.length}건</span>
             </div>
@@ -473,8 +458,8 @@ export default function ReportPage() {
                     <th>발생 시각</th>
                     <th>이벤트</th>
                     <th>위험도</th>
-                    <th>Track</th>
-                    <th>Zone</th>
+                    <th>대상</th>
+                    <th>구역</th>
                     <th>원인 후보</th>
                   </tr>
                 </thead>
@@ -498,7 +483,7 @@ export default function ReportPage() {
                         </td>
                         <td>
                           <span className={`risk-badge ${severityDisplay.className}`}>
-                            {severityDisplay.iconLabel} · {severityDisplay.label}
+                            {severityDisplay.label}
                           </span>
                         </td>
                         <td>{formatTrackId(event.track_id)}</td>
