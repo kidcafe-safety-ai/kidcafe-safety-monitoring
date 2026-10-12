@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 from pathlib import Path
 from uuid import uuid4
 
@@ -181,7 +182,20 @@ def test_event_confidence_and_cause_round_trip_through_list_and_recent(client):
 
 @pytest.mark.parametrize(
     "updated_at",
-    ["not-a-date", "2026-10-12T10:00:00", "2026-13-01T00:00:00+09:00", ""],
+    [
+        "not-a-date",
+        "2026-10-12T10:00:00",
+        "2026-13-01T00:00:00+09:00",
+        "",
+        # Python fromisoformat()은 통과하지만 SQLite julianday()는 NULL인 값
+        "2026-10-12T10:00:00+09:00:30",
+        "2026-10-12X10:00:00+09:00",
+        # SQLite는 읽지만 Python 3.10이 읽지 못하는 소수점 자릿수
+        "2026-10-12T10:00:00.1+09:00",
+        # 형식은 맞지만 존재하지 않는 날짜
+        "2026-02-30T10:00:00+09:00",
+        "2026-10-12T10:00:00+09:00\n",
+    ],
 )
 def test_put_status_current_rejects_invalid_updated_at(client, updated_at):
     response = client.put(
@@ -192,10 +206,19 @@ def test_put_status_current_rejects_invalid_updated_at(client, updated_at):
     assert client.get("/status/current").json()["data"]["source"] == "unknown"
 
 
-@pytest.mark.parametrize(
-    "updated_at",
-    ["2026-10-12T01:00:00Z", "2026-10-12T10:00:00.123456+09:00", "2026-10-12T01:00:00+00:00"],
-)
+# PUT /status/current가 받는 형식. 모두 2026-10-12T01:00:00Z(UTC) 이후 시각이다.
+VALID_UPDATED_AT = [
+    "2026-10-12T01:00:00Z",
+    "2026-10-12T01:00:00+00:00",
+    "2026-10-12T10:00:00.123+09:00",
+    "2026-10-12T10:00:00.123456+09:00",
+    "2026-10-12 10:00:00+09:00",
+    "2026-10-12T10:01+09:00",
+    "2026-10-11T21:00:00-04:00",
+]
+
+
+@pytest.mark.parametrize("updated_at", VALID_UPDATED_AT)
 def test_put_status_current_keeps_valid_updated_at_as_is(client, updated_at):
     assert (
         client.put(
@@ -219,6 +242,43 @@ def test_get_status_current_compares_updated_at_across_offsets(client):
     )
 
     assert client.get("/status/current").json()["data"]["source"] == "newer"
+
+
+@pytest.mark.parametrize("updated_at", VALID_UPDATED_AT)
+def test_accepted_updated_at_is_readable_by_sqlite_julianday(updated_at):
+    """API가 받은 값은 GET 정렬에 쓰는 julianday()가 반드시 해석해야 한다."""
+    connection = sqlite3.connect(":memory:")
+    try:
+        value = connection.execute("SELECT julianday(?)", (updated_at,)).fetchone()[0]
+    finally:
+        connection.close()
+
+    assert value is not None
+
+
+@pytest.mark.parametrize("newer_updated_at", VALID_UPDATED_AT)
+def test_get_status_current_selects_newer_of_two_sources_for_each_format(
+    client, newer_updated_at
+):
+    # older는 모든 VALID_UPDATED_AT보다 이른 시각이다(2026-10-12T00:59:59Z).
+    client.put(
+        "/status/current",
+        json=make_status_payload(source="older", updated_at="2026-10-12T09:59:59+09:00"),
+    )
+    client.put(
+        "/status/current",
+        json=make_status_payload(
+            source="newer",
+            active_track_count=0,
+            zone_occupancy=[],
+            updated_at=newer_updated_at,
+        ),
+    )
+
+    data = client.get("/status/current").json()["data"]
+    assert data["source"] == "newer"
+    assert data["active_track_count"] == 0
+    assert data["updated_at"] == newer_updated_at
 
 
 def test_status_reset_to_zero_on_shutdown_is_returned(client):

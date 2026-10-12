@@ -362,7 +362,8 @@ CurrentStatus → 현재 상태, 최신 값 갱신 → PUT /status/current
 }
 ```
 
-`updated_at`은 timezone을 포함한 ISO 8601이어야 하며(아니면 `422`), Backend는
+`updated_at`은 timezone을 포함한 ISO 8601(`YYYY-MM-DDTHH:MM:SS[.ffffff](Z|±HH:MM)` 등,
+상세 형식은 `api_contract.md`)이어야 하며(아니면 `422`), Backend는
 source별 row 중 `updated_at`이 가장 늦은 row를 `GET /status/current`로 반환한다.
 offset이 달라도 절대 시각으로 비교한다. 실행 종료·영상 전환 시 A가 0명 상태를
 보내면 그 값이 최신 상태가 된다. 상세: `docs/api_contract.md` Current Status Schema.

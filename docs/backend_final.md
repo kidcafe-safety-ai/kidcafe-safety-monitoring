@@ -85,7 +85,9 @@ Report는 별도 API 없이 `GET /events?created_from=...&created_to=...`로 기
 ### CurrentStatus
 
 - `current_status` 테이블에 `source`별 1 row, `PUT`마다 덮어쓴다.
-- `updated_at`은 timezone 포함 ISO 8601이어야 하고, 받은 문자열 그대로 저장한다.
+- `updated_at`은 `YYYY-MM-DD(T| )HH:MM[:SS[.fff|.ffffff]](Z|±HH:MM)` 형식이어야
+  하고(아니면 `422`), 받은 문자열 그대로 저장한다. SQLite `julianday()`가 해석할 수
+  있는 형식만 받으므로 정렬에서 NULL이 되는 값은 저장되지 않는다.
   생략하면 서버 시각을 넣는다.
 - `GET`은 `julianday(updated_at)`가 가장 늦은 row를 반환한다. 영상 전환으로 source가
   바뀌어도 새 source가 반환되고, 실행 종료 시 0명 상태를 보내면 그 상태가 반환된다.
@@ -220,7 +222,7 @@ python scripts/sqlite_db.py reset --yes               # 현재 DB를 백업한 �
 | 항목 | 결과 |
 |---|---|
 | `flake8 src tests` | 통과 |
-| `pytest -q` | 전체 통과 (Backend 신규: `test_api_final_stability.py` 24개, `test_backend_ops_scripts.py` 13개) |
+| `pytest -q` | 전체 통과 (Backend 신규: `test_api_final_stability.py` 47개, `test_backend_ops_scripts.py` 13개) |
 | 깨끗한 디렉터리에서 `init_zone_runtime` → `docker compose up --build -d` | API healthy, Frontend `200` |
 | `api_smoke_test.py --write` | 10/10 |
 | `docker compose restart kidcafe-api`, `down` → `up` | Event 유지 |

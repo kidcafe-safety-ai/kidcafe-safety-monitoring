@@ -136,8 +136,18 @@ Phase 3에서도 `CurrentStatus.risk_level`은 `NORMAL | HIGH`를 유지한다.
 `LOW | MEDIUM | HIGH`는 `risk_level`의 확장이 아니라 Frontend `SafetyEvent.severity` 파생 표시값이다 (`docs/interfaces.md` Severity 정책 참조).
 
 `PUT /status/current` 요청 body에 `updated_at`이 있으면 그대로 저장한다.
-단, timezone을 포함한 ISO 8601이어야 한다(`2026-10-12T10:00:00+09:00`,
-`2026-10-12T01:00:00Z`). 날짜가 아니거나 timezone이 없으면 `422`다 (Final Phase).
+단, 아래 형식의 timezone 포함 ISO 8601이어야 하며 아니면 `422`다 (Final Phase).
+
+```text
+YYYY-MM-DD(T| )HH:MM[:SS[.fff|.ffffff]](Z|+HH:MM|-HH:MM)
+```
+
+허용 예: `2026-10-12T10:00:00+09:00`, `2026-10-12T01:00:00Z`,
+`2026-10-12T10:00:00.123456+09:00`. 거부 예: `2026-10-12T10:00:00`(timezone 없음),
+`2026-10-12T10:00:00+09:00:30`(초 단위 offset), `2026-10-12X10:00:00Z`(구분자),
+`2026-10-12T10:00:00.1+09:00`(소수점 1자리), `2026-02-30T10:00:00+09:00`(없는 날짜).
+Python `fromisoformat()`과 정렬에 쓰는 SQLite `julianday()`가 모두 해석하는 범위로
+제한한 것이다. Vision AI가 보내는 `datetime.isoformat()` 값은 모두 이 형식이다.
 `updated_at`이 없으면 Backend 수신 시각을 timezone-aware ISO 문자열로 생성해 저장한다.
 `GET /status/current`는 source별 row 중 `updated_at`이 가장 늦은 row를 반환한다.
 source마다 offset이 달라도 맞게 고르도록 문자열이 아니라 SQLite

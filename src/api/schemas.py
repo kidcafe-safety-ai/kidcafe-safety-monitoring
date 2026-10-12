@@ -24,6 +24,16 @@ EventCauseType = Literal["NEARBY_TRACK"]
 TIMESTAMP_REGEX = r"^\d{2}:[0-5]\d:[0-5]\d\.\d{3}$"
 TIMESTAMP_PATTERN = re.compile(TIMESTAMP_REGEX)
 
+# CurrentStatus `updated_at` 허용 형식. Python `fromisoformat()`과 SQLite
+# `julianday()`가 모두 해석하는 범위로 제한한다. `fromisoformat()`만 쓰면
+# 초 단위 offset(`+09:00:30`)이나 임의 구분자(`2026-10-12X10:00:00Z`)도
+# 통과하는데, SQLite는 이를 NULL로 읽어 최신 source 판단에서 밀려난다.
+# 소수점 이하 초는 Python 3.10이 읽는 3자리·6자리만 허용한다.
+UPDATED_AT_PATTERN = re.compile(
+    r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d{3}|\.\d{6})?)?"
+    r"(Z|[+-]\d{2}:\d{2})"
+)
+
 # 입력 float은 NaN·Infinity를 받지 않는다. Python json은 `NaN`/`Infinity`를
 # 읽어들이므로 그대로 저장하면 조회 응답 직렬화(allow_nan=False)가 실패해
 # GET /events 전체가 500이 된다. 저장 전에 422로 거절한다.
@@ -125,11 +135,17 @@ class CurrentStatusCreate(BaseModel):
     def validate_updated_at(cls, value: Optional[str]) -> Optional[str]:
         """timezone을 포함한 ISO 8601만 받는다. 저장은 받은 문자열 그대로 한다.
 
-        `GET /status/current`가 `updated_at` 기준으로 최신 source를 고르므로
-        날짜가 아니거나 timezone이 없는 값은 순서를 판단할 수 없다.
+        `GET /status/current`가 SQLite `julianday(updated_at)`로 최신 source를
+        고르므로, SQLite가 해석할 수 있는 형식(`UPDATED_AT_PATTERN`)이어야 한다.
+        형식이 맞아도 존재하지 않는 날짜·시각은 `fromisoformat()`에서 거절한다.
         """
         if value is None:
             return value
+        if not UPDATED_AT_PATTERN.fullmatch(value):
+            raise ValueError(
+                "updated_at must be ISO 8601 like 2026-10-12T10:00:00+09:00 "
+                "or 2026-10-12T01:00:00Z"
+            )
         parse_value = value[:-1] + "+00:00" if value.endswith("Z") else value
         try:
             parsed = datetime.fromisoformat(parse_value)
