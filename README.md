@@ -240,6 +240,9 @@ Vision AI는 로컬에서 실행하고, FastAPI·React·SQLite는 Docker Compose
 # .env 준비 (최초 1회)
 cp .env.example .env
 
+# Zone runtime 파일 생성 (최초 1회). 건너뛰면 GET /zones가 500이다.
+python scripts/init_zone_runtime.py
+
 # 빌드 및 실행
 docker compose up --build
 
@@ -258,6 +261,14 @@ docker compose down
 > Docker frontend 컨테이너는 Vite dev server(`npm run dev`)로 실행한다. 시연·통합 검증용이며 운영 배포 구성은 아니다.
 
 Vision AI는 Docker 실행 중인 FastAPI로 이벤트를 전송한다.
+
+실행 확인·DB 백업·초기화는 [`docs/backend_final.md`](docs/backend_final.md)를 따른다.
+
+```bash
+python scripts/api_smoke_test.py          # API 점검 (읽기 전용)
+python scripts/sqlite_db.py backup        # outputs/backups/에 DB 백업
+python scripts/sqlite_db.py reset --yes   # 백업 후 DB 비우기
+```
 
 ```bash
 .venv/bin/python -m src.main \

@@ -233,6 +233,7 @@ outputs/*.json
 outputs/*.csv
 outputs/*.mp4
 outputs/*.db
+outputs/backups/
 outputs/benchmark/
 outputs/e2e-*/
 outputs/fall_eval/
