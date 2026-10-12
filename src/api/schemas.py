@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator
 
 from src.geofencing.polygon_rules import validate_polygon_points
 
@@ -23,11 +24,15 @@ EventCauseType = Literal["NEARBY_TRACK"]
 TIMESTAMP_REGEX = r"^\d{2}:[0-5]\d:[0-5]\d\.\d{3}$"
 TIMESTAMP_PATTERN = re.compile(TIMESTAMP_REGEX)
 
+# 입력 float은 NaN·Infinity를 받지 않는다. Python json은 `NaN`/`Infinity`를
+# 읽어들이므로 그대로 저장하면 조회 응답 직렬화(allow_nan=False)가 실패해
+# GET /events 전체가 500이 된다. 저장 전에 422로 거절한다.
+
 
 class EventCauseEvidence(BaseModel):
-    min_distance_norm: float = Field(ge=0.0)
-    closing_speed_norm: float = Field(ge=0.0)
-    time_to_fall_sec: float = Field(ge=0.0)
+    min_distance_norm: FiniteFloat = Field(ge=0.0)
+    closing_speed_norm: FiniteFloat = Field(ge=0.0)
+    time_to_fall_sec: FiniteFloat = Field(ge=0.0)
 
 
 class EventCause(BaseModel):
@@ -35,23 +40,23 @@ class EventCause(BaseModel):
 
     type: EventCauseType
     track_id: int = Field(ge=0)
-    score: float = Field(ge=0.0, le=1.0)
+    score: FiniteFloat = Field(ge=0.0, le=1.0)
     evidence: EventCauseEvidence
 
 
 class EventCreate(BaseModel):
-    event_id: str
+    event_id: str = Field(min_length=1)
     timestamp: str = Field(pattern=TIMESTAMP_REGEX)
     event_type: EventType
     track_id: int
-    zone_id: str
-    bbox: List[float] = Field(min_length=4, max_length=4)
-    foot_point: List[float] = Field(min_length=2, max_length=2)
-    frame_number: int
-    video_source: str
+    zone_id: str = Field(min_length=1)
+    bbox: List[FiniteFloat] = Field(min_length=4, max_length=4)
+    foot_point: List[FiniteFloat] = Field(min_length=2, max_length=2)
+    frame_number: int = Field(ge=0)
+    video_source: str = Field(min_length=1)
     zone_name: Optional[str] = None
-    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    event_confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    confidence: Optional[FiniteFloat] = Field(default=None, ge=0.0, le=1.0)
+    event_confidence: Optional[FiniteFloat] = Field(default=None, ge=0.0, le=1.0)
     cause: Optional[EventCause] = None
 
     @field_validator("timestamp")
@@ -114,6 +119,25 @@ class CurrentStatusCreate(BaseModel):
     active_track_count: int = Field(ge=0)
     zone_occupancy: List[CurrentZoneOccupancy]
     updated_at: Optional[str] = None
+
+    @field_validator("updated_at")
+    @classmethod
+    def validate_updated_at(cls, value: Optional[str]) -> Optional[str]:
+        """timezone을 포함한 ISO 8601만 받는다. 저장은 받은 문자열 그대로 한다.
+
+        `GET /status/current`가 `updated_at` 기준으로 최신 source를 고르므로
+        날짜가 아니거나 timezone이 없는 값은 순서를 판단할 수 없다.
+        """
+        if value is None:
+            return value
+        parse_value = value[:-1] + "+00:00" if value.endswith("Z") else value
+        try:
+            parsed = datetime.fromisoformat(parse_value)
+        except ValueError as exc:
+            raise ValueError("updated_at must be an ISO 8601 datetime") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError("updated_at must be timezone-aware")
+        return value
 
 
 class CurrentStatusOut(BaseModel):

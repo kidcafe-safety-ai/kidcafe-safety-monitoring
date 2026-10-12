@@ -118,3 +118,11 @@ def test_dockerignore_excludes_runtime_artifacts() -> None:
     ]
     for pattern in required_patterns:
         assert pattern in dockerignore
+
+
+def test_compose_restarts_services_and_checks_health_quickly() -> None:
+    compose = read_file("docker-compose.yml")
+
+    assert compose.count("restart: unless-stopped") == 2
+    assert "interval: 10s" in compose
+    assert "/health" in compose

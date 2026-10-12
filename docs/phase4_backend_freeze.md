@@ -38,7 +38,8 @@ Frame, RTSP 입력, Event 판정 상수, 출력 파일, 의존성
 | 기동 명령 | `uvicorn src.api.main:app --host 0.0.0.0 --port 8000` | `Dockerfile.api` |
 | base image | `python:3.10-slim` | `Dockerfile.api` |
 | health endpoint | `GET /health` | `src/api/routers/health.py` |
-| healthcheck | `urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)` | `docker-compose.yml` |
+| healthcheck | `urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)`, interval `10s` (Final Phase, 기존 `30s`) | `docker-compose.yml` |
+| restart 정책 | `unless-stopped` (API·Frontend, Final Phase) | `docker-compose.yml` |
 | Frontend 컨테이너 포트 | `3000` | `frontend/Dockerfile` |
 
 라우터 등록 순서를 그대로 둔다.
