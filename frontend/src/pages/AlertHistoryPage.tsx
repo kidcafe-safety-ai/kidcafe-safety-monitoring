@@ -378,7 +378,7 @@ export default function AlertHistoryPage({
       ) : null}
       {hasApiError ? (
         <div className="state-banner error">
-          안전 이벤트 데이터를 불러오지 못했습니다. 연결 상태를 확인해 주세요.
+          안전 이벤트 데이터를 불러오지 못했습니다. 표시된 기록은 마지막 정상 응답의 오래된 데이터일 수 있습니다.
         </div>
       ) : null}
       {isLoading ? null : (

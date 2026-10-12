@@ -24,6 +24,7 @@ const REPORT_PAGE_SIZE = 100;
 const MAX_REPORT_DAYS = 31;
 const MAX_REPORT_PAGES = 200;
 const EVENT_PREVIEW_LIMIT = 20;
+const REPORT_REQUEST_TIMEOUT_MS = 30000;
 
 interface LoadedReportEvents {
   events: SafetyEvent[];
@@ -166,16 +167,21 @@ export default function ReportPage() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const reportSummary = useMemo(() => aggregateReportEvents(events), [events]);
+  const hasCompleteReport = reportState === "success" || reportState === "empty";
   const previewEvents = events.slice(0, EVENT_PREVIEW_LIMIT);
 
   useEffect(
     () => () => {
+      requestIdRef.current += 1;
       abortControllerRef.current?.abort();
     },
     [],
   );
 
   const handleLoadReport = async () => {
+    // Invalidate the previous request even when the new input is rejected locally.
+    abortControllerRef.current?.abort();
+    requestIdRef.current += 1;
     const { range, errorMessage: dateErrorMessage } =
       buildSeoulInclusiveDateRange(startDate, endDate);
 
@@ -191,9 +197,7 @@ export default function ReportPage() {
       return;
     }
 
-    abortControllerRef.current?.abort();
-
-    const requestId = requestIdRef.current + 1;
+    const requestId = requestIdRef.current;
     const abortController = new AbortController();
     requestIdRef.current = requestId;
     abortControllerRef.current = abortController;
@@ -205,13 +209,28 @@ export default function ReportPage() {
     setPagesLoaded(0);
     setReportedTotal(0);
 
+    let timeoutId: number | null = null;
+    let timedOut = false;
     try {
-      const result = await loadAllEventsForReport(
-        range,
-        abortController.signal,
-      );
+      const aborted = new Promise<never>((_, reject) => {
+        abortController.signal.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        }, { once: true });
+      });
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutId = window.setTimeout(() => {
+          timedOut = true;
+          abortController.abort();
+          reject(new Error("리포트 조회 시간이 초과되었습니다. 다시 조회해 주세요."));
+        }, REPORT_REQUEST_TIMEOUT_MS);
+      });
+      const result = await Promise.race([
+        loadAllEventsForReport(range, abortController.signal),
+        aborted,
+        timeout,
+      ]);
 
-      if (requestIdRef.current !== requestId || abortController.signal.aborted) {
+      if (requestIdRef.current !== requestId || (abortController.signal.aborted && !timedOut)) {
         return;
       }
 
@@ -220,7 +239,7 @@ export default function ReportPage() {
       setReportedTotal(result.total);
       setReportState(result.total === 0 || result.events.length === 0 ? "empty" : "success");
     } catch (error) {
-      if (requestIdRef.current !== requestId || abortController.signal.aborted) {
+      if (requestIdRef.current !== requestId || (abortController.signal.aborted && !timedOut)) {
         return;
       }
 
@@ -228,7 +247,11 @@ export default function ReportPage() {
       setPagesLoaded(0);
       setReportedTotal(0);
       setReportState("error");
-      setErrorMessage(getReportErrorMessage(error));
+      setErrorMessage(timedOut
+        ? "리포트 조회 시간이 초과되었습니다. 다시 조회해 주세요."
+        : getReportErrorMessage(error));
+    } finally {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
     }
   };
 
@@ -274,7 +297,7 @@ export default function ReportPage() {
         <dl className="report-preview-list">
           <div>
             <dt>조회 기준</dt>
-            <dd>이벤트 발생 시각 기준</dd>
+            <dd>서버 저장 시각(created_at) 기준</dd>
           </div>
           <div>
             <dt>전체 이벤트</dt>
@@ -358,19 +381,19 @@ export default function ReportPage() {
               <div className="report-kpi-grid">
                 <div>
                   <span>전체 이벤트</span>
-                  <strong>{reportSummary.totalEvents}</strong>
+                  <strong>{hasCompleteReport ? reportSummary.totalEvents : "-"}</strong>
                 </div>
                 <div>
                   <span>낙상 의심</span>
-                  <strong>{reportSummary.fallSuspectCount}</strong>
+                  <strong>{hasCompleteReport ? reportSummary.fallSuspectCount : "-"}</strong>
                 </div>
                 <div>
                   <span>HIGH 이벤트</span>
-                  <strong>{reportSummary.highSeverityCount}</strong>
+                  <strong>{hasCompleteReport ? reportSummary.highSeverityCount : "-"}</strong>
                 </div>
                 <div>
                   <span>위험구역 관련</span>
-                  <strong>{reportSummary.dangerZoneEventCount}</strong>
+                  <strong>{hasCompleteReport ? reportSummary.dangerZoneEventCount : "-"}</strong>
                 </div>
               </div>
             </div>

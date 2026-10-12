@@ -147,4 +147,15 @@ describe("zoneSettingsApi", () => {
     expect(response.error_type).toBe("validation");
     expect(response.details).toEqual(["points must contain at least 3 points"]);
   });
+
+  it("classifies a save failure as server error without exposing mock zones", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(envelope({
+      status: "error", data: null, message: "zone configuration could not be saved",
+    }, 500)));
+    const { putZones } = await importZoneSettingsApi("api");
+    const response = await putZones({ expected_version: VALID_VERSION, zones: [] });
+    expect(response).toMatchObject({
+      status: "error", data: null, error_type: "server", status_code: 500,
+    });
+  });
 });

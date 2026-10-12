@@ -8,7 +8,7 @@ export default function ZoneStatusPanel({ zones }: ZoneStatusPanelProps) {
   return (
     <section className="card panel">
       <div className="panel-header">
-        <h2>위험구역 상태</h2>
+        <h2>전체 구역 상태</h2>
         <span>{zones.length}개 구역</span>
       </div>
       <div className="zone-list">

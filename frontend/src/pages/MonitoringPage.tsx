@@ -5,6 +5,7 @@ import {
   getDashboardSummary,
   getRecentEvents,
 } from "../api/eventsApi";
+import { getZones } from "../api/zoneSettingsApi";
 import KpiCard from "../components/KpiCard";
 import LiveFrameView from "../components/LiveFrameView";
 import RecentEventList from "../components/RecentEventList";
@@ -12,6 +13,7 @@ import ZoneStatusPanel from "../components/ZoneStatusPanel";
 import { usePolling, type PollingContext } from "../hooks/usePolling";
 import type { DashboardSummary, SafetyEvent, ZoneStatus } from "../types/event";
 import type { CurrentStatus } from "../types/status";
+import type { Zone } from "../types/zoneSettings";
 
 const RECENT_EVENT_MINUTES = 10;
 const RECENT_DASHBOARD_EVENT_LIMIT = 2;
@@ -26,20 +28,41 @@ function getZonesFromCurrentStatus(currentStatus: CurrentStatus): ZoneStatus[] {
   }));
 }
 
+function mergeConfiguredZones(configured: Zone[], current: ZoneStatus[]): ZoneStatus[] {
+  const currentById = new Map(current.map((zone) => [zone.zone_id, zone]));
+  const configuredIds = new Set(configured.map((zone) => zone.zone_id));
+  return [
+    ...configured.map((zone) => {
+      const occupancy = currentById.get(zone.zone_id);
+      return {
+        zone_id: zone.zone_id,
+        zone_name: zone.zone_name,
+        zone_type: zone.zone_type,
+        current_count: occupancy?.current_count ?? 0,
+        risk_level: occupancy?.risk_level ?? (zone.zone_type === "danger" ? "HIGH" : "NORMAL"),
+      } as ZoneStatus;
+    }),
+    ...current.filter((zone) => !configuredIds.has(zone.zone_id)),
+  ];
+}
+
 export default function MonitoringPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [activeTrackCount, setActiveTrackCount] = useState<number | null>(null);
   const [recentEvents, setRecentEvents] = useState<SafetyEvent[]>([]);
   const [zones, setZones] = useState<ZoneStatus[]>([]);
+  const [configuredZones, setConfiguredZones] = useState<Zone[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [apiErrors, setApiErrors] = useState({
     recentEvents: false,
     summary: false,
     zones: false,
+    zoneConfig: false,
   });
 
-  const hasApiError = apiErrors.recentEvents || apiErrors.summary || apiErrors.zones;
-  const dangerZoneOccupancy = zones
+  const hasApiError = Object.values(apiErrors).some(Boolean);
+  const displayedZones = mergeConfiguredZones(configuredZones, zones);
+  const dangerZoneOccupancy = displayedZones
     .filter((zone) => zone.risk_level === "HIGH")
     .reduce((sum, zone) => sum + zone.current_count, 0);
   const dangerZoneOccupancyValue =
@@ -47,13 +70,14 @@ export default function MonitoringPage() {
   const recentEventCount = summary?.recent_event_count ?? "-";
 
   const loadDashboardData = useCallback(async (context: PollingContext) => {
-    const [summaryData, eventData, currentStatusData] = await Promise.all([
+    const [summaryData, eventData, currentStatusData, zoneConfigData] = await Promise.all([
       getDashboardSummary({ signal: context.signal }),
       getRecentEvents(RECENT_DASHBOARD_EVENT_LIMIT, {
         minutes: RECENT_EVENT_MINUTES,
         signal: context.signal,
       }),
       getCurrentStatus({ signal: context.signal }),
+      getZones({ signal: context.signal }),
     ]);
 
     if (!context.isActive()) {
@@ -72,10 +96,14 @@ export default function MonitoringPage() {
       setActiveTrackCount(currentStatusData.data.active_track_count);
       setZones(getZonesFromCurrentStatus(currentStatusData.data));
     }
+    if (zoneConfigData.status !== "error" && zoneConfigData.data !== null) {
+      setConfiguredZones(zoneConfigData.data.zones);
+    }
     setApiErrors({
       recentEvents: eventData.status === "error",
       summary: summaryData.status === "error",
       zones: currentStatusData.status === "error",
+      zoneConfig: zoneConfigData.status === "error",
     });
     setIsLoading(false);
   }, []);
@@ -134,10 +162,23 @@ export default function MonitoringPage() {
     }));
   }, []);
 
+  const loadZoneConfig = useCallback(async (context: PollingContext) => {
+    const response = await getZones({ signal: context.signal });
+    if (!context.isActive()) return;
+    if (response.status === "success" && response.data !== null) {
+      setConfiguredZones(response.data.zones);
+    }
+    setApiErrors((previous) => ({
+      ...previous,
+      zoneConfig: response.status === "error",
+    }));
+  }, []);
+
   usePolling(loadDashboardData, INITIAL_DASHBOARD_RETRY_INTERVAL_MS, isLoading);
   usePolling(loadRecentEvents, 1000, !isLoading);
   usePolling(loadSummary, 10000, !isLoading);
   usePolling(loadCurrentStatus, 2000, !isLoading);
+  usePolling(loadZoneConfig, 10000, !isLoading);
 
   return (
     <main className="page">
@@ -153,7 +194,7 @@ export default function MonitoringPage() {
       {isLoading ? <div className="state-banner">데이터를 불러오는 중입니다.</div> : null}
       {hasApiError ? (
         <div className="state-banner error">
-          안전 데이터를 불러오지 못했습니다. 연결 상태를 확인해 주세요.
+          안전 데이터를 불러오지 못했습니다. 표시된 값은 마지막 정상 응답의 오래된 데이터일 수 있습니다.
         </div>
       ) : null}
 
@@ -192,7 +233,7 @@ export default function MonitoringPage() {
             hasError={apiErrors.recentEvents}
             isLoading={isLoading}
           />
-          <ZoneStatusPanel zones={zones} />
+          <ZoneStatusPanel zones={displayedZones} />
         </aside>
       </section>
     </main>

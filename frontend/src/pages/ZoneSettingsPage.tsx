@@ -131,6 +131,10 @@ function getSafeErrorMessage(response: ZoneApiResponse<ZoneConfig>) {
     return "안전구역 설정 응답 형식이 올바르지 않습니다.";
   }
 
+  if (response.error_type === "server") {
+    return "서버에서 안전구역 설정을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+  }
+
   return response.message ?? "안전구역 설정 요청에 실패했습니다.";
 }
 

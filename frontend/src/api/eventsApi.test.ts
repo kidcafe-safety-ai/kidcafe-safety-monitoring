@@ -103,6 +103,46 @@ describe("eventsApi", () => {
     expect(response.data[0].event_id).toBe("real-api-event");
   });
 
+  it("loads the full paginated Event History without silently stopping at 50", async () => {
+    const first = Array.from({ length: 50 }, (_, index) =>
+      apiEvent({ event_id: `event-${index}` }));
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        status: "success",
+        data: { items: first, total: 51, limit: 50, offset: 0, count: 50 },
+        message: null,
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        status: "success",
+        data: { items: [apiEvent({ event_id: "event-50" })], total: 51, limit: 500, offset: 50, count: 1 },
+        message: null,
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { getEvents } = await importEventsApi("api");
+    const response = await getEvents();
+    expect(response.status).toBe("success");
+    expect(response.data).toHaveLength(51);
+    expect(fetchMock.mock.calls[1][0]).toContain("offset=50");
+  });
+
+  it("rejects shifted duplicate Event History pages instead of showing partial data", async () => {
+    const first = Array.from({ length: 50 }, (_, index) =>
+      apiEvent({ event_id: `event-${index}` }));
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        status: "success",
+        data: { items: first, total: 51, limit: 50, offset: 0, count: 50 },
+        message: null,
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        status: "success",
+        data: { items: [first[49]], total: 51, limit: 500, offset: 50, count: 1 },
+        message: null,
+      })));
+    const { getEvents } = await importEventsApi("api");
+    expect(await getEvents()).toMatchObject({ status: "error", data: [] });
+  });
+
   it("does not expose mock events when API mode request fails", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 500)));
     const { getEvents } = await importEventsApi("api");
