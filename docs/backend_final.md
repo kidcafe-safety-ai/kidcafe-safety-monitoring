@@ -92,12 +92,15 @@ Report는 별도 API 없이 `GET /events?created_from=...&created_to=...`로 기
 - `GET`은 `julianday(updated_at)`가 가장 늦은 row를 반환한다. 영상 전환으로 source가
   바뀌어도 새 source가 반환되고, 실행 종료 시 0명 상태를 보내면 그 상태가 반환된다.
 - 저장된 상태가 없으면 `source="unknown"`, 0명, `updated_at=null`.
+- `risk_level`은 Vision AI가 정한다(사람이 있는 `danger`·`restricted` Zone만 `HIGH`).
+  Backend는 다시 계산하지 않는다. 상세: `api_contract.md` Current Status Schema.
 
 ### LiveFrame
 
 - DB·파일에 저장하지 않는 process 메모리 1장. API 재시작 시 사라진다(`204`).
 - 서버 수신 후 3초가 지나면 `204`. Vision AI가 멈추면 3초 뒤 Live View가 비워진다.
 - `image/jpeg`, 1 MiB 이하, JPEG 시작·끝 marker 검사, `captured_at`은 timezone 포함.
+- 해상도는 Vision AI가 최대 640×480·원본 비율로 맞춘다. Backend는 해상도를 검사하지 않는다.
 
 ### Zone Settings
 

@@ -2,7 +2,7 @@
 
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
-> **최종 수정**: 2026-10-12 (Final Phase 입력 검증·CurrentStatus 최신 판단·DB 재생성 반영)
+> **최종 수정**: 2026-10-13 (Final Phase 입력 검증·CurrentStatus 최신 판단·DB 재생성, Vision AI #69 CurrentStatus·Live Frame 동작 반영)
 > **상태**: Phase 4 기간 조회·Zone 저장·Frontend 연동 구현 완료,
 > Backend·DB·RTSP 설정 동결
 > **관련 문서**: [`interfaces.md`](interfaces.md),
@@ -134,6 +134,20 @@ Event는 `events` 테이블에 누적 저장하고, Current Status는 `source`�
 
 Phase 3에서도 `CurrentStatus.risk_level`은 `NORMAL | HIGH`를 유지한다.
 `LOW | MEDIUM | HIGH`는 `risk_level`의 확장이 아니라 Frontend `SafetyEvent.severity` 파생 표시값이다 (`docs/interfaces.md` Severity 정책 참조).
+
+Vision AI가 보내는 `zone_occupancy` 기준 (Final Phase, PR #69):
+
+- 설정된 Zone을 인원과 관계없이 모두 포함한다. 인원이 없으면 `current_count=0`,
+  `risk_level="NORMAL"`이다.
+- `risk_level`은 `zone_type`이 `danger` 또는 `restricted`이고 `current_count > 0`일
+  때만 `HIGH`다. `play`·`exit` Zone은 인원이 있어도 `NORMAL`이다. 이전에는
+  `current_count > 0`이면 Zone 종류와 관계없이 `HIGH`였다. Dashboard의 "위험구역
+  체류 인원"은 `risk_level == "HIGH"`인 Zone의 `current_count` 합계다.
+- 실행이 끝나면 `active_track_count=0`과 모든 Zone `current_count=0`, `NORMAL`을 한 번
+  더 보낸다.
+- 전송 간격은 입력 영상 시간 기준이며 기본 2초다(`--status-update-interval-sec`).
+
+Backend는 이 값을 검증·저장만 하고 `risk_level`을 다시 계산하지 않는다.
 
 `PUT /status/current` 요청 body에 `updated_at`이 있으면 그대로 저장한다.
 단, 아래 형식의 timezone 포함 ISO 8601이어야 하며 아니면 `422`다 (Final Phase).
@@ -680,8 +694,10 @@ Content-Type: image/jpeg
 - Body: JPEG binary
 - Content-Type: `image/jpeg`
 - 최대 크기: 1 MiB
-- 업로드 주기: 1-2 FPS
-- 해상도: 640×480, JPEG quality 70-80
+- 업로드 주기: 기본 1.5 FPS (`--live-frame-fps`). 시연용 값은 CLI로 명시하고 기본값은 바꾸지 않는다.
+- 해상도: 최대 640×480, 원본 종횡비 유지. 이보다 작은 영상은 확대하지 않는다 (Final Phase, PR #69).
+  Backend는 해상도를 검사하지 않고 1 MiB 제한만 적용한다.
+- JPEG quality: 기본 75 (권장 70-80)
 
 **응답**
 
