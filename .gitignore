@@ -228,17 +228,11 @@ data/videos/*
 data/datasets/*
 !data/datasets/.gitkeep
 
-outputs/*.jsonl
-outputs/*.json
-outputs/*.csv
-outputs/*.mp4
-outputs/*.db
-outputs/benchmark/
-outputs/e2e-*/
-outputs/fall_eval/
-outputs/fall_training/
-outputs/phase3_integration/
-outputs/phase4_*/
+# Runtime, evaluation, demo, and locally rendered artifacts.
+# Public artifacts must be reviewed and moved to a tracked docs/ path explicitly.
+outputs/*
+!outputs/.gitkeep
+output/
 
 # Frontend
 frontend/node_modules/

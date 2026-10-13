@@ -7,10 +7,11 @@ import time
 from collections import deque
 from urllib.parse import urlsplit
 
+import cv2
 import numpy as np
 import pytest
 
-from src.input.file_source import FileVideoSource
+from src.input.file_source import FilePlaylistSource, FileVideoSource
 from src.input.webcam_source import WebcamSource
 from src.input.rtsp_source import (
     RTSPConnectionConfig,
@@ -33,6 +34,59 @@ SPECIAL_RTSP_PASSWORD = "pw with symbols:/+"
 
 def _frame(value: int) -> np.ndarray:
     return np.full((2, 2, 3), value, dtype=np.uint8)
+
+
+class FakeFileCapture:
+    def __init__(
+        self,
+        frames,
+        *,
+        opened: bool = True,
+        fps: float = 30.0,
+        width: int = 2,
+        height: int = 2,
+        rewind_ok: bool = True,
+    ) -> None:
+        self.frames = list(frames)
+        self.opened = opened
+        self.fps = fps
+        self.width = width
+        self.height = height
+        self.rewind_ok = rewind_ok
+        self.index = 0
+        self.released = False
+
+    def isOpened(self):
+        return self.opened
+
+    def get(self, prop_id):
+        values = {
+            cv2.CAP_PROP_FPS: self.fps,
+            cv2.CAP_PROP_FRAME_WIDTH: self.width,
+            cv2.CAP_PROP_FRAME_HEIGHT: self.height,
+            cv2.CAP_PROP_FRAME_COUNT: len(self.frames),
+        }
+        return values.get(prop_id, 0)
+
+    def set(self, prop_id, value):
+        if (
+            prop_id == cv2.CAP_PROP_POS_FRAMES
+            and value == 0
+            and self.rewind_ok
+        ):
+            self.index = 0
+            return True
+        return False
+
+    def read(self):
+        if self.index >= len(self.frames):
+            return False, None
+        frame = self.frames[self.index]
+        self.index += 1
+        return True, frame
+
+    def release(self):
+        self.released = True
 
 
 def _rtsp_test_url(path: str = "/media/video2") -> str:
@@ -119,6 +173,9 @@ class TestInputSourceInterface:
     def test_file_source_is_input_source(self):
         assert issubclass(FileVideoSource, InputSource)
 
+    def test_file_playlist_source_is_input_source(self):
+        assert issubclass(FilePlaylistSource, InputSource)
+
     def test_webcam_source_is_input_source(self):
         assert issubclass(WebcamSource, InputSource)
 
@@ -167,6 +224,118 @@ class TestFileVideoSource:
         ret, frame = src.read()
         assert ret is False
         assert frame is None
+
+    def test_rejects_invalid_repeat_count(self):
+        with pytest.raises(ValueError, match="repeat_count"):
+            FileVideoSource("demo.mp4", repeat_count=0)
+
+    def test_repeats_file_and_reports_total_frames(self, monkeypatch):
+        capture = FakeFileCapture([_frame(1), _frame(2)])
+        monkeypatch.setattr(
+            "src.input.file_source.cv2.VideoCapture", lambda _: capture
+        )
+        source = FileVideoSource("demo.mp4", repeat_count=2)
+        source.open()
+
+        values = []
+        while True:
+            ret, frame = source.read()
+            if not ret:
+                break
+            values.append(int(frame[0, 0, 0]))
+
+        assert values == [1, 2, 1, 2]
+        assert source.cycle_index == 1
+        assert source.total_frames == 4
+
+    def test_repeat_fails_clearly_when_backend_cannot_rewind(self, monkeypatch):
+        capture = FakeFileCapture([_frame(1)], rewind_ok=False)
+        monkeypatch.setattr(
+            "src.input.file_source.cv2.VideoCapture", lambda _: capture
+        )
+        source = FileVideoSource("demo.mp4", repeat_count=2)
+        source.open()
+        assert source.read()[0] is True
+
+        with pytest.raises(RuntimeError, match="되감을 수 없습니다"):
+            source.read()
+
+
+class TestFilePlaylistSource:
+    def test_rejects_empty_playlist_and_invalid_repeat_count(self):
+        with pytest.raises(ValueError, match="paths"):
+            FilePlaylistSource([])
+        with pytest.raises(ValueError, match="repeat_count"):
+            FilePlaylistSource(["first.mp4"], repeat_count=0)
+
+    def test_plays_files_in_order_and_repeats_playlist(self, monkeypatch):
+        def capture_factory(path):
+            value = 1 if path == "first.mp4" else 2
+            return FakeFileCapture([_frame(value)])
+
+        monkeypatch.setattr(
+            "src.input.file_source.cv2.VideoCapture", capture_factory
+        )
+        source = FilePlaylistSource(
+            ["first.mp4", "second.mp4"], repeat_count=2
+        )
+        source.open()
+
+        values = []
+        source_ids = []
+        while True:
+            ret, frame = source.read()
+            if not ret:
+                break
+            values.append(int(frame[0, 0, 0]))
+            source_ids.append(source.source_id)
+
+        assert values == [1, 2, 1, 2]
+        assert source_ids == [
+            "first.mp4",
+            "second.mp4",
+            "first.mp4",
+            "second.mp4",
+        ]
+        assert source.cycle_index == 3
+
+    def test_fails_when_next_file_cannot_be_opened(self, monkeypatch):
+        captures = {
+            "first.mp4": FakeFileCapture([_frame(1)]),
+            "missing.mp4": FakeFileCapture([], opened=False),
+        }
+        monkeypatch.setattr(
+            "src.input.file_source.cv2.VideoCapture", captures.__getitem__
+        )
+        source = FilePlaylistSource(["first.mp4", "missing.mp4"])
+        source.open()
+        assert source.read()[0] is True
+
+        with pytest.raises(RuntimeError, match="missing.mp4"):
+            source.read()
+        assert captures["missing.mp4"].released is True
+
+    @pytest.mark.parametrize(
+        "second_kwargs",
+        [{"fps": 25.0}, {"width": 4}, {"height": 4}],
+    )
+    def test_rejects_format_change_between_files(
+        self, monkeypatch, second_kwargs
+    ):
+        captures = {
+            "first.mp4": FakeFileCapture([_frame(1)]),
+            "second.mp4": FakeFileCapture([_frame(2)], **second_kwargs),
+        }
+        monkeypatch.setattr(
+            "src.input.file_source.cv2.VideoCapture", captures.__getitem__
+        )
+        source = FilePlaylistSource(["first.mp4", "second.mp4"])
+        source.open()
+        assert source.read()[0] is True
+
+        with pytest.raises(ValueError, match="형식이 첫 파일과 다릅니다"):
+            source.read()
+        assert captures["second.mp4"].released is True
 
 
 class TestWebcamSource:
@@ -566,7 +735,9 @@ class TestRTSPSource:
 
             assert ret is False
             assert frame is None
-            assert "exception_type=RuntimeError" in caplog.text
+            assert _wait_until(
+                lambda: "exception_type=RuntimeError" in caplog.text
+            )
             assert TEST_RTSP_PASSWORD not in caplog.text
             assert TEST_RTSP_USERNAME not in caplog.text
             assert "rtsp://" not in caplog.text

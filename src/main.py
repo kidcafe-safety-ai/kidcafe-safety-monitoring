@@ -21,7 +21,7 @@ from src.events.event_manager import EventManager
 from src.geofencing.zone_checker import ZoneChecker
 from src.geofencing.zone_loader import load_zones
 from src.input.base import InputSource
-from src.input.file_source import FileVideoSource
+from src.input.file_source import FilePlaylistSource, FileVideoSource
 from src.input.rtsp_source import (
     DEFAULT_RTSP_HOST,
     DEFAULT_RTSP_MAIN_PATH,
@@ -122,6 +122,7 @@ def run_pipeline_from_source(
     live_frame_enabled: bool = False,
     live_frame_fps: float = 1.5,
     live_frame_quality: int = 75,
+    status_update_interval_sec: float = _STATUS_UPDATE_INTERVAL_SEC,
     fall_detection_enabled: bool = False,
     fall_config_path: str = "configs/fall_detection.json",
     fall_model_path: Optional[str] = None,
@@ -145,6 +146,7 @@ def run_pipeline_from_source(
             쓰지 않기 위함이다.
         live_frame_enabled: 지정 시 FastAPI PUT /live/frame으로 최신 frame을 전송한다.
             api_url이 필요하며, Event/CurrentStatus 전송과는 별도로 켜고 끌 수 있다.
+        status_update_interval_sec: CurrentStatus 갱신 간격(입력 영상 시간 기준 초).
         fall_detection_enabled: FALL_SUSPECT 감지(FallPipeline)를 켤지 여부.
             함수 API와 CLI 모두 기본 False다. 명시적으로 켜면 pose confirm 경로에
             필요한 Track.keypoints를 얻기 위해 PoseTracker를 사용한다.
@@ -159,14 +161,19 @@ def run_pipeline_from_source(
             latency/FPS 지표를 JSON으로 저장한다. None이면 계측 파일을 만들지 않는다.
         api_failed_events_output_path: API 전송 최종 실패 Event를 기록할 JSONL 경로.
     """
+    if status_update_interval_sec <= 0:
+        raise ValueError("status_update_interval_sec는 0보다 커야 합니다.")
+
     source.open()
     dispatcher: Optional[AsyncEventDispatcher] = None
     overlay_writer = None
     writer = None
     metrics = PipelineMetrics() if metrics_output_path is not None else None
     processed_frame_number = 0
+    source_frame_number = 0
     total_events = 0
     fps = source.fps
+    zones: List[Zone] = []
     try:
         if live_frame_enabled and not api_url:
             raise ValueError("--live-frame-enabled 사용 시 --api-url을 지정해야 합니다.")
@@ -286,7 +293,9 @@ def run_pipeline_from_source(
         LOGGER.info("Tracker: %s, Model: %s", tracker_name, resolved_model_path)
 
         pipeline_start = time.perf_counter()
-        _last_status_time = time.time()
+        status_interval_frames = max(1, round(fps * status_update_interval_sec))
+        last_status_frame = -status_interval_frames
+        source_cycle_index = getattr(source, "cycle_index", 0)
 
         while True:
             frame_start = time.perf_counter()
@@ -294,6 +303,37 @@ def run_pipeline_from_source(
             ret, frame = source.read()
             if not ret or frame is None:
                 break
+
+            next_cycle_index = getattr(source, "cycle_index", source_cycle_index)
+            if next_cycle_index != source_cycle_index:
+                tracker.reset()
+                event_manager = EventManager(zones=zones, fps=fps)
+                if fall_pipeline is not None:
+                    pose_normal_gate = None
+                    if fall_pose_normal_gate_enabled:
+                        pose_normal_gate = PoseNormalGate(
+                            fps=fps,
+                            config=PoseNormalGateConfig.from_fall_detector_config(
+                                fall_detector_config
+                            ),
+                        )
+                    fall_pipeline = FallPipeline(
+                        fps=fps,
+                        detector_config=fall_detector_config,
+                        auxiliary_model=auxiliary_model,
+                        iou_threshold=fall_model_iou_threshold,
+                        fall_config_path=fall_config_path,
+                        auxiliary_inference_interval_frames=(
+                            fall_model_interval_frames
+                        ),
+                        pose_normal_gate=pose_normal_gate,
+                    )
+                source_cycle_index = next_cycle_index
+                LOGGER.info(
+                    "파일 전환 또는 반복 재생: %d번째 입력, source=%s (모델 재사용)",
+                    source_cycle_index + 1,
+                    source.source_id,
+                )
 
             # 1. Detection + Tracking
             #
@@ -351,8 +391,7 @@ def run_pipeline_from_source(
                 for event in frame_events:
                     dispatcher.enqueue_event(event)
 
-                _now = time.time()
-                if _now - _last_status_time >= _STATUS_UPDATE_INTERVAL_SEC:
+                if source_frame_number - last_status_frame >= status_interval_frames:
                     status = _build_current_status(
                         source_id=source.source_id,
                         frame_number=source_frame_number,
@@ -361,7 +400,7 @@ def run_pipeline_from_source(
                         zones=zones,
                     )
                     dispatcher.update_current_status(status)
-                    _last_status_time = _now
+                    last_status_frame = source_frame_number
 
                 # 4-1. Live Frame 등록 (latest-only, worker가 비차단 전송)
                 # Dashboard Live View는 관리자가 바로 추적 상태를 확인할 수 있도록
@@ -429,6 +468,14 @@ def run_pipeline_from_source(
         if show:
             cv2.destroyAllWindows()
         if dispatcher is not None:
+            final_status = _build_current_status(
+                source_id=source.source_id,
+                frame_number=source_frame_number,
+                active_track_count=0,
+                zone_occupancy={},
+                zones=zones,
+            )
+            dispatcher.update_current_status(final_status)
             dispatcher.close(timeout=3.0)
         if writer is not None:
             writer.finalize(fps=fps)
@@ -486,19 +533,23 @@ def _build_current_status(
     zones: List[Zone],
 ) -> Dict[str, Any]:
     """PUT /status/current 페이로드를 생성한다."""
-    zone_map = {z.zone_id: z.name for z in zones}
     status = CurrentStatus(
         source=source_id,
         frame_number=frame_number,
         active_track_count=active_track_count,
         zone_occupancy=[
             CurrentZoneStatus(
-                zone_id=zone_id,
-                zone_name=zone_map.get(zone_id, zone_id),
-                current_count=count,
-                risk_level="HIGH" if count > 0 else "NORMAL",
+                zone_id=zone.zone_id,
+                zone_name=zone.name,
+                current_count=zone_occupancy.get(zone.zone_id, 0),
+                risk_level=(
+                    "HIGH"
+                    if zone.zone_type in {"danger", "restricted"}
+                    and zone_occupancy.get(zone.zone_id, 0) > 0
+                    else "NORMAL"
+                ),
             )
-            for zone_id, count in zone_occupancy.items()
+            for zone in zones
         ],
         updated_at=datetime.now(timezone.utc).astimezone().isoformat(),
     )
@@ -557,6 +608,19 @@ def main() -> None:
         "--video",
         default="data/videos/test.mp4",
         help="[레거시] 파일 영상 경로. --source-type file 일 때 --source 미지정 시 사용.",
+    )
+    parser.add_argument(
+        "--file-repeat-count",
+        type=int,
+        default=1,
+        help="파일 입력 전체를 모델 재로딩 없이 반복할 횟수. 기본값 1.",
+    )
+    parser.add_argument(
+        "--file-playlist",
+        nargs="+",
+        default=None,
+        metavar="VIDEO",
+        help="모델을 재로딩하지 않고 순서대로 처리할 영상 파일 목록.",
     )
 
     # 출력
@@ -677,6 +741,12 @@ def main() -> None:
         default=75,
         help="Live Frame JPEG quality (0~100). 기본값 75 (권장 70~80).",
     )
+    parser.add_argument(
+        "--status-update-interval-sec",
+        type=float,
+        default=_STATUS_UPDATE_INTERVAL_SEC,
+        help="CurrentStatus 갱신 간격(입력 영상 시간 기준 초). 기본값 2.0.",
+    )
 
     # Zone
     parser.add_argument(
@@ -776,6 +846,7 @@ def main() -> None:
         live_frame_enabled=args.live_frame_enabled,
         live_frame_fps=args.live_frame_fps,
         live_frame_quality=args.live_frame_quality,
+        status_update_interval_sec=args.status_update_interval_sec,
         fall_detection_enabled=args.fall_detection_enabled,
         fall_config_path=args.fall_config,
         fall_model_path=args.fall_model_path,
@@ -1036,7 +1107,8 @@ def _build_source(args) -> InputSource:
             device = int(args.source) if args.source is not None else 0
         except ValueError:
             raise ValueError(
-                f"--source-type webcam 사용 시 --source는 정수여야 합니다. 받은 값: {args.source!r}"
+                "--source-type webcam 사용 시 --source는 정수여야 합니다. "
+                f"받은 값: {args.source!r}"
             )
         LOGGER.info("웹캠 입력 선택: device=%d", device)
         return WebcamSource(device=device, width=args.width, height=args.height)
@@ -1087,9 +1159,17 @@ def _build_source(args) -> InputSource:
         )
 
     # file (default)
+    playlist = getattr(args, "file_playlist", None)
+    repeat_count = getattr(args, "file_repeat_count", 1)
+    if playlist:
+        if args.source:
+            raise ValueError("--file-playlist와 --source는 함께 사용할 수 없습니다.")
+        LOGGER.info("파일 플레이리스트 입력 선택: %d개", len(playlist))
+        return FilePlaylistSource(paths=playlist, repeat_count=repeat_count)
+
     path = args.source if args.source else args.video
     LOGGER.info("파일 영상 입력 선택: %s", path)
-    return FileVideoSource(path=path)
+    return FileVideoSource(path=path, repeat_count=repeat_count)
 
 
 if __name__ == "__main__":
