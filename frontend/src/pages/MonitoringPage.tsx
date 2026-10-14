@@ -39,7 +39,7 @@ function mergeConfiguredZones(configured: Zone[], current: ZoneStatus[]): ZoneSt
         zone_name: zone.zone_name,
         zone_type: zone.zone_type,
         current_count: occupancy?.current_count ?? 0,
-        risk_level: occupancy?.risk_level ?? (zone.zone_type === "danger" ? "HIGH" : "NORMAL"),
+        risk_level: occupancy?.risk_level ?? "NORMAL",
       } as ZoneStatus;
     }),
     ...current.filter((zone) => !configuredIds.has(zone.zone_id)),

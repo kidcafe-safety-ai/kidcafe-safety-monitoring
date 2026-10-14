@@ -8,6 +8,7 @@ import {
 import { getZones } from "../api/zoneSettingsApi";
 import type { DashboardSummary, SafetyEvent } from "../types/event";
 import type { CurrentStatus } from "../types/status";
+import type { Zone } from "../types/zoneSettings";
 import MonitoringPage from "./MonitoringPage";
 
 vi.mock("../api/eventsApi", () => ({
@@ -42,9 +43,9 @@ vi.mock("../components/RecentEventList", () => ({
 }));
 
 vi.mock("../components/ZoneStatusPanel", () => ({
-  default: ({ zones }: { zones: { zone_id: string; current_count: number }[] }) => (
+  default: ({ zones }: { zones: { zone_id: string; current_count: number; risk_level?: string }[] }) => (
     <div data-testid="zone-status-panel">
-      {zones.map((zone) => `${zone.zone_id}:${zone.current_count}`).join(",")}
+      {zones.map((zone) => `${zone.zone_id}:${zone.current_count}:${zone.risk_level}`).join(",")}
     </div>
   ),
 }));
@@ -95,6 +96,17 @@ const currentStatus: CurrentStatus = {
   updated_at: "2026-08-24T00:00:00+09:00",
 };
 
+function dangerZone(zone_id: string): Zone {
+  return {
+    zone_id,
+    zone_name: zone_id,
+    type: "polygon",
+    zone_type: "danger",
+    points: [[0, 0], [1, 0], [0, 1]],
+    rules: { enter_alert: false, dwell_threshold_sec: 0 },
+  };
+}
+
 describe("MonitoringPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -106,7 +118,7 @@ describe("MonitoringPage", () => {
     });
   });
 
-  it("shows every configured zone at zero and accepts a later shutdown status", async () => {
+  it("shows unoccupied danger zones as 0 people and NORMAL after startup and shutdown", async () => {
     vi.mocked(getDashboardSummary).mockResolvedValue(summaryResponse(summary));
     vi.mocked(getRecentEvents).mockResolvedValue(eventsResponse([]));
     vi.mocked(getCurrentStatus)
@@ -122,22 +134,41 @@ describe("MonitoringPage", () => {
       data: {
         version: "sha256:test",
         updated_at: "2026-08-24T00:00:00Z",
-        zones: ["a", "b"].map((zone_id) => ({
-          zone_id, zone_name: zone_id, type: "polygon" as const,
-          zone_type: "danger" as const,
-          points: [[0, 0], [1, 0], [0, 1]] as [number, number][],
-          rules: { enter_alert: false, dwell_threshold_sec: 0 },
-        })),
+        zones: ["a", "b"].map(dangerZone),
       },
       message: null,
     });
 
     render(<MonitoringPage />);
     await act(async () => { await Promise.resolve(); });
-    expect(screen.getByTestId("zone-status-panel")).toHaveTextContent("a:0,b:0");
+    expect(screen.getByTestId("zone-status-panel")).toHaveTextContent("a:0:NORMAL,b:0:NORMAL");
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
     expect(screen.getByText("현재 감지 인원").closest("section")).toHaveTextContent("0");
-    expect(screen.getByTestId("zone-status-panel")).toHaveTextContent("a:0,b:0");
+    expect(screen.getByTestId("zone-status-panel")).toHaveTextContent("a:0:NORMAL,b:0:NORMAL");
+  });
+
+  it("keeps a reported HIGH risk level when danger zone occupancy exists", async () => {
+    vi.mocked(getDashboardSummary).mockResolvedValue(summaryResponse(summary));
+    vi.mocked(getRecentEvents).mockResolvedValue(eventsResponse([]));
+    vi.mocked(getCurrentStatus).mockResolvedValue(currentStatusResponse({
+      ...currentStatus,
+      zone_occupancy: [{
+        zone_id: "a", zone_name: "a", current_count: 2, risk_level: "HIGH",
+      }],
+    }));
+    vi.mocked(getZones).mockResolvedValue({
+      status: "success",
+      data: {
+        version: "sha256:test",
+        updated_at: "2026-08-24T00:00:00Z",
+        zones: [dangerZone("a"), dangerZone("b")],
+      },
+      message: null,
+    });
+
+    render(<MonitoringPage />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByTestId("zone-status-panel")).toHaveTextContent("a:2:HIGH,b:0:NORMAL");
   });
 
   it("marks old KPI data as stale during a status outage and recovers", async () => {

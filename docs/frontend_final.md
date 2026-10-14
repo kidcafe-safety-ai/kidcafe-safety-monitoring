@@ -38,7 +38,7 @@ AbortSignal, 활성 요청 검사를 사용한다. 모니터링 첫 로드는 �
 
 - Monitoring: 처음에는 loading과 `-`를 표시한다. 정상적인 0명 상태는
   `updated_at: null`을 포함해 그대로 0으로 표시한다. 설정된 모든 Zone을
-  나열하고 status에 없는 Zone은 0명으로 표시한다. API 장애 시 이전 값이
+  나열하고 status에 없는 Zone은 종류와 관계없이 0명·NORMAL로 표시한다. API 장애 시 이전 값이
   남을 수 있으므로 오래된 데이터 경고를 띄우며 다음 성공 응답에서 회복한다.
 - Live Frame: JPEG 200은 원본 종횡비를 유지해 표시한다. 첫 204는 빈
   placeholder, 이전 프레임 이후 204는 만료 상태다. 서버 재시작이나 3초
