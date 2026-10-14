@@ -2,7 +2,7 @@
 
 > **작성일**: 2026-06-04  
 > **작성자**: 우민 (B / Backend FastAPI 담당)  
-> **최종 수정**: 2026-08-24 (Phase 4 구현·동결 결과 반영)
+> **최종 수정**: 2026-10-13 (Final Phase 입력 검증·CurrentStatus 최신 판단·DB 재생성, Vision AI #69 CurrentStatus·Live Frame 동작 반영)
 > **상태**: Phase 4 기간 조회·Zone 저장·Frontend 연동 구현 완료,
 > Backend·DB·RTSP 설정 동결
 > **관련 문서**: [`interfaces.md`](interfaces.md),
@@ -36,8 +36,11 @@ Phase 4 기간 조회·Zone 저장 구현 및 동결 결과를 구분해 정리�
 }
 ```
 
-FastAPI/Pydantic validation error는 기본 `422` 응답 형식을 그대로 사용한다.
-이번 문서 기준으로 `RequestValidationError` 공통 handler는 아직 추가하지 않는다.
+FastAPI/Pydantic validation error는 기본 `422` 응답 형식(`{"detail": [...]}`)을
+그대로 사용한다. Final Phase에서 `RequestValidationError` handler를 추가했지만
+형식은 바꾸지 않는다. 요청 값에 `NaN`·`Infinity`가 있으면 기본 handler가
+`detail[].input`을 JSON으로 직렬화하지 못해 500이 나가므로, 그 값만 문자열
+(`"nan"`, `"inf"`)로 바꿔 `422`를 보장한다.
 
 `GET /live/frame`은 binary endpoint이므로 위 공통 JSON wrapper의 예외다. `200`은 `image/jpeg` body를 그대로 반환하고, `204`는 body 없이 반환한다.
 
@@ -52,15 +55,22 @@ API 계층에서는 별도 Pydantic schema로 매핑하며, 기존 Event datacla
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `event_id` | `string` | 이벤트 UUID 또는 고유 ID |
+| `event_id` | `string` | 이벤트 UUID 또는 고유 ID, 빈 문자열 불가 |
 | `timestamp` | `string` | 영상 내 상대 시각, `HH:MM:SS.mmm` |
 | `event_type` | `EventType` | 이벤트 종류. 아래 Phase 3 활성 값 중 하나 |
 | `track_id` | `integer` | 사람 추적 ID |
-| `zone_id` | `string` | zone 식별자 |
-| `bbox` | `number[4]` | `[x1, y1, x2, y2]` pixel 좌표 |
-| `foot_point` | `number[2]` | `[cx, y2]` pixel 좌표 |
-| `frame_number` | `integer` | 이벤트 발생 프레임 번호 |
-| `video_source` | `string` | 입력 영상 경로 또는 소스 ID |
+| `zone_id` | `string` | zone 식별자, 빈 문자열 불가 (낙상은 `__global__`) |
+| `bbox` | `number[4]` | `[x1, y1, x2, y2]` pixel 좌표, 유한한 값 |
+| `foot_point` | `number[2]` | `[cx, y2]` pixel 좌표, 유한한 값 |
+| `frame_number` | `integer` | 이벤트 발생 프레임 번호, `>= 0` |
+| `video_source` | `string` | 입력 영상 경로 또는 소스 ID, 빈 문자열 불가 |
+
+모든 number 입력(`bbox`, `foot_point`, `confidence`, `event_confidence`,
+`cause.score`, `cause.evidence.*`)은 `NaN`·`Infinity`를 받지 않고 `422`를
+반환한다 (Final Phase). Python `json`은 이 값을 읽어들이기 때문에 저장되면
+조회 응답 직렬화가 실패해 `GET /events`·`/events/recent` 전체가 500이 된다.
+Vision AI의 `AsyncEventDispatcher`는 `422`를 실패로 보고
+`outputs/api_failed_events.jsonl`에 남긴다.
 
 Phase 3 활성 `EventType`은 `ENTER`, `DWELL`, `EXIT`, `ENTER_RESTRICTED`,
 `DANGER_ZONE_DWELL`, `FALL_SUSPECT`다. 기존 세 타입은 그대로 유지한다.
@@ -125,8 +135,41 @@ Event는 `events` 테이블에 누적 저장하고, Current Status는 `source`�
 Phase 3에서도 `CurrentStatus.risk_level`은 `NORMAL | HIGH`를 유지한다.
 `LOW | MEDIUM | HIGH`는 `risk_level`의 확장이 아니라 Frontend `SafetyEvent.severity` 파생 표시값이다 (`docs/interfaces.md` Severity 정책 참조).
 
+Vision AI가 보내는 `zone_occupancy` 기준 (Final Phase, PR #69):
+
+- 설정된 Zone을 인원과 관계없이 모두 포함한다. 인원이 없으면 `current_count=0`,
+  `risk_level="NORMAL"`이다.
+- `risk_level`은 `zone_type`이 `danger` 또는 `restricted`이고 `current_count > 0`일
+  때만 `HIGH`다. `play`·`exit` Zone은 인원이 있어도 `NORMAL`이다. 이전에는
+  `current_count > 0`이면 Zone 종류와 관계없이 `HIGH`였다. Dashboard의 "위험구역
+  체류 인원"은 `risk_level == "HIGH"`인 Zone의 `current_count` 합계다.
+- 실행이 끝나면 `active_track_count=0`과 모든 Zone `current_count=0`, `NORMAL`을 한 번
+  더 보낸다.
+- 전송 간격은 입력 영상 시간 기준이며 기본 2초다(`--status-update-interval-sec`).
+
+Backend는 이 값을 검증·저장만 하고 `risk_level`을 다시 계산하지 않는다.
+
 `PUT /status/current` 요청 body에 `updated_at`이 있으면 그대로 저장한다.
+단, 아래 형식의 timezone 포함 ISO 8601이어야 하며 아니면 `422`다 (Final Phase).
+
+```text
+YYYY-MM-DD(T| )HH:MM[:SS[.fff|.ffffff]](Z|+HH:MM|-HH:MM)
+```
+
+허용 예: `2026-10-12T10:00:00+09:00`, `2026-10-12T01:00:00Z`,
+`2026-10-12T10:00:00.123456+09:00`. 거부 예: `2026-10-12T10:00:00`(timezone 없음),
+`2026-10-12T10:00:00+09:00:30`(초 단위 offset), `2026-10-12X10:00:00Z`(구분자),
+`2026-10-12T10:00:00.1+09:00`(소수점 1자리), `2026-02-30T10:00:00+09:00`(없는 날짜).
+Python `fromisoformat()`과 정렬에 쓰는 SQLite `julianday()`가 모두 해석하는 범위로
+제한한 것이다. Vision AI가 보내는 `datetime.isoformat()` 값은 모두 이 형식이다.
 `updated_at`이 없으면 Backend 수신 시각을 timezone-aware ISO 문자열로 생성해 저장한다.
+`GET /status/current`는 source별 row 중 `updated_at`이 가장 늦은 row를 반환한다.
+source마다 offset이 달라도 맞게 고르도록 문자열이 아니라 SQLite
+`julianday(updated_at)`로 비교한다 (Final Phase). 이전에 저장된, 파싱할 수 없는
+`updated_at` row는 가장 뒤로 밀린다. 영상 전환·playlist처럼 source가 바뀌면 이전
+source row는 남아 있지만 새 source가 최신이므로 응답에 영향을 주지 않는다.
+실행 종료 시 Vision AI가 `active_track_count=0`, 각 Zone `current_count=0`으로
+보내면 그 값이 최신 상태가 된다.
 저장된 current status가 하나도 없는 경우에만 `GET /status/current`에서 `updated_at: null`을 반환한다.
 이 기준은 `current_status.updated_at`에만 적용하며, 기존 `events.created_at`은 SQLite `CURRENT_TIMESTAMP`를 유지한다.
 
@@ -524,6 +567,9 @@ API 응답에서는 `zone_name`을 보장한다.
 기본 DB 경로는 프로젝트 루트 기준 `outputs/kidcafe_events.db`다.
 환경변수 `KIDCAFE_DB_PATH`가 있으면 해당 경로를 사용한다.
 DB 경로는 모듈 import 시점이 아니라 connection 생성 또는 `init_db` 실행 시점에 읽는다.
+connection을 열 때 DB 파일이 없으면 아래 schema를 다시 만든다 (Final Phase). API
+실행 중 DB 파일을 지우거나 `outputs/`를 비워도 재시작 없이 빈 DB로 계속 동작한다.
+백업·복원·초기화 절차는 [`backend_final.md`](backend_final.md)를 따른다.
 
 `events` 테이블:
 
@@ -648,8 +694,10 @@ Content-Type: image/jpeg
 - Body: JPEG binary
 - Content-Type: `image/jpeg`
 - 최대 크기: 1 MiB
-- 업로드 주기: 1-2 FPS
-- 해상도: 640×480, JPEG quality 70-80
+- 업로드 주기: 기본 1.5 FPS (`--live-frame-fps`). 시연용 값은 CLI로 명시하고 기본값은 바꾸지 않는다.
+- 해상도: 최대 640×480, 원본 종횡비 유지. 이보다 작은 영상은 확대하지 않는다 (Final Phase, PR #69).
+  Backend는 해상도를 검사하지 않고 1 MiB 제한만 적용한다.
+- JPEG quality: 기본 75 (권장 70-80)
 
 **응답**
 
