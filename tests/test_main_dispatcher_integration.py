@@ -282,6 +282,54 @@ class TestDispatcherWiring:
             main_module.AuxiliaryFallModel.assert_not_called()
             main_module.FallPipeline.assert_not_called()
 
+    def test_file_boundary_resets_source_frame_number_but_keeps_status_interval(self):
+        patcher, _, mock_event_manager = _patch_pipeline_internals([])
+        mock_dispatcher = MagicMock()
+        mock_live_frame_dispatcher = MagicMock()
+
+        with patcher, patch.object(
+            main_module, "AsyncEventDispatcher", return_value=mock_dispatcher
+        ), patch.object(
+            main_module, "LiveFrameClient", return_value=MagicMock()
+        ), patch.object(
+            main_module,
+            "LiveFrameDispatcher",
+            return_value=mock_live_frame_dispatcher,
+        ):
+            run_pipeline_from_source(
+                source=_make_switching_source(),
+                zones_path="unused.json",
+                api_url="http://localhost:8000",
+                live_frame_enabled=True,
+                status_update_interval_sec=0.01,
+            )
+
+            tracker_calls = main_module.ByteTracker.return_value.update.call_args_list
+            assert [call.args[1:] for call in tracker_calls] == [
+                (0, "first.mp4"),
+                (0, "second.mp4"),
+            ]
+            assert [
+                call.kwargs["frame_number"]
+                for call in mock_event_manager.process.call_args_list
+            ] == [0, 0]
+            assert [
+                call.kwargs["frame_number"]
+                for call in mock_dispatcher.update_live_frame.call_args_list
+            ] == [0, 0]
+
+            status_calls = mock_dispatcher.update_current_status.call_args_list
+            assert [call.args[0]["source"] for call in status_calls] == [
+                "first.mp4",
+                "second.mp4",
+                "second.mp4",
+            ]
+            assert [call.args[0]["frame_number"] for call in status_calls] == [
+                0,
+                0,
+                0,
+            ]
+
     def test_live_frame_is_delegated_through_dispatcher(self):
         """LiveFrameClient/LiveFrameDispatcher도 mock 처리해 실제 daemon
 

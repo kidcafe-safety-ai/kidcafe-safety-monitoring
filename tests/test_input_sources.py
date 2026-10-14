@@ -299,7 +299,7 @@ class TestFilePlaylistSource:
         ]
         assert source.cycle_index == 3
 
-    def test_fails_when_next_file_cannot_be_opened(self, monkeypatch):
+    def test_rejects_unopenable_file_before_playback(self, monkeypatch):
         captures = {
             "first.mp4": FakeFileCapture([_frame(1)]),
             "missing.mp4": FakeFileCapture([], opened=False),
@@ -308,18 +308,17 @@ class TestFilePlaylistSource:
             "src.input.file_source.cv2.VideoCapture", captures.__getitem__
         )
         source = FilePlaylistSource(["first.mp4", "missing.mp4"])
-        source.open()
-        assert source.read()[0] is True
 
         with pytest.raises(RuntimeError, match="missing.mp4"):
-            source.read()
+            source.open()
+        assert captures["first.mp4"].released is True
         assert captures["missing.mp4"].released is True
 
     @pytest.mark.parametrize(
         "second_kwargs",
         [{"fps": 25.0}, {"width": 4}, {"height": 4}],
     )
-    def test_rejects_format_change_between_files(
+    def test_rejects_format_change_before_playback(
         self, monkeypatch, second_kwargs
     ):
         captures = {
@@ -330,11 +329,10 @@ class TestFilePlaylistSource:
             "src.input.file_source.cv2.VideoCapture", captures.__getitem__
         )
         source = FilePlaylistSource(["first.mp4", "second.mp4"])
-        source.open()
-        assert source.read()[0] is True
 
         with pytest.raises(ValueError, match="형식이 첫 파일과 다릅니다"):
-            source.read()
+            source.open()
+        assert captures["first.mp4"].released is True
         assert captures["second.mp4"].released is True
 
 

@@ -95,7 +95,7 @@ class FilePlaylistSource(InputSource):
     """여러 원본 영상 파일을 하나의 입력처럼 순서대로 읽는 소스.
 
     출력 영상 writer가 실행 중 해상도/FPS를 바꾸지 못하므로 첫 파일과 형식이
-    다른 파일은 전환 시점에 명확한 오류로 중단한다. 모델은 상위 파이프라인에서
+    다른 파일은 처리 시작 전에 명확한 오류로 중단한다. 모델은 상위 파이프라인에서
     한 번만 생성되며, ``cycle_index`` 변경을 기준으로 상태만 초기화한다.
     """
 
@@ -120,6 +120,43 @@ class FilePlaylistSource(InputSource):
         self._repeat_index = 0
         self._cycle_index = 0
         self._open_current(validate_format=False)
+        try:
+            self._validate_remaining_files()
+        except Exception:
+            self.release()
+            raise
+
+    def _read_format(self, cap: cv2.VideoCapture) -> Tuple[float, int, int]:
+        raw_fps = cap.get(cv2.CAP_PROP_FPS)
+        fps = raw_fps if raw_fps > 0 else 30.0
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        return fps, width, height
+
+    def _validate_format(self, path: str, fps: float, width: int, height: int) -> None:
+        if (
+            width != self._width
+            or height != self._height
+            or abs(fps - self._fps) > 0.01
+        ):
+            raise ValueError(
+                f"플레이리스트 영상 형식이 첫 파일과 다릅니다: {path} "
+                f"({width}x{height}, {fps:.3f} FPS; expected "
+                f"{self._width}x{self._height}, {self._fps:.3f} FPS)"
+            )
+
+    def _validate_remaining_files(self) -> None:
+        """첫 frame 처리 전에 나머지 파일의 접근성과 형식을 검사한다."""
+        for path in self._paths[1:]:
+            cap = cv2.VideoCapture(path)
+            if not cap.isOpened():
+                cap.release()
+                raise RuntimeError(f"영상 파일을 열 수 없습니다: {path}")
+            try:
+                fps, width, height = self._read_format(cap)
+                self._validate_format(path, fps, width, height)
+            finally:
+                cap.release()
 
     def _open_current(self, *, validate_format: bool) -> None:
         path = self._paths[self._playlist_index]
@@ -128,21 +165,13 @@ class FilePlaylistSource(InputSource):
             cap.release()
             raise RuntimeError(f"영상 파일을 열 수 없습니다: {path}")
 
-        raw_fps = cap.get(cv2.CAP_PROP_FPS)
-        fps = raw_fps if raw_fps > 0 else 30.0
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        if validate_format and (
-            width != self._width
-            or height != self._height
-            or abs(fps - self._fps) > 0.01
-        ):
-            cap.release()
-            raise ValueError(
-                f"플레이리스트 영상 형식이 첫 파일과 다릅니다: {path} "
-                f"({width}x{height}, {fps:.3f} FPS; expected "
-                f"{self._width}x{self._height}, {self._fps:.3f} FPS)"
-            )
+        fps, width, height = self._read_format(cap)
+        if validate_format:
+            try:
+                self._validate_format(path, fps, width, height)
+            except ValueError:
+                cap.release()
+                raise
 
         self._cap = cap
         if not validate_format:

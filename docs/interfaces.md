@@ -35,6 +35,9 @@ class TrackingResult:
 - 형식: `HH:MM:SS.mmm`
 - 의미: 영상 내 상대 시각 (시스템 시간 아님)
 - 계산: `frame_number / fps`
+- 파일 반복·playlist에서는 각 원본 영상 또는 반복 회차가 시작될 때
+  `frame_number=0`부터 다시 시작한다. `video_source`와 timestamp는 항상 같은
+  원본 영상의 시간축을 가리킨다.
 - fps는 입력 영상의 `cv2.CAP_PROP_FPS` 값 사용
 
 ---
@@ -105,6 +108,8 @@ Phase 4 정량 평가 후 cause attribution은 진단 범위로 분리했다.
 - 형식: `HH:MM:SS.mmm`
 - 의미: 영상 내 상대 시각 (시스템 시간 아님)
 - 계산: `frame_number / fps`
+- 파일 반복·playlist에서는 각 원본 영상 또는 반복 회차가 시작될 때
+  `frame_number=0`부터 다시 시작한다.
 
 ### 구조
 
@@ -352,8 +357,8 @@ CurrentStatus → 현재 상태, 최신 값 갱신 → PUT /status/current
   "active_track_count": 4,
   "zone_occupancy": [
     {
-      "zone_id": "exit_area",
-      "zone_name": "출입구 위험구역",
+      "zone_id": "restricted_area",
+      "zone_name": "출입 제한 구역",
       "current_count": 1,
       "risk_level": "HIGH"
     }
@@ -373,8 +378,8 @@ CurrentStatus → 현재 상태, 최신 값 갱신 → PUT /status/current
     "active_track_count": 4,
     "zone_occupancy": [
       {
-        "zone_id": "exit_area",
-        "zone_name": "출입구 위험구역",
+        "zone_id": "restricted_area",
+        "zone_name": "출입 제한 구역",
         "current_count": 1,
         "risk_level": "HIGH"
       }
@@ -414,8 +419,13 @@ MonitoringPage의 KPI와 목록은 다음 기준으로 매핑한다.
 - 최근 10분(`recent_10min_event_count`): Backend UTC 현재 시각 기준
 - 집계 기준 컬럼: `event.timestamp`(영상 상대 시각)가 아닌 `events.created_at`(저장 시각)
 - `today_event_count`, `recent_10min_event_count` 집계 실패 시 `0`이나 목록 길이로 대체하지 않는다.
+- `zone_occupancy`에는 설정된 전체 Zone을 포함하며, 사람이 없는 Zone도
+  `current_count=0`, `risk_level=NORMAL`로 전송한다.
+- `risk_level=HIGH`는 `zone_type`이 `danger` 또는 `restricted`이면서
+  `current_count > 0`일 때만 사용한다. `play`·`exit`은 인원이 있어도
+  `NORMAL`이며, 파이프라인 종료 상태는 모든 Zone이 `NORMAL`이다.
 
-> `risk_level`: `"NORMAL" | "HIGH"` — Phase 2 required 필드. Vision AI가 `PUT /status/current` 전송 시 반드시 포함하며, Phase 3에서도 이 값 그대로 유지한다.
+> `risk_level`: `"NORMAL" | "HIGH"` — Vision AI가 `PUT /status/current` 전송 시 반드시 포함하는 현재 위험 상태다.
 > `LOW | MEDIUM | HIGH`는 `risk_level`의 확장이 아니라 Frontend `SafetyEvent.severity` 파생 표시값이다 (본 문서 9절 Severity 정책 참조).
 
 ---

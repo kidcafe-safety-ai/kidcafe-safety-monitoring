@@ -45,7 +45,7 @@ File / Webcam / RTSP
 - 파일 반복·전환은 모델 수명주기와 분리한다. 모델은 한 번만 로드하고,
   Tracker·EventManager·FallPipeline의 영상별 상태만 초기화한다.
 - playlist의 모든 영상은 출력 writer 계약상 첫 영상과 같은 해상도와 FPS를
-  사용해야 한다.
+  사용해야 하며, 처리 시작 전에 전체 파일의 접근성과 형식을 검사한다.
 
 ## Detection·Tracking·Event 구조
 
@@ -113,10 +113,13 @@ RTSP 검증과 Cause 정확도 기준이 완료되지 않았으므로 낙상 감
 - 여러 파일은 `--file-playlist`에 지정한 순서대로 처리한다.
 - 파일 전환 또는 반복 경계에서 Tracker, EventManager, FallPipeline 상태를
   초기화한다. 이미 로드한 모델 인스턴스는 재사용한다.
-- 플레이리스트의 해상도와 FPS는 첫 파일과 같아야 한다. 형식이 다르거나 다음
-  파일을 열 수 없으면 원인이 포함된 오류로 중단한다.
+- 각 원본 영상과 반복 회차의 frame 번호는 0부터 다시 시작한다. Event timestamp와
+  Live Frame frame 번호는 현재 `video_source`의 영상 내 상대 시각을 나타낸다.
+- 플레이리스트의 해상도와 FPS는 첫 파일과 같아야 한다. 처리 시작 전에 전체
+  파일을 검사하고, 형식이 다르거나 파일을 열 수 없으면 원인이 포함된 오류로
+  중단한다.
 - CurrentStatus는 실제 처리 속도가 아닌 입력 영상의 frame/FPS 시간축으로
-  갱신한다.
+  갱신한다. 전송 간격은 playlist 전체의 연속 시간축으로 계산한다.
 - 파이프라인 종료 시 모든 구역을 `current_count=0`, `risk_level=NORMAL`로 만든
   최종 상태를 전송한 뒤 dispatcher를 닫는다.
 - Live Frame은 원본 종횡비를 유지해 최대 640×480 안으로 축소하고 작은 영상은
@@ -174,6 +177,7 @@ python -m src.main \
 - 파일 반복 순서와 전체 frame 수
 - 되감기 실패 시 명확한 오류 처리
 - 플레이리스트 순서, 반복, 파일 열기 실패, FPS·해상도 불일치
+- 영상별 Event·Live Frame frame 번호 및 timestamp 시간축 초기화
 - 영상 경계의 Tracker·EventManager·FallPipeline 초기화와 모델 재사용
 - 구성된 모든 구역의 CurrentStatus 포함 및 위험 구역 risk 정책
 - 종료 시 0명/NORMAL 상태 전송
@@ -194,7 +198,7 @@ python -m src.main \
 
 - 입력·Live Frame 변경 관련 테스트: 14 passed
 - 입력·Live Frame 전체 회귀: 60 passed, 2 skipped
-- Main dispatcher 통합 테스트: 11 passed
+- Main dispatcher 통합 테스트: 12 passed
 - 실제 영상 playlist 경계 전환: 통과
 - 실제 영상 2회 반복: 40/40 frame 통과
 - Ruff 및 Python 3.10 문법 검사: 통과
@@ -206,6 +210,8 @@ clone 재현 결과는 세 역할 PR 병합 후 최종 릴리스 기록에 남�
 
 - 파일 반복과 다중 영상 playlist를 모델 재로딩 없이 지원한다.
 - 입력 경계에서 Tracker·EventManager·FallPipeline 상태를 초기화한다.
+- Event·Tracking·Live Frame의 frame 번호를 각 원본 영상 기준으로 초기화한다.
+- playlist 전체 파일의 접근성과 형식을 처리 전에 검증한다.
 - Live Frame의 종횡비를 보존하고 작은 frame을 확대하지 않는다.
 - CurrentStatus 갱신 주기를 입력 영상 시간축에 맞춘다.
 - 종료 시 구성된 모든 Zone의 상태를 `0명/NORMAL`로 초기화한다.

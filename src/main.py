@@ -294,8 +294,9 @@ def run_pipeline_from_source(
 
         pipeline_start = time.perf_counter()
         status_interval_frames = max(1, round(fps * status_update_interval_sec))
-        last_status_frame = -status_interval_frames
+        last_status_timeline_frame = -status_interval_frames
         source_cycle_index = getattr(source, "cycle_index", 0)
+        cycle_start_timeline_frame = 0
 
         while True:
             frame_start = time.perf_counter()
@@ -304,8 +305,18 @@ def run_pipeline_from_source(
             if not ret or frame is None:
                 break
 
+            # 파일 입력의 전체 실행 시간축은 진행률·상태 전송 간격 계산에 유지하고,
+            # Event·Tracking·Live Frame의 frame_number는 각 원본 영상마다 0부터
+            # 다시 시작한다. 그래야 timestamp=frame_number/fps가 video_source 내부의
+            # 실제 상대 시각을 나타낸다. RTSP는 cycle 경계가 없으므로 기존 capture
+            # sequence 시간축을 그대로 사용한다.
+            timeline_frame_number = _resolve_source_frame_number(
+                source,
+                processed_frame_number,
+            )
             next_cycle_index = getattr(source, "cycle_index", source_cycle_index)
             if next_cycle_index != source_cycle_index:
+                cycle_start_timeline_frame = timeline_frame_number
                 tracker.reset()
                 event_manager = EventManager(zones=zones, fps=fps)
                 if fall_pipeline is not None:
@@ -340,12 +351,10 @@ def run_pipeline_from_source(
             # RTSPSource는 지연 누적을 막기 위해 오래된 frame을 drop하고 최신
             # frame만 전달한다. 이때 처리 loop 횟수를 safety/event 시간축으로
             # 사용하면 dwell/fall/cause 규칙 시간이 실제 카메라 시간보다 느려진다.
-            # 따라서 RTSP처럼 capture_sequence를 제공하는 source는 원본 캡처
-            # frame_number를 사용하고, file/webcam은 기존 처리 frame_number를
-            # 그대로 사용한다.
-            source_frame_number = _resolve_source_frame_number(
-                source,
-                processed_frame_number,
+            # RTSP는 원본 capture sequence를 사용하고, file/webcam은 처리 loop
+            # 시간축을 사용하되 file cycle 시작값을 빼 영상별 번호로 변환한다.
+            source_frame_number = (
+                timeline_frame_number - cycle_start_timeline_frame
             )
             result = tracker.update(frame, source_frame_number, source.source_id)
 
@@ -391,7 +400,10 @@ def run_pipeline_from_source(
                 for event in frame_events:
                     dispatcher.enqueue_event(event)
 
-                if source_frame_number - last_status_frame >= status_interval_frames:
+                if (
+                    timeline_frame_number - last_status_timeline_frame
+                    >= status_interval_frames
+                ):
                     status = _build_current_status(
                         source_id=source.source_id,
                         frame_number=source_frame_number,
@@ -400,7 +412,7 @@ def run_pipeline_from_source(
                         zones=zones,
                     )
                     dispatcher.update_current_status(status)
-                    last_status_frame = source_frame_number
+                    last_status_timeline_frame = timeline_frame_number
 
                 # 4-1. Live Frame 등록 (latest-only, worker가 비차단 전송)
                 # Dashboard Live View는 관리자가 바로 추적 상태를 확인할 수 있도록
@@ -489,12 +501,13 @@ def _resolve_source_frame_number(
     source: InputSource,
     processed_frame_number: int,
 ) -> int:
-    """안전 규칙에 사용할 입력 source 기준 frame_number를 반환한다.
+    """입력의 연속 실행 시간축에 사용할 frame_number를 반환한다.
 
     FileVideoSource/WebcamSource는 read()마다 순차 처리되므로 처리 loop 번호가
-    source frame_number와 같다. RTSPSource는 최신 프레임 유지를 위해 처리되지
-    않은 오래된 프레임을 버릴 수 있으므로, read()로 전달된 frame의 원본 캡처
-    sequence를 우선 사용한다.
+    연속 실행 시간축과 같다. 파일 반복·playlist의 원본 영상별 frame_number는
+    호출부에서 cycle 시작값을 빼서 계산한다. RTSPSource는 최신 프레임 유지를 위해
+    처리되지 않은 오래된 프레임을 버릴 수 있으므로, read()로 전달된 frame의 원본
+    캡처 sequence를 우선 사용한다.
     """
 
     metadata_getter = getattr(source, "get_last_frame_metadata", None)
