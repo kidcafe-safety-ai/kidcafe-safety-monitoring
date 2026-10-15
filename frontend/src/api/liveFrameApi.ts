@@ -69,9 +69,18 @@ export async function getLiveFrame(options?: {
     throw new Error(`Live frame request failed: ${response.status}`);
   }
 
+  if (!response.headers.get("Content-Type")?.toLowerCase().startsWith("image/jpeg")) {
+    throw new Error("Live frame response was not JPEG");
+  }
+
+  const blob = await response.blob();
+  if (blob.size === 0) {
+    throw new Error("Live frame response was empty");
+  }
+
   return {
     status: "live",
-    blob: await response.blob(),
+    blob,
     metadata: readFrameMetadata(response),
   };
 }

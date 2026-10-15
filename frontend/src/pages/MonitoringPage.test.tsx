@@ -5,8 +5,10 @@ import {
   getDashboardSummary,
   getRecentEvents,
 } from "../api/eventsApi";
+import { getZones } from "../api/zoneSettingsApi";
 import type { DashboardSummary, SafetyEvent } from "../types/event";
 import type { CurrentStatus } from "../types/status";
+import type { Zone } from "../types/zoneSettings";
 import MonitoringPage from "./MonitoringPage";
 
 vi.mock("../api/eventsApi", () => ({
@@ -14,6 +16,10 @@ vi.mock("../api/eventsApi", () => ({
   getCurrentStatus: vi.fn(),
   getDashboardSummary: vi.fn(),
   getRecentEvents: vi.fn(),
+}));
+
+vi.mock("../api/zoneSettingsApi", () => ({
+  getZones: vi.fn(),
 }));
 
 vi.mock("../components/LiveFrameView", () => ({
@@ -37,7 +43,11 @@ vi.mock("../components/RecentEventList", () => ({
 }));
 
 vi.mock("../components/ZoneStatusPanel", () => ({
-  default: () => <div data-testid="zone-status-panel" />,
+  default: ({ zones }: { zones: { zone_id: string; current_count: number; risk_level?: string }[] }) => (
+    <div data-testid="zone-status-panel">
+      {zones.map((zone) => `${zone.zone_id}:${zone.current_count}:${zone.risk_level}`).join(",")}
+    </div>
+  ),
 }));
 
 const POLLING_REQUEST_TIMEOUT_MS = 10000;
@@ -86,9 +96,99 @@ const currentStatus: CurrentStatus = {
   updated_at: "2026-08-24T00:00:00+09:00",
 };
 
+function dangerZone(zone_id: string): Zone {
+  return {
+    zone_id,
+    zone_name: zone_id,
+    type: "polygon",
+    zone_type: "danger",
+    points: [[0, 0], [1, 0], [0, 1]],
+    rules: { enter_alert: false, dwell_threshold_sec: 0 },
+  };
+}
+
 describe("MonitoringPage", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.useFakeTimers();
+    vi.mocked(getZones).mockResolvedValue({
+      status: "success",
+      data: { version: "sha256:test", updated_at: "2026-08-24T00:00:00Z", zones: [] },
+      message: null,
+    });
+  });
+
+  it("shows unoccupied danger zones as 0 people and NORMAL after startup and shutdown", async () => {
+    vi.mocked(getDashboardSummary).mockResolvedValue(summaryResponse(summary));
+    vi.mocked(getRecentEvents).mockResolvedValue(eventsResponse([]));
+    vi.mocked(getCurrentStatus)
+      .mockResolvedValueOnce(currentStatusResponse(currentStatus))
+      .mockResolvedValue(currentStatusResponse({
+        ...currentStatus,
+        active_track_count: 0,
+        zone_occupancy: [],
+        updated_at: null,
+      }));
+    vi.mocked(getZones).mockResolvedValue({
+      status: "success",
+      data: {
+        version: "sha256:test",
+        updated_at: "2026-08-24T00:00:00Z",
+        zones: ["a", "b"].map(dangerZone),
+      },
+      message: null,
+    });
+
+    render(<MonitoringPage />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByTestId("zone-status-panel")).toHaveTextContent("a:0:NORMAL,b:0:NORMAL");
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(screen.getByText("현재 감지 인원").closest("section")).toHaveTextContent("0");
+    expect(screen.getByTestId("zone-status-panel")).toHaveTextContent("a:0:NORMAL,b:0:NORMAL");
+  });
+
+  it("keeps a reported HIGH risk level when danger zone occupancy exists", async () => {
+    vi.mocked(getDashboardSummary).mockResolvedValue(summaryResponse(summary));
+    vi.mocked(getRecentEvents).mockResolvedValue(eventsResponse([]));
+    vi.mocked(getCurrentStatus).mockResolvedValue(currentStatusResponse({
+      ...currentStatus,
+      zone_occupancy: [{
+        zone_id: "a", zone_name: "a", current_count: 2, risk_level: "HIGH",
+      }],
+    }));
+    vi.mocked(getZones).mockResolvedValue({
+      status: "success",
+      data: {
+        version: "sha256:test",
+        updated_at: "2026-08-24T00:00:00Z",
+        zones: [dangerZone("a"), dangerZone("b")],
+      },
+      message: null,
+    });
+
+    render(<MonitoringPage />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByTestId("zone-status-panel")).toHaveTextContent("a:2:HIGH,b:0:NORMAL");
+  });
+
+  it("marks old KPI data as stale during a status outage and recovers", async () => {
+    vi.mocked(getDashboardSummary).mockResolvedValue(summaryResponse(summary));
+    vi.mocked(getRecentEvents).mockResolvedValue(eventsResponse([]));
+    vi.mocked(getCurrentStatus)
+      .mockResolvedValueOnce(currentStatusResponse(currentStatus))
+      .mockResolvedValueOnce(currentStatusResponse(currentStatus))
+      .mockResolvedValueOnce({
+        status: "error", data: currentStatus, message: "offline",
+      })
+      .mockResolvedValue(currentStatusResponse({ ...currentStatus, active_track_count: 0 }));
+    render(<MonitoringPage />);
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(screen.getByText(/마지막 정상 응답의 오래된 데이터/)).toBeInTheDocument();
+    expect(screen.getByText("현재 감지 인원").closest("section")).toHaveTextContent("3");
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(screen.queryByText(/마지막 정상 응답의 오래된 데이터/)).not.toBeInTheDocument();
+    expect(screen.getByText("현재 감지 인원").closest("section")).toHaveTextContent("0");
   });
 
   afterEach(() => {

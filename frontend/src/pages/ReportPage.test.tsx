@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ApiResponse, EventListData } from "../api/eventsApi";
 import { getEventsPage } from "../api/eventsApi";
 import type { SafetyEvent } from "../types/event";
 import type { SeoulInclusiveDateRange } from "../utils/eventDateTime";
-import { loadAllEventsForReport } from "./ReportPage";
+import ReportPage, { loadAllEventsForReport } from "./ReportPage";
 
 vi.mock("../api/eventsApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/eventsApi")>();
@@ -59,6 +60,8 @@ const range: SeoulInclusiveDateRange = {
 
 describe("loadAllEventsForReport", () => {
   afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -127,5 +130,20 @@ describe("loadAllEventsForReport", () => {
       "Aborted",
     );
     expect(getEventsPage).not.toHaveBeenCalled();
+  });
+
+  it("times out a stalled report and allows a successful empty retry", async () => {
+    vi.useFakeTimers();
+    const getEventsPageMock = vi.mocked(getEventsPage);
+    getEventsPageMock
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockResolvedValueOnce(page([], 0, 0));
+    render(<ReportPage />);
+    fireEvent.click(screen.getByRole("button", { name: "안전 리포트 조회" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(30000); });
+    expect(screen.getByText(/리포트 조회 시간이 초과되었습니다/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "안전 리포트 조회" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByText("선택한 기간에 안전 이벤트가 없습니다.")).toBeInTheDocument();
   });
 });

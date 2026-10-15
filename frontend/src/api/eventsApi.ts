@@ -68,6 +68,7 @@ const STATUS_RISK_LEVELS: readonly CurrentRiskLevel[] = ["NORMAL", "HIGH"];
 const ZONE_TYPES: readonly ZoneType[] = ["exit", "play", "restricted", "danger"];
 const EVENT_CAUSE_TYPES = ["NEARBY_TRACK"] as const;
 export const RECENT_EVENT_LIMIT = 5;
+const MAX_HISTORY_PAGES = 20;
 
 const API_BASE_URL = getEnvValue(
   import.meta.env.VITE_API_BASE_URL,
@@ -834,18 +835,44 @@ export async function getEvents(options?: {
     return successResponse(mockEvents);
   }
 
-  const result = await loadApiData(
-    "/events",
-    normalizeSafetyEventsStrict,
-    [],
-    options,
-  );
+  try {
+    const firstData = await fetchApi<unknown>("/events", options);
+    // Older API fixtures returned an array; the deployed contract is paginated.
+    if (Array.isArray(firstData)) {
+      return successResponse(normalizeSafetyEventsStrict(firstData));
+    }
+    assertEventListData(firstData);
+    const firstPage = normalizeEventListDataStrict(firstData);
+    const events = [...firstPage.items];
+    const seen = new Set(events.map((event) => event.event_id));
+    let offset = firstPage.limit;
+    let pages = 1;
 
-  if (result.errorMessage !== null) {
-    return fallbackResponse(result.data, result.errorMessage);
+    while (offset < firstPage.total && pages < MAX_HISTORY_PAGES) {
+      if (options?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      const response = await getEventsPage({ limit: 500, offset }, options);
+      if (response.status === "error") {
+        throw new Error(response.message ?? "Event page request failed");
+      }
+      const page = response.data;
+      if (page.total !== firstPage.total || page.count === 0) {
+        throw new Error("Event list changed during pagination");
+      }
+      page.items.forEach((event) => {
+        if (seen.has(event.event_id)) return;
+        seen.add(event.event_id);
+        events.push(event);
+      });
+      offset += page.limit;
+      pages += 1;
+    }
+    if (events.length !== firstPage.total || offset < firstPage.total) {
+      throw new Error("Event list changed during pagination");
+    }
+    return successResponse(events);
+  } catch (error) {
+    return fallbackResponse([], errorToMessage(error));
   }
-
-  return successResponse(result.data);
 }
 
 export async function getEventsPage(
