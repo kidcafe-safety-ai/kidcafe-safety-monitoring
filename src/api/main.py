@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import math
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exception_handlers import http_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -55,6 +59,30 @@ async def envelope_exception_handler(request: Request, exc: StarletteHTTPExcepti
     if isinstance(detail, dict):
         return JSONResponse(status_code=exc.status_code, content=detail)
     return await http_exception_handler(request, exc)
+
+
+def _replace_non_finite(value: Any) -> Any:
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, list):
+        return [_replace_non_finite(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _replace_non_finite(item) for key, item in value.items()}
+    return value
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """FastAPI 기본 422 형식(`{"detail": [...]}`)을 유지한다.
+
+    기본 handler는 `detail[].input`에 요청 값을 그대로 담는데, NaN·Infinity가
+    들어 있으면 JSON 직렬화가 실패해 422 대신 500이 나간다. 그런 값만 문자열
+    (`"nan"`, `"inf"`)로 바꿔 422를 보장한다.
+    """
+    return JSONResponse(
+        status_code=422,
+        content={"detail": _replace_non_finite(jsonable_encoder(exc.errors()))},
+    )
 
 
 app.include_router(health.router)

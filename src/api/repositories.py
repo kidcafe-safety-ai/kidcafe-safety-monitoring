@@ -196,12 +196,18 @@ def upsert_current_status(status: CurrentStatusCreate) -> Dict[str, Any]:
 
 
 def get_current_status() -> Dict[str, Any]:
+    """가장 최근에 갱신된 source의 상태를 반환한다.
+
+    `updated_at`은 source마다 offset이 다를 수 있다(`+09:00`, `Z` 등). 문자열
+    정렬은 offset을 무시하므로 `julianday()`로 절대 시각을 비교한다. 파싱할 수
+    없는 과거 row는 NULL이 되어 가장 뒤로 밀린다.
+    """
     with get_connection() as connection:
         row = connection.execute(
             """
             SELECT *
             FROM current_status
-            ORDER BY updated_at DESC, source ASC
+            ORDER BY julianday(updated_at) DESC, updated_at DESC, source ASC
             LIMIT 1
             """
         ).fetchone()
