@@ -13,8 +13,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 
 import src.main as main_module
-from src.common.types import Event
-from src.main import run_pipeline_from_source
+from src.common.types import Event, Zone
+from src.main import _build_current_status, run_pipeline_from_source
 
 
 def _make_mock_source(frame_count: int = 1):
@@ -25,11 +25,47 @@ def _make_mock_source(frame_count: int = 1):
     source.height = 480
     source.total_frames = frame_count
     source.source_id = "test-source"
+    source.cycle_index = 0
     source.read.side_effect = [(True, frame)] * frame_count + [(False, None)]
     return source
 
 
-def _patch_pipeline_internals(fake_events):
+def _make_switching_source():
+    """두 파일 경계를 한 번 통과하는 가벼운 입력 소스를 만든다."""
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+    class SwitchingSource:
+        fps = 30.0
+        width = 640
+        height = 480
+        total_frames = 2
+
+        def __init__(self):
+            self.index = 0
+            self.cycle_index = 0
+
+        @property
+        def source_id(self):
+            return "first.mp4" if self.cycle_index == 0 else "second.mp4"
+
+        def open(self):
+            pass
+
+        def read(self):
+            if self.index >= 2:
+                return False, None
+            if self.index == 1:
+                self.cycle_index = 1
+            self.index += 1
+            return True, frame
+
+        def release(self):
+            pass
+
+    return SwitchingSource()
+
+
+def _patch_pipeline_internals(fake_events, zones=None):
     """PoseTracker/zones/EventManager 등 무거운 의존성을 mock으로 교체한다."""
     mock_track = MagicMock(track_id=1, bbox=[10.0, 10.0, 50.0, 50.0])
     mock_tracker = MagicMock()
@@ -50,9 +86,12 @@ def _patch_pipeline_internals(fake_events):
         main_module,
         ByteTracker=MagicMock(return_value=mock_tracker),
         PoseTracker=MagicMock(return_value=mock_tracker),
-        load_zones=MagicMock(return_value=[]),
+        load_zones=MagicMock(return_value=zones or []),
         ZoneChecker=MagicMock(return_value=mock_checker),
         EventManager=MagicMock(return_value=mock_event_manager),
+        AuxiliaryFallModel=MagicMock(return_value=MagicMock(enabled=True)),
+        FallDetectorConfig=MagicMock(),
+        FallPipeline=MagicMock(return_value=MagicMock()),
         EventWriter=MagicMock(return_value=mock_writer),
         VideoOverlayWriter=MagicMock(return_value=mock_overlay_writer),
     ), mock_writer, mock_event_manager
@@ -68,6 +107,61 @@ def _make_fake_event() -> Event:
         frame_number=0,
         video_source="test-source",
     )
+
+
+def _danger_zone() -> Zone:
+    return Zone(
+        zone_id="danger_floor",
+        name="위험 구역",
+        type="polygon",
+        zone_type="danger",
+        points=[[0.1, 0.1], [0.5, 0.1], [0.5, 0.5]],
+    )
+
+
+def test_current_status_keeps_all_configured_zones_and_applies_risk_policy():
+    play_zone = Zone(
+        zone_id="play_floor",
+        name="놀이 구역",
+        type="polygon",
+        zone_type="play",
+        points=[[0.1, 0.1], [0.5, 0.1], [0.5, 0.5]],
+    )
+    empty_danger_zone = Zone(
+        zone_id="empty_danger_floor",
+        name="비어 있는 위험 구역",
+        type="polygon",
+        zone_type="danger",
+        points=[[0.2, 0.2], [0.3, 0.2], [0.3, 0.3]],
+    )
+    status = _build_current_status(
+        source_id="camera-1",
+        frame_number=10,
+        active_track_count=2,
+        zone_occupancy={"play_floor": 1, "danger_floor": 1},
+        zones=[play_zone, _danger_zone(), empty_danger_zone],
+    )
+
+    assert status["zone_occupancy"] == [
+        {
+            "zone_id": "play_floor",
+            "zone_name": "놀이 구역",
+            "current_count": 1,
+            "risk_level": "NORMAL",
+        },
+        {
+            "zone_id": "danger_floor",
+            "zone_name": "위험 구역",
+            "current_count": 1,
+            "risk_level": "HIGH",
+        },
+        {
+            "zone_id": "empty_danger_floor",
+            "zone_name": "비어 있는 위험 구역",
+            "current_count": 0,
+            "risk_level": "NORMAL",
+        },
+    ]
 
 
 class TestDispatcherWiring:
@@ -115,9 +209,24 @@ class TestDispatcherWiring:
         _, kwargs = mock_dispatcher_cls.call_args
         assert kwargs["failed_events_path"] == "outputs/run-1-failures.jsonl"
 
-    def test_current_status_is_registered_with_dispatcher(self, monkeypatch):
-        monkeypatch.setattr(main_module, "_STATUS_UPDATE_INTERVAL_SEC", 0.0)
+    def test_current_status_is_registered_with_dispatcher(self):
         patcher, _, _ = _patch_pipeline_internals([])
+        mock_dispatcher = MagicMock()
+
+        with patcher, patch.object(
+            main_module, "AsyncEventDispatcher", return_value=mock_dispatcher
+        ):
+            run_pipeline_from_source(
+                source=_make_mock_source(),
+                zones_path="unused.json",
+                api_url="http://localhost:8000",
+                status_update_interval_sec=0.01,
+            )
+
+        assert mock_dispatcher.update_current_status.call_count == 2
+
+    def test_final_status_clears_people_and_configured_zones(self):
+        patcher, _, _ = _patch_pipeline_internals([], zones=[_danger_zone()])
         mock_dispatcher = MagicMock()
 
         with patcher, patch.object(
@@ -129,7 +238,97 @@ class TestDispatcherWiring:
                 api_url="http://localhost:8000",
             )
 
-        mock_dispatcher.update_current_status.assert_called_once()
+        final_status = mock_dispatcher.update_current_status.call_args_list[-1].args[0]
+        assert final_status["active_track_count"] == 0
+        assert final_status["zone_occupancy"] == [
+            {
+                "zone_id": "danger_floor",
+                "zone_name": "위험 구역",
+                "current_count": 0,
+                "risk_level": "NORMAL",
+            }
+        ]
+
+    def test_file_boundary_resets_state_without_reloading_model(self):
+        patcher, _, _ = _patch_pipeline_internals([])
+        with patcher:
+            run_pipeline_from_source(
+                source=_make_switching_source(),
+                zones_path="unused.json",
+                fall_detection_enabled=True,
+                fall_model_path="fall.pt",
+            )
+
+            main_module.ByteTracker.assert_not_called()
+            main_module.PoseTracker.assert_called_once()
+            main_module.PoseTracker.return_value.reset.assert_called_once()
+            assert main_module.EventManager.call_count == 2
+            main_module.AuxiliaryFallModel.assert_called_once()
+            assert main_module.FallPipeline.call_count == 2
+
+    def test_file_boundary_resets_state_when_fall_detection_is_disabled(self):
+        patcher, _, _ = _patch_pipeline_internals([])
+        with patcher:
+            run_pipeline_from_source(
+                source=_make_switching_source(),
+                zones_path="unused.json",
+                fall_detection_enabled=False,
+            )
+
+            main_module.ByteTracker.assert_called_once()
+            main_module.ByteTracker.return_value.reset.assert_called_once()
+            main_module.PoseTracker.assert_not_called()
+            assert main_module.EventManager.call_count == 2
+            main_module.AuxiliaryFallModel.assert_not_called()
+            main_module.FallPipeline.assert_not_called()
+
+    def test_file_boundary_resets_source_frame_number_but_keeps_status_interval(self):
+        patcher, _, mock_event_manager = _patch_pipeline_internals([])
+        mock_dispatcher = MagicMock()
+        mock_live_frame_dispatcher = MagicMock()
+
+        with patcher, patch.object(
+            main_module, "AsyncEventDispatcher", return_value=mock_dispatcher
+        ), patch.object(
+            main_module, "LiveFrameClient", return_value=MagicMock()
+        ), patch.object(
+            main_module,
+            "LiveFrameDispatcher",
+            return_value=mock_live_frame_dispatcher,
+        ):
+            run_pipeline_from_source(
+                source=_make_switching_source(),
+                zones_path="unused.json",
+                api_url="http://localhost:8000",
+                live_frame_enabled=True,
+                status_update_interval_sec=0.01,
+            )
+
+            tracker_calls = main_module.ByteTracker.return_value.update.call_args_list
+            assert [call.args[1:] for call in tracker_calls] == [
+                (0, "first.mp4"),
+                (0, "second.mp4"),
+            ]
+            assert [
+                call.kwargs["frame_number"]
+                for call in mock_event_manager.process.call_args_list
+            ] == [0, 0]
+            assert [
+                call.kwargs["frame_number"]
+                for call in mock_dispatcher.update_live_frame.call_args_list
+            ] == [0, 0]
+
+            status_calls = mock_dispatcher.update_current_status.call_args_list
+            assert [call.args[0]["source"] for call in status_calls] == [
+                "first.mp4",
+                "second.mp4",
+                "second.mp4",
+            ]
+            assert [call.args[0]["frame_number"] for call in status_calls] == [
+                0,
+                0,
+                0,
+            ]
 
     def test_live_frame_is_delegated_through_dispatcher(self):
         """LiveFrameClient/LiveFrameDispatcher도 mock 처리해 실제 daemon

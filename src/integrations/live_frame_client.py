@@ -68,9 +68,21 @@ class LiveFrameClient:
         return True
 
     def _encode(self, frame: np.ndarray) -> Optional[bytes]:
-        resized = cv2.resize(frame, (_TARGET_WIDTH, _TARGET_HEIGHT))
+        height, width = frame.shape[:2]
+        if height <= 0 or width <= 0:
+            self._warn("JPEG 인코딩 실패: 빈 frame")
+            return None
+
+        scale = min(_TARGET_WIDTH / width, _TARGET_HEIGHT / height, 1.0)
+        if scale < 1.0:
+            target_size = (
+                max(1, round(width * scale)),
+                max(1, round(height * scale)),
+            )
+            frame = cv2.resize(frame, target_size, interpolation=cv2.INTER_AREA)
+
         ok, buffer = cv2.imencode(
-            ".jpg", resized, [cv2.IMWRITE_JPEG_QUALITY, self._quality]
+            ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, self._quality]
         )
         if not ok:
             self._warn("JPEG 인코딩 실패")
