@@ -101,8 +101,6 @@ docker compose up --build -d
 python scripts/api_smoke_test.py --base-url http://localhost:8000
 ```
 
-[대시보드](http://localhost:3000) · [API 문서](http://localhost:8000/docs) · [Health check](http://localhost:8000/health)
-
 ### 3. 영상 분석 실행
 
 직접 준비한 영상을 `data/videos/test.mp4`에 배치합니다.
