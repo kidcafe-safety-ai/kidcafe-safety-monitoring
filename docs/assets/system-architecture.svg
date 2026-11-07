@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="615" viewBox="0 0 1600 820" role="img" aria-labelledby="title desc">
+  <title id="title">KidCafe Safety AI system architecture</title>
+  <desc id="desc">System overview of video inputs, Vision AI processing, the FastAPI backend, persistent data, and the React dashboard.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#475569"/>
+    </marker>
+    <style>
+      .title { font: 700 40px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #64748b; }
+      .boundary { fill: #ffffff; stroke: #94a3b8; stroke-width: 1.5; stroke-dasharray: 7 7; }
+      .boundary-title { font: 700 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 1.1px; fill: #475569; }
+      .card { fill: #ffffff; stroke-width: 1.5; }
+      .card-title { font: 700 25px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .card-meta { font: 500 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #64748b; }
+      .section { font: 700 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: .8px; }
+      .item { font: 600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+      .detail { font: 500 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #64748b; }
+      .mono { font: 600 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #334155; }
+      .edge { fill: none; stroke: #475569; stroke-width: 2.5; marker-end: url(#arrow); }
+      .edge-bi { fill: none; stroke: #475569; stroke-width: 2.5; marker-start: url(#arrow); marker-end: url(#arrow); }
+      .edge-fallback { fill: none; stroke: #64748b; stroke-width: 2; stroke-dasharray: 6 5; marker-end: url(#arrow); }
+      .edge-label { font: 700 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+      .store-title { font: 700 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .store-meta { font: 500 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #64748b; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="880" fill="#f8fafc"/>
+
+  <!-- Header -->
+  <text x="56" y="58" class="title">KidCafe Safety AI</text>
+  <text x="56" y="88" class="subtitle">Real-time Vision Safety Monitoring · System Overview</text>
+  <line x1="56" y1="112" x2="1544" y2="112" stroke="#e2e8f0" stroke-width="1.5"/>
+
+  <!-- Runtime boundaries -->
+  <rect x="42" y="152" width="750" height="606" rx="16" class="boundary"/>
+  <rect x="820" y="152" width="738" height="606" rx="16" class="boundary"/>
+  <text x="72" y="181" class="boundary-title">HOST RUNTIME</text>
+  <text x="850" y="181" class="boundary-title">DOCKER COMPOSE</text>
+
+  <!-- Input sources -->
+  <rect x="72" y="250" width="220" height="286" rx="12" class="card" stroke="#cbd5e1"/>
+  <rect x="72" y="250" width="220" height="8" rx="4" fill="#64748b"/>
+  <text x="96" y="296" class="card-title">Video Sources</text>
+  <text x="96" y="321" class="card-meta">Local and network inputs</text>
+  <line x1="96" y1="341" x2="268" y2="341" stroke="#e2e8f0"/>
+  <text x="96" y="376" class="item">Video File · Playlist</text>
+  <text x="96" y="414" class="item">Webcam</text>
+  <text x="96" y="452" class="item">RTSP · IP Camera</text>
+
+  <!-- Vision service -->
+  <rect x="358" y="202" width="390" height="382" rx="12" class="card" stroke="#60a5fa"/>
+  <rect x="358" y="202" width="390" height="8" rx="4" fill="#2563eb"/>
+  <text x="382" y="248" class="card-title">Vision AI Service</text>
+  <text x="382" y="273" class="card-meta">Python inference runtime</text>
+
+  <text x="382" y="310" class="section" fill="#2563eb">PROCESSING PIPELINE</text>
+  <rect x="382" y="326" width="342" height="48" rx="7" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="400" y="356" class="item">Person Detection</text>
+  <text x="700" y="356" text-anchor="end" class="detail">YOLO</text>
+  <rect x="382" y="384" width="342" height="48" rx="7" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="400" y="414" class="item">Tracking</text>
+  <text x="700" y="414" text-anchor="end" class="detail">ByteTrack · PoseTracker</text>
+  <rect x="382" y="442" width="342" height="48" rx="7" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="400" y="472" class="item">Safety Analysis</text>
+  <text x="700" y="472" text-anchor="end" class="detail">Geofencing · Fall</text>
+  <rect x="382" y="500" width="342" height="56" rx="7" fill="#ffffff" stroke="#bfdbfe"/>
+  <text x="400" y="524" class="item">Result Dispatch</text>
+  <text x="400" y="544" class="detail">Asynchronous · non-blocking</text>
+
+  <!-- API service -->
+  <rect x="864" y="202" width="304" height="382" rx="12" class="card" stroke="#34d399"/>
+  <rect x="864" y="202" width="304" height="8" rx="4" fill="#059669"/>
+  <text x="888" y="248" class="card-title">Backend API</text>
+  <text x="888" y="273" class="card-meta">FastAPI service</text>
+  <text x="888" y="310" class="section" fill="#059669">SERVICE RESPONSIBILITIES</text>
+  <rect x="888" y="326" width="256" height="48" rx="7" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <text x="904" y="347" class="item">Event Ingestion</text>
+  <text x="904" y="366" class="detail">Validated event history</text>
+  <rect x="888" y="384" width="256" height="48" rx="7" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <text x="904" y="405" class="item">Current Status</text>
+  <text x="904" y="424" class="detail">Latest occupancy and risk</text>
+  <rect x="888" y="442" width="256" height="48" rx="7" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <text x="904" y="463" class="item">Live Frame Relay</text>
+  <text x="904" y="482" class="detail">Latest JPEG snapshot</text>
+  <rect x="888" y="500" width="256" height="48" rx="7" fill="#ffffff" stroke="#a7f3d0"/>
+  <text x="904" y="521" class="item">Zone Configuration</text>
+  <text x="904" y="540" class="detail">Versioned settings</text>
+
+  <!-- Dashboard client -->
+  <rect x="1270" y="250" width="250" height="286" rx="12" class="card" stroke="#a78bfa"/>
+  <rect x="1270" y="250" width="250" height="8" rx="4" fill="#7c3aed"/>
+  <text x="1294" y="296" class="card-title">Web Dashboard</text>
+  <text x="1294" y="321" class="card-meta">React application</text>
+  <line x1="1294" y1="341" x2="1496" y2="341" stroke="#ede9fe"/>
+  <text x="1294" y="376" class="item">Live Monitoring</text>
+  <text x="1294" y="414" class="item">Alerts · Events</text>
+  <text x="1294" y="452" class="item">Safety Report</text>
+  <text x="1294" y="490" class="item">Zone Settings</text>
+
+  <!-- Horizontal request/data paths -->
+  <path d="M292 393 H346" class="edge"/>
+  <text x="319" y="377" text-anchor="middle" class="edge-label">Frames</text>
+
+  <path d="M748 393 H852" class="edge"/>
+  <text x="800" y="366" text-anchor="middle" class="edge-label">HTTP API</text>
+
+  <path d="M1168 393 H1258" class="edge-bi"/>
+  <text x="1213" y="366" text-anchor="middle" class="edge-label">REST polling</text>
+
+  <!-- Local artifacts -->
+  <path d="M553 584 V616" class="edge-fallback"/>
+  <text x="568" y="607" class="detail">API failure</text>
+  <rect x="358" y="628" width="390" height="104" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="382" y="660" class="section" fill="#475569">FAILURE RECOVERY</text>
+  <text x="382" y="690" class="store-title">Failed Event Log</text>
+  <text x="382" y="714" class="store-meta">Event payloads preserved for recovery</text>
+
+  <!-- Backend data connections -->
+  <path d="M1016 584 V608 H922 V626" class="edge"/>
+  <path d="M1016 608 H1172 V626" class="edge"/>
+  <path d="M1016 608 H1422 V626" class="edge"/>
+
+  <!-- Stores -->
+  <rect x="850" y="628" width="214" height="104" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="874" y="662" class="store-title">Event &amp; Status Store</text>
+  <text x="874" y="687" class="store-meta">SQLite</text>
+  <text x="874" y="710" class="store-meta">Persistent</text>
+
+  <rect x="1082" y="628" width="224" height="104" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="1106" y="662" class="store-title">Zone Config Store</text>
+  <text x="1106" y="687" class="store-meta">Versioned JSON</text>
+  <text x="1106" y="710" class="store-meta">Persistent</text>
+
+  <rect x="1324" y="628" width="210" height="104" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-dasharray="5 4"/>
+  <text x="1348" y="662" class="store-title">Live Frame Cache</text>
+  <text x="1348" y="687" class="store-meta">Latest JPEG</text>
+  <text x="1348" y="710" class="store-meta">In-memory · expiring</text>
+</svg>

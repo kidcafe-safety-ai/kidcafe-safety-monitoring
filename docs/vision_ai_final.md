@@ -1,8 +1,10 @@
 # Vision AI 런타임 최종 운영 가이드
 
-> 담당: A — Vision AI·입력 처리·시스템 통합
+> 담당 영역: A — Technical PM·Vision AI·시스템 통합
 >
-> 기준: Final Phase 기능 동결 후보
+> 기준: `main` @ `9869277e` (애플리케이션 `v0.3.0`)
+>
+> 최종 수정: 2026-10-15
 >
 > 정책: 신규 모델·알고리즘을 추가하지 않고 기존 실행 경로를 안정화한다.
 
@@ -101,7 +103,7 @@ Cause·Tracking 평가에서는 Cause top-1 `3/8`, `cause=null` specificity `24/
 정한 Cause 채택 기준을 충족하지 못해 production association tracker는
 ByteTrack을 유지했다. 상세 낙상 평가와 최종 운영 제약은
 [`fall_evaluation.md`](fall_evaluation.md)와
-[`README.md`](../README.md#검증-범위와-알려진-제약)를 기준으로 한다.
+[`README.md`](../README.md#공개-범위와-실행-조건)를 기준으로 한다.
 
 이 수치는 통제된 성인 재연과 한 목표 카메라 구도에 한정된다. 장시간 정상 행동
 RTSP 검증과 Cause 정확도 기준이 완료되지 않았으므로 낙상 감지는 기본 비활성으로
@@ -169,8 +171,8 @@ python -m src.main \
 11. playlist 경계에서 이전 Track·Event·Fall 상태가 제거되는지 확인한다.
 12. 종료 후 모든 Zone이 `0명/NORMAL`인지 확인한다.
 
-최종 E2E는 A/B/C PR이 모두 병합된 `main`과 고정된 모델·영상·설정으로 한 번 더
-수행한다. 역할별 브랜치 결과를 최종 통합 결과로 대신하지 않는다.
+최종 E2E는 A/B/C 변경이 모두 병합된 `main`과 고정된 영상·설정으로 수행했으며,
+결과는 [`final_validation.md`](final_validation.md)에 기록했다.
 
 ## 검증 항목
 
@@ -194,17 +196,15 @@ python -m src.main \
 - `tests/test_async_event_dispatcher.py`
 - `tests/test_event_api_client.py`
 
-현재 A 변경에서 확인한 결과:
+최종 `main` 확인 결과:
 
-- 입력·Live Frame 변경 관련 테스트: 14 passed
-- 입력·Live Frame 전체 회귀: 60 passed, 2 skipped
-- Main dispatcher 통합 테스트: 12 passed
-- 실제 영상 playlist 경계 전환: 통과
-- 실제 영상 2회 반복: 40/40 frame 통과
-- Ruff 및 Python 3.10 문법 검사: 통과
+- GitHub Actions Backend lint·전체 pytest: 통과
+- GitHub Actions Frontend test·build: 통과
+- 실제 영상 2개 playlist 600 frame 및 경계 전환: 통과
+- Event·CurrentStatus·Live Frame·Dashboard 통합: 통과
+- 종료 후 전체 Zone 0명·NORMAL 상태: 통과
 
-전체 `flake8 src tests`, `pytest -q`, Frontend test·build, Docker E2E와 깨끗한
-clone 재현 결과는 세 역할 PR 병합 후 최종 릴리스 기록에 남긴다.
+명령, 환경과 관찰값은 [`final_validation.md`](final_validation.md)를 기준으로 한다.
 
 ## Final Phase A 변경 요약
 

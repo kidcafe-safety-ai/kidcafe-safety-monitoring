@@ -1,11 +1,14 @@
 # Backend 최종 기술 문서 (Final Phase)
 
-> **작성자**: 원우민 (B / Backend·Database·Docker)
-> **기준**: `v1.0.0-final` 대상 `main`
-> **최종 수정**: 2026-10-12
+> **담당 영역**: B — Backend·Database·Docker
+>
+> **기준**: `main` @ `9869277e` (애플리케이션 `v0.3.0`)
+>
+> **최종 수정**: 2026-10-15
+>
 > **관련 문서**: [`api_contract.md`](api_contract.md) (요청·응답 상세 계약),
 > [`interfaces.md`](interfaces.md), [`phase4_backend_freeze.md`](phase4_backend_freeze.md),
-> [`docker_phase_2_5.md`](docker_phase_2_5.md)
+> [`docker_phase_2_5.md`](docker_phase_2_5.md), [`final_validation.md`](final_validation.md)
 
 이 문서는 Backend를 처음 받는 사람이 실행·점검·운영할 수 있도록 최종 상태를
 한곳에 모은 것이다. 필드별 schema와 응답 예시는 `api_contract.md`가 기준이며 여기서는

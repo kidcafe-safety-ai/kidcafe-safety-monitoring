@@ -1,8 +1,10 @@
-# Final Phase Frontend·Dashboard 안정화
+# Frontend·Dashboard 운영 가이드
 
-기준 브랜치: `fix/final-dashboard-stability` (2026-10-12, `origin/main` 기준).
-기능 수정 종료일: 2026-10-13. Backend PR #67은 아직 미병합이며, 본 브랜치는
-Backend 파일을 포함하지 않는다.
+> **담당 영역**: C — Frontend·Dashboard·UX
+>
+> **기준**: `main` @ `9869277e` (애플리케이션 `v0.3.0`)
+>
+> **최종 수정**: 2026-10-15
 
 ## 화면과 데이터 출처
 
@@ -65,7 +67,7 @@ AbortSignal, 활성 요청 검사를 사용한다. 모니터링 첫 로드는 �
 
 ## 계약 확인과 남은 한계
 
-PR #67의 실제 `src/api/main.py`, `src/api/repositories.py`,
+최종 `main`의 `src/api/main.py`, `src/api/repositories.py`,
 `src/api/schemas.py`, `docs/api_contract.md`, `docs/interfaces.md`를
 확인했다. 422는 FastAPI detail 배열이며 명시적 409·500은
 `status/data/message` envelope다. 최신 status source는 timezone offset을
@@ -73,12 +75,10 @@ PR #67의 실제 `src/api/main.py`, `src/api/repositories.py`,
 Live Frame은 200 JPEG 또는 body 없는 204다. Report는 별도 엔드포인트가
 없다. Zone 저장은 version 충돌 409·검증 422·저장 실패 500이다.
 
-PR #67의 분리된 복사본에서 Backend 계약 테스트 24개를 실행했고, 실행 중인
-API에 Frontend 클라이언트를 직접 연결해 빈 status(0명·null), timezone 포함
-기간 조회, 설정 Zone, Live Frame 204, Zone 409·422를 확인했다. PR #67이
-main에 병합된 뒤 실제 배포 구성에서 offset이 다른 source 사이 최신 status,
-종료 직후 0명, 프레임 만료·API 재시작 후 204, `zone_name: null`,
-기간 경계의 `created_at`, Zone 500을 재검증해야 한다.
+자동화 테스트에서 빈 status(0명·null), timezone 포함 기간 조회, 설정 Zone,
+Live Frame 204, Zone 409·422 계약을 확인했다. 최종 `main`의 Docker 통합 실행에서는
+실제 Event·CurrentStatus·Live Frame과 Dashboard 표시, 종료 직후 0명·NORMAL을
+확인했다. 세부 조건과 관찰값은 [`final_validation.md`](final_validation.md)에 있다.
 
 이벤트 목록은 최대 20페이지(최대 9,550건)까지 읽는다. 기간 중 신규 이벤트가 들어와
 offset 순서가 변하면 오류를 표시하고 다음 polling에서 재시도한다. Report는
@@ -87,18 +87,18 @@ offset 순서가 변하면 오류를 표시하고 다음 polling에서 재시도
 
 ## 검증
 
-```powershell
+```bash
 cd frontend
-npm.cmd ci
-npm.cmd run test -- --run
-npm.cmd run build
+npm ci
+npm run test -- --run
+npm run build
 cd ..
 git diff --check
 ```
 
-PR #67 통합 테스트는 별도 Backend 서버를 실행한 상태에서
-`PR67_API_URL=http://127.0.0.1:18080`을 환경변수로 지정하고
-`npm.cmd run test -- --run src/api/pr67Integration.test.ts`를 실행한다.
-변수가 없으면 이 테스트만 건너뛴다.
+최종 `main` 기준 Vitest는 63 passed, 1 skipped이며 build도 통과했다. 전체 CI 결과는
+[`final_validation.md`](final_validation.md)를 기준으로 한다. Backend 계약 통합 테스트는
+별도 API 서버에서 `PR67_API_URL=http://127.0.0.1:18080`을 지정해 실행하며,
+환경변수가 없으면 해당 테스트만 건너뛴다. 테스트 파일의 PR 번호는 레거시 이름이다.
 
-PowerShell에서 `npm.ps1` 실행이 제한된 경우 `npm.cmd`를 사용한다.
+Windows PowerShell에서 `npm.ps1` 실행이 제한된 경우 `npm.cmd`를 사용한다.
