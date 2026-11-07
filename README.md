@@ -39,6 +39,15 @@
 
 </details>
 
+<details>
+<summary>위험구역 진입·체류 감지 보기</summary>
+
+![위험구역 진입·체류 감지 대시보드](docs/assets/geofencing-dashboard.png)
+
+설정한 다각형 위험구역의 진입·체류를 감지하고, 추적 ID별 알림과 현재 체류 인원을 대시보드에 표시합니다.
+
+</details>
+
 ## 주요 기능과 기술
 
 | 영역 | 구현 내용 | 주요 기술 |
