@@ -20,7 +20,8 @@
 | 평균 감지 지연 | **0.44초** | 동일 최종 시험 |
 | 서비스 통합 | **API smoke test 7/7 통과** | 영상 2개·600프레임 처리, 이벤트 저장·대시보드 표시 확인 |
 
-낙상 평가는 성인 재연·목표 카메라 1대 조건입니다. 서비스 통합 시험은 낙상 모델 평가와 별도로 수행했습니다. [낙상 평가](docs/fall_evaluation.md) · [통합 검증 기록](docs/final_validation.md)
+낙상 평가는 성인 재연·목표 카메라 1대 조건입니다. 서비스 통합 시험은 낙상 모델 평가와 별도로 수행했습니다. 
+[낙상 평가](docs/fall_evaluation.md) · [통합 검증 기록](docs/final_validation.md)
 
 **ACK 2026 논문 게재** — [비전 AI 기반 키즈카페 안전 모니터링 시스템의 설계 및 평가](https://ack.kips.or.kr/society/kips/conference/ack2026/file/downloadSoConfManuscript/abs/KIPS_C2026B0263F)
 
@@ -115,7 +116,8 @@ python -m src.main \
   --fall-detection-disabled
 ```
 
-기본 사람 탐지 모델은 최초 실행 시 자동 다운로드됩니다. 낙상 감지는 별도 학습 모델을 준비한 뒤 활성화합니다. [낙상 모델·웹캠·RTSP·다중 영상 실행 가이드](docs/vision_ai_final.md#실행-예시)
+기본 사람 탐지 모델은 최초 실행 시 자동 다운로드됩니다. 낙상 감지는 별도 학습 모델을 준비한 뒤 활성화합니다. 
+[낙상 모델·웹캠·RTSP·다중 영상 실행 가이드](docs/vision_ai_final.md#실행-예시)
 
 <details>
 <summary>품질 검사 명령</summary>
