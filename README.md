@@ -26,7 +26,9 @@
 
 ## 시연
 
-[![키즈카페 안전 모니터링 서비스 시연](https://i.ytimg.com/vi/kOI58emDueI/hqdefault.jpg)](https://www.youtube.com/watch?v=kOI58emDueI)
+[![키즈카페 실시간 모니터링 대시보드](docs/assets/dashboard-monitoring.png)](https://www.youtube.com/watch?v=kOI58emDueI)
+
+실시간 영상과 낙상·위험구역 이벤트를 확인하는 관리자 대시보드입니다. [시연 영상 보기](https://www.youtube.com/watch?v=kOI58emDueI)
 
 <details>
 <summary>낙상 감지·원인 후보 분석 GIF 보기</summary>
